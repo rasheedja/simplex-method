@@ -1,6 +1,6 @@
 # Third-Party Software Acknowledgement
 
-The file `Simplex.hs` was generated from Isabelle using the implementation
+The file `generated/Simplex.hs` was generated from Isabelle using the implementation
 found here: https://www.isa-afp.org/entries/Simplex.html
 
 The license for this implementation can be found below.
