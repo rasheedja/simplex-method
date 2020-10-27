@@ -23,26 +23,23 @@ data PolyConstraint =
   EQPP VarConstMap VarConstMap; 
 
 varConstMapToLinearPoly :: VarConstMap -> Linear_poly
-varConstMapToLinearPoly vcm = LinearPoly (Fmap_of_list (map (\(v,r) -> (nat_of_integer v, rationalToRat r)) vcm))
-
-rationalToRat :: Rational -> Rat
-rationalToRat r = Frct (Int_of_integer (numerator r), Int_of_integer (denominator r))  
+varConstMapToLinearPoly vcm = LinearPoly (Fmap_of_list (map (\(v,r) -> (nat_of_integer v, r)) vcm))
 
 polyConstraintToConstraint :: PolyConstraint -> Constraint
 polyConstraintToConstraint pcs =
   case pcs of
-    Util.LT vcm r -> Simplex.LT (varConstMapToLinearPoly vcm) (rationalToRat r)
-    Util.GT vcm r -> Simplex.GT (varConstMapToLinearPoly vcm) (rationalToRat r)
-    Util.LEQ vcm r -> Simplex.LEQ (varConstMapToLinearPoly vcm) (rationalToRat r)
-    Util.GEQ vcm r -> Simplex.GEQ (varConstMapToLinearPoly vcm) (rationalToRat r)
-    Util.EQ vcm r -> Simplex.EQ (varConstMapToLinearPoly vcm) (rationalToRat r)
+    Util.LT vcm r -> Simplex.LT (varConstMapToLinearPoly vcm) r
+    Util.GT vcm r -> Simplex.GT (varConstMapToLinearPoly vcm) r
+    Util.LEQ vcm r -> Simplex.LEQ (varConstMapToLinearPoly vcm) r
+    Util.GEQ vcm r -> Simplex.GEQ (varConstMapToLinearPoly vcm) r
+    Util.EQ vcm r -> Simplex.EQ (varConstMapToLinearPoly vcm) r
     Util.LTPP vcm vcm' -> Simplex.LTPP (varConstMapToLinearPoly vcm) (varConstMapToLinearPoly vcm')
     Util.GTPP vcm vcm' -> Simplex.GTPP (varConstMapToLinearPoly vcm) (varConstMapToLinearPoly vcm')
     Util.LEQPP vcm vcm' -> Simplex.LEQPP (varConstMapToLinearPoly vcm) (varConstMapToLinearPoly vcm')
     Util.GEQPP vcm vcm' -> Simplex.GEQPP (varConstMapToLinearPoly vcm) (varConstMapToLinearPoly vcm')
     Util.EQPP vcm vcm' -> Simplex.EQPP (varConstMapToLinearPoly vcm) (varConstMapToLinearPoly vcm')
 
-showSimplexResult :: Sum [Nat] (Mapping Nat Rat) -> (Bool, [Maybe (Integer, Integer)])
+showSimplexResult :: Sum [Nat] (Mapping Nat Rational) -> (Bool, [Maybe (Integer, Integer)])
 showSimplexResult result =
   case result of
     Inl unsatl  -> 
@@ -65,7 +62,7 @@ showSimplexResult result =
 optSimplex :: [PolyConstraint] -> Integer -> Opt -> (Bool, [Maybe (Integer, Integer)])
 optSimplex pcs varToMaximize minOrMax = simplexHelper (map polyConstraintToConstraint pcs) (nat_of_integer varToMaximize) Nothing
   where
-    simplexHelper :: [Constraint] -> Nat -> Maybe (Sum [Nat] (Mapping Nat Rat)) -> (Bool, [Maybe (Integer, Integer)])
+    simplexHelper :: [Constraint] -> Nat -> Maybe (Sum [Nat] (Mapping Nat Rational)) -> (Bool, [Maybe (Integer, Integer)])
     simplexHelper cs' varToMaximize mPreviousSimplexResult =
       case simplexResult of
         Inl unsatl ->
@@ -78,10 +75,8 @@ optSimplex pcs varToMaximize minOrMax = simplexHelper (map polyConstraintToConst
             Just r  -> 
               trace (show (both integer_of_int (quotient_of r))) $
               case minOrMax of
-                Max -> simplexHelper ((Simplex.GT (LinearPoly (Fmap_of_list [(varToMaximize, fracToRat 1 1)])) r) : cs') varToMaximize (Just simplexResult)
-                Min -> simplexHelper ((Simplex.LT (LinearPoly (Fmap_of_list [(varToMaximize, fracToRat 1 1)])) r) : cs') varToMaximize (Just simplexResult)
+                Max -> simplexHelper ((Simplex.GT (LinearPoly (Fmap_of_list [(varToMaximize, 1)])) r) : cs') varToMaximize (Just simplexResult)
+                Min -> simplexHelper ((Simplex.LT (LinearPoly (Fmap_of_list [(varToMaximize, 1)])) r) : cs') varToMaximize (Just simplexResult)
       where
         simplexResult = simplex cs'
         both f (a, b) = (f a, f b)
-
-        fracToRat n d = Frct (Int_of_integer n, Int_of_integer d)

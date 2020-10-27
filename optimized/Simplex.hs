@@ -9,6 +9,8 @@ import Prelude ((==), (/=), (<), (<=), (>=), (>), (+), (-), (*), (/), (**),
   String, Bool(True, False), Maybe(Nothing, Just));
 import qualified Prelude;
 
+import Data.Ratio;
+
 newtype Int = Int_of_integer Integer;
 
 integer_of_int :: Int -> Integer;
@@ -67,17 +69,11 @@ class (Order a) => Linorder a where {
 instance Linorder Nat where {
 };
 
-newtype Rat = Frct (Int, Int);
+quotient_of :: Rational -> (Int, Int);
+quotient_of x = (Int_of_integer (numerator x), Int_of_integer (denominator x));
 
-quotient_of :: Rat -> (Int, Int);
-quotient_of (Frct x) = x;
-
-equal_rat :: Rat -> Rat -> Bool;
-equal_rat a b = quotient_of a == quotient_of b;
-
-instance Eq Rat where {
-  a == b = equal_rat a b;
-};
+equal_rat :: Rational -> Rational -> Bool;
+equal_rat a b = a == b;
 
 times_int :: Int -> Int -> Int;
 times_int k l = Int_of_integer (integer_of_int k * integer_of_int l);
@@ -85,41 +81,18 @@ times_int k l = Int_of_integer (integer_of_int k * integer_of_int l);
 less_eq_int :: Int -> Int -> Bool;
 less_eq_int k l = integer_of_int k <= integer_of_int l;
 
-less_eq_rat :: Rat -> Rat -> Bool;
+less_eq_rat :: Rational -> Rational -> Bool;
 less_eq_rat p q =
-  let {
-    a = quotient_of p;
-  } in (case a of {
-         (aa, c) ->
-           let {
-             b = quotient_of q;
-           } in (case b of {
-                  (ba, d) -> less_eq_int (times_int aa d) (times_int c ba);
-                });
-       });
+  p <= q;
 
 less_int :: Int -> Int -> Bool;
 less_int k l = integer_of_int k < integer_of_int l;
 
-less_rat :: Rat -> Rat -> Bool;
+less_rat :: Rational -> Rational -> Bool;
 less_rat p q =
-  let {
-    a = quotient_of p;
-  } in (case a of {
-         (aa, c) ->
-           let {
-             b = quotient_of q;
-           } in (case b of {
-                  (ba, d) -> less_int (times_int aa d) (times_int c ba);
-                });
-       });
+  p < q;
 
-instance Ord Rat where {
-  less_eq = less_eq_rat;
-  less = less_rat;
-};
-
-data QDelta = QDelta Rat Rat;
+data QDelta = QDelta Rational Rational;
 
 equal_QDelta :: QDelta -> QDelta -> Bool;
 equal_QDelta (QDelta x1 x2) (QDelta y1 y2) = equal_rat x1 y1 && equal_rat x2 y2;
@@ -136,11 +109,11 @@ data Num = One | Bit0 Num | Bit1 Num;
 one_int :: Int;
 one_int = Int_of_integer (1 :: Integer);
 
-zero_rat :: Rat;
-zero_rat = Frct (zero_int, one_int);
+zero_rat :: Rational;
+zero_rat = 0 % 1;
 
-one_rat :: Rat;
-one_rat = Frct (one_int, one_int);
+one_rat :: Rational;
+one_rat = 1 % 1;
 
 one_QDelta :: QDelta;
 one_QDelta = QDelta one_rat zero_rat;
@@ -206,26 +179,13 @@ normalize p =
                   a = uminus_int (gcd_int (fst p) (snd p));
                 } in (divide_int (fst p) a, divide_int (snd p) a)));
 
-plus_rat :: Rat -> Rat -> Rat;
-plus_rat p q =
-  Frct (let {
-          a = quotient_of p;
-        } in (case a of {
-               (aa, c) ->
-                 let {
-                   b = quotient_of q;
-                 } in (case b of {
-                        (ba, d) ->
-                          normalize
-                            (plus_int (times_int aa d) (times_int ba c),
-                              times_int c d);
-                      });
-             }));
+plus_rat :: Rational -> Rational -> Rational;
+plus_rat p q = p + q;
 
-qdsnd :: QDelta -> Rat;
+qdsnd :: QDelta -> Rational;
 qdsnd (QDelta a b) = b;
 
-qdfst :: QDelta -> Rat;
+qdfst :: QDelta -> Rational;
 qdfst (QDelta a b) = a;
 
 plus_QDelta :: QDelta -> QDelta -> QDelta;
@@ -254,21 +214,8 @@ instance Zero QDelta where {
 minus_int :: Int -> Int -> Int;
 minus_int k l = Int_of_integer (integer_of_int k - integer_of_int l);
 
-minus_rat :: Rat -> Rat -> Rat;
-minus_rat p q =
-  Frct (let {
-          a = quotient_of p;
-        } in (case a of {
-               (aa, c) ->
-                 let {
-                   b = quotient_of q;
-                 } in (case b of {
-                        (ba, d) ->
-                          normalize
-                            (minus_int (times_int aa d) (times_int ba c),
-                              times_int c d);
-                      });
-             }));
+minus_rat :: Rational -> Rational -> Rational;
+minus_rat p q = p - q;
 
 minus_QDelta :: QDelta -> QDelta -> QDelta;
 minus_QDelta qd1 qd2 =
@@ -283,12 +230,8 @@ instance Minus QDelta where {
   minus = minus_QDelta;
 };
 
-uminus_rat :: Rat -> Rat;
-uminus_rat p = Frct (let {
-                       a = quotient_of p;
-                     } in (case a of {
-                            (aa, b) -> (uminus_int aa, b);
-                          }));
+uminus_rat :: Rational -> Rational;
+uminus_rat p = negate p;
 
 uminus_QDelta :: QDelta -> QDelta;
 uminus_QDelta qd = QDelta (uminus_rat (qdfst qd)) (uminus_rat (qdsnd qd));
@@ -382,24 +325,14 @@ instance Cancel_comm_monoid_add QDelta where {
 instance Ab_group_add QDelta where {
 };
 
-times_rat :: Rat -> Rat -> Rat;
-times_rat p q =
-  Frct (let {
-          a = quotient_of p;
-        } in (case a of {
-               (aa, c) ->
-                 let {
-                   b = quotient_of q;
-                 } in (case b of {
-                        (ba, d) -> normalize (times_int aa ba, times_int c d);
-                      });
-             }));
+times_rat :: Rational -> Rational -> Rational;
+times_rat p q = p * q;
 
-scaleRat_QDelta :: Rat -> QDelta -> QDelta;
+scaleRat_QDelta :: Rational -> QDelta -> QDelta;
 scaleRat_QDelta r qd = QDelta (times_rat r (qdfst qd)) (times_rat r (qdsnd qd));
 
 class ScaleRat a where {
-  scaleRat :: Rat -> a -> a;
+  scaleRat :: Rational -> a -> a;
 };
 
 class (Ab_group_add a, ScaleRat a) => Rational_vector a where {
@@ -491,9 +424,9 @@ fmrel r m n =
 equal_fmap :: forall a b. (Eq a, Eq b) => Fmap a b -> Fmap a b -> Bool;
 equal_fmap = fmrel (\ a b -> a == b);
 
-newtype Linear_poly = LinearPoly (Fmap Nat Rat);
+newtype Linear_poly = LinearPoly (Fmap Nat Rational);
 
-linear_poly_map :: Linear_poly -> Fmap Nat Rat;
+linear_poly_map :: Linear_poly -> Fmap Nat Rational;
 linear_poly_map (LinearPoly x) = x;
 
 equal_linear_poly :: Linear_poly -> Linear_poly -> Bool;
@@ -529,10 +462,10 @@ data Direction a b =
     (State a b -> Nat -> Maybe b) (State a b -> Nat -> a)
     (State a b -> Nat -> a)
     ((Mapping Nat (a, b) -> Mapping Nat (a, b)) -> State a b -> State a b)
-    (Nat -> b -> Atom b) (Nat -> b -> Atom b) (Rat -> Rat -> Bool);
+    (Nat -> b -> Atom b) (Nat -> b -> Atom b) (Rational -> Rational -> Bool);
 
-data Constraint = LT Linear_poly Rat | GT Linear_poly Rat | LEQ Linear_poly Rat
-  | GEQ Linear_poly Rat | EQ Linear_poly Rat | LTPP Linear_poly Linear_poly
+data Constraint = LT Linear_poly Rational | GT Linear_poly Rational | LEQ Linear_poly Rational
+  | GEQ Linear_poly Rational | EQ Linear_poly Rational | LTPP Linear_poly Linear_poly
   | GTPP Linear_poly Linear_poly | LEQPP Linear_poly Linear_poly
   | GEQPP Linear_poly Linear_poly | EQPP Linear_poly Linear_poly;
 
@@ -578,7 +511,7 @@ foldr :: forall a b. (a -> b -> b) -> [a] -> b -> b;
 foldr f [] = id;
 foldr f (x : xs) = f x . foldr f xs;
 
-val :: QDelta -> Rat -> Rat;
+val :: QDelta -> Rational -> Rational;
 val qd delta = plus_rat (qdfst qd) (times_rat delta (qdsnd qd));
 
 balance :: forall a b. Rbta a b -> a -> b -> Rbta a b -> Rbta a b;
@@ -793,16 +726,16 @@ fmmap f (Fmap_of_list m) = Fmap_of_list (map (apsnd f) m);
 fmempty :: forall a b. Fmap a b;
 fmempty = Fmap_of_list [];
 
-scale :: Rat -> Fmap Nat Rat -> Fmap Nat Rat;
+scale :: Rational -> Fmap Nat Rational -> Fmap Nat Rational;
 scale r lp = (if equal_rat r zero_rat then fmempty else fmmap (times_rat r) lp);
 
-scaleRat_linear_poly :: Rat -> Linear_poly -> Linear_poly;
+scaleRat_linear_poly :: Rational -> Linear_poly -> Linear_poly;
 scaleRat_linear_poly r p = LinearPoly (scale r (linear_poly_map p));
 
 uminus_linear_poly :: Linear_poly -> Linear_poly;
 uminus_linear_poly lp = scaleRat_linear_poly (uminus_rat one_rat) lp;
 
-get_var_coeff :: Fmap Nat Rat -> Nat -> Rat;
+get_var_coeff :: Fmap Nat Rational -> Nat -> Rational;
 get_var_coeff lp v = (case fmlookup lp v of {
                        Nothing -> zero_rat;
                        Just c -> c;
@@ -867,14 +800,14 @@ fmadd (Fmap_of_list m) (Fmap_of_list n) = Fmap_of_list (merge m n);
 fmupd :: forall a b. (Eq a) => a -> b -> Fmap a b -> Fmap a b;
 fmupd k v m = fmadd m (Fmap_of_list [(k, v)]);
 
-set_var_coeff :: Nat -> Rat -> Fmap Nat Rat -> Fmap Nat Rat;
+set_var_coeff :: Nat -> Rational -> Fmap Nat Rational -> Fmap Nat Rational;
 set_var_coeff v c lp =
   (if equal_rat c zero_rat then fmdrop v lp else fmupd v c lp);
 
-add_monom :: Rat -> Nat -> Fmap Nat Rat -> Fmap Nat Rat;
+add_monom :: Rational -> Nat -> Fmap Nat Rational -> Fmap Nat Rational;
 add_monom c v lp = set_var_coeff v (plus_rat c (get_var_coeff lp v)) lp;
 
-add :: Fmap Nat Rat -> Fmap Nat Rat -> Fmap Nat Rat;
+add :: Fmap Nat Rational -> Fmap Nat Rational -> Fmap Nat Rational;
 add lp1 lp2 =
   foldl (\ lp v -> add_monom (get_var_coeff lp1 v) v lp) lp2 (ordered_keys lp1);
 
@@ -960,20 +893,10 @@ valuate lp val =
   } in sum_list
          (map (\ x -> scaleRat (the (fmlookup lpm x)) (val x)) (vars_list lp));
 
-divide_rat :: Rat -> Rat -> Rat;
-divide_rat p q =
-  Frct (let {
-          a = quotient_of p;
-        } in (case a of {
-               (aa, c) ->
-                 let {
-                   b = quotient_of q;
-                 } in (case b of {
-                        (ba, d) -> normalize (times_int aa d, times_int c ba);
-                      });
-             }));
+divide_rat :: Rational -> Rational -> Rational;
+divide_rat p q = p / q;
 
-delta_0 :: QDelta -> QDelta -> Rat;
+delta_0 :: QDelta -> QDelta -> Rational;
 delta_0 qd1 qd2 =
   let {
     c1 = qdfst qd1;
@@ -983,13 +906,17 @@ delta_0 qd1 qd2 =
   } in (if less_rat c1 c2 && less_rat k2 k1
          then divide_rat (minus_rat c2 c1) (minus_rat k1 k2) else one_rat);
 
-delta_0_val :: Ns_constraint QDelta -> (Nat -> QDelta) -> Rat;
+delta_0_val :: Ns_constraint QDelta -> (Nat -> QDelta) -> Rational;
 delta_0_val (LEQ_ns lll rrr) vl = delta_0 (valuate lll vl) rrr;
 delta_0_val (GEQ_ns lll rrr) vl = delta_0 rrr (valuate lll vl);
 
-delta_0_val_min :: [Ns_constraint QDelta] -> (Nat -> QDelta) -> Rat;
+delta_0_val_min :: [Ns_constraint QDelta] -> (Nat -> QDelta) -> Rational;
 delta_0_val_min [] vl = one_rat;
-delta_0_val_min (h : t) vl = min (delta_0_val_min t vl) (delta_0_val h vl);
+delta_0_val_min (h : t) vl = 
+  let
+    min a b = if a <= b then a else b; 
+  in
+    min (delta_0_val_min t vl) (delta_0_val h vl);
 
 tabulate :: forall a b. (Linorder a) => [a] -> (a -> b) -> Mapping a b;
 tabulate ks f = Mapping (bulkload (map (\ k -> (k, f k)) ks));
@@ -1000,7 +927,7 @@ map2fun v = (\ x -> (case lookupa v x of {
                       Just y -> y;
                     }));
 
-from_ns :: Mapping Nat QDelta -> [Ns_constraint QDelta] -> Mapping Nat Rat;
+from_ns :: Mapping Nat QDelta -> [Ns_constraint QDelta] -> Mapping Nat Rational;
 from_ns vl cs =
   let {
     delta = delta_0_val_min cs (map2fun vl);
@@ -1041,7 +968,7 @@ v (State x1 x2 x3 x4 x5 x6) = x4;
 t :: forall a b. State a b -> [(Nat, Linear_poly)];
 t (State x1 x2 x3 x4 x5 x6) = x1;
 
-coeff :: Linear_poly -> Nat -> Rat;
+coeff :: Linear_poly -> Nat -> Rational;
 coeff lp = get_var_coeff (linear_poly_map lp);
 
 rhs_eq_val ::
@@ -1286,14 +1213,14 @@ sgn_int i =
 abs_int :: Int -> Int;
 abs_int i = (if less_int i zero_int then uminus_int i else i);
 
-inverse_rat :: Rat -> Rat;
+inverse_rat :: Rational -> Rational;
 inverse_rat p =
-  Frct (let {
+  (let {
           a = quotient_of p;
         } in (case a of {
                (aa, b) ->
-                 (if equal_int aa zero_int then (zero_int, one_int)
-                   else (times_int (sgn_int aa) b, abs_int aa));
+                 (if equal_int aa zero_int then (integer_of_int zero_int % integer_of_int one_int)
+                   else (integer_of_int (times_int (sgn_int aa) b) % integer_of_int (abs_int aa)));
              }));
 
 max_var :: Linear_poly -> Nat;
@@ -1385,7 +1312,7 @@ tableau (IState x1 x2 x3 x4 x5) = x2;
 atoms :: forall a. Istate a -> [(a, Atom QDelta)];
 atoms (IState x1 x2 x3 x4 x5) = x3;
 
-zero :: Fmap Nat Rat;
+zero :: Fmap Nat Rational;
 zero = fmempty;
 
 zero_linear_poly :: Linear_poly;
@@ -1414,7 +1341,7 @@ zero_satisfies (GEQ_ns l r) = less_eq r zeroa;
 monom_var :: Linear_poly -> Nat;
 monom_var l = max_var l;
 
-monom_coeff :: Linear_poly -> Rat;
+monom_coeff :: Linear_poly -> Rational;
 monom_coeff l = coeff l (monom_var l);
 
 monom_to_atom :: Ns_constraint QDelta -> Atom QDelta;
@@ -1490,7 +1417,7 @@ solve_exec_ns_code s =
   });
 
 solve_exec_code ::
-  forall a. (Eq a) => [(a, Constraint)] -> Sum [a] (Mapping Nat Rat);
+  forall a. (Eq a) => [(a, Constraint)] -> Sum [a] (Mapping Nat Rational);
 solve_exec_code cs = let {
                        csa = to_ns cs;
                      } in (case solve_exec_ns_code csa of {
@@ -1499,10 +1426,10 @@ solve_exec_code cs = let {
                           });
 
 simplex_index ::
-  forall a. (Eq a) => [(a, Constraint)] -> Sum [a] (Mapping Nat Rat);
+  forall a. (Eq a) => [(a, Constraint)] -> Sum [a] (Mapping Nat Rational);
 simplex_index = solve_exec_code;
 
-simplex :: [Constraint] -> Sum [Nat] (Mapping Nat Rat);
+simplex :: [Constraint] -> Sum [Nat] (Mapping Nat Rational);
 simplex cs = simplex_index (zip (upt zero_nat (size_list cs)) cs);
 
 }
