@@ -23,7 +23,7 @@ instance Eq Int where {
   a == b = equal_int a b;
 };
 
-newtype Nat = Nat Integer;
+newtype Nat = Nat Integer deriving Prelude.Show;
 
 integer_of_nat :: Nat -> Integer;
 integer_of_nat (Nat x) = x;
@@ -92,7 +92,7 @@ less_rat :: Rational -> Rational -> Bool;
 less_rat p q =
   p < q;
 
-data QDelta = QDelta Rational Rational;
+data QDelta = QDelta Rational Rational deriving Prelude.Show;
 
 equal_QDelta :: QDelta -> QDelta -> Bool;
 equal_QDelta (QDelta x1 x2) (QDelta y1 y2) = equal_rat x1 y1 && equal_rat x2 y2;
@@ -381,7 +381,7 @@ rel_option r (Just y2) Nothing = False;
 rel_option r Nothing Nothing = True;
 rel_option r (Just x2) (Just y2) = r x2 y2;
 
-newtype Fmap a b = Fmap_of_list [(a, b)];
+newtype Fmap a b = Fmap_of_list [(a, b)] deriving Prelude.Show;
 
 map_of :: forall a b. (Eq a) => [(a, b)] -> a -> Maybe b;
 map_of ((l, v) : ps) k = (if l == k then Just v else map_of ps k);
@@ -390,9 +390,9 @@ map_of [] k = Nothing;
 fmlookup :: forall a b. (Eq a) => Fmap a b -> a -> Maybe b;
 fmlookup (Fmap_of_list m) = map_of m;
 
-data Set a = Set [a] | Coset [a];
+data Set a = Set [a] | Coset [a] deriving Prelude.Show;
 
-newtype Fset a = Abs_fset (Set a);
+newtype Fset a = Abs_fset (Set a) deriving Prelude.Show;
 
 fset_of_list :: forall a. [a] -> Fset a;
 fset_of_list xa = Abs_fset (Set xa);
@@ -424,7 +424,7 @@ fmrel r m n =
 equal_fmap :: forall a b. (Eq a, Eq b) => Fmap a b -> Fmap a b -> Bool;
 equal_fmap = fmrel (\ a b -> a == b);
 
-newtype Linear_poly = LinearPoly (Fmap Nat Rational);
+newtype Linear_poly = LinearPoly (Fmap Nat Rational)  deriving Prelude.Show;
 
 linear_poly_map :: Linear_poly -> Fmap Nat Rational;
 linear_poly_map (LinearPoly x) = x;
@@ -436,21 +436,21 @@ instance Eq Linear_poly where {
   a == b = equal_linear_poly a b;
 };
 
-data Color = R | B;
+data Color = R | B deriving Prelude.Show;
 
-data Rbta a b = Empty | Branch Color (Rbta a b) a b (Rbta a b);
+data Rbta a b = Empty | Branch Color (Rbta a b) a b (Rbta a b) deriving Prelude.Show;
 
-newtype Rbt b a = RBT (Rbta b a);
+newtype Rbt b a = RBT (Rbta b a) deriving Prelude.Show;
 
-data Atom a = Leq Nat a | Geq Nat a;
+data Atom a = Leq Nat a | Geq Nat a deriving Prelude.Show;
 
-data Sum a b = Inl a | Inr b;
+data Sum a b = Inl a | Inr b deriving Prelude.Show;
 
-newtype Mapping a b = Mapping (Rbt a b);
+newtype Mapping a b = Mapping (Rbt a b) deriving Prelude.Show;
 
 data State a b =
   State [(Nat, Linear_poly)] (Mapping Nat (a, b)) (Mapping Nat (a, b))
-    (Mapping Nat b) Bool (Maybe [a]);
+    (Mapping Nat b) Bool (Maybe [a]) deriving Prelude.Show;
 
 data Istate a =
   IState Nat [(Nat, Linear_poly)] [(a, Atom QDelta)] (Linear_poly -> Maybe Nat)
@@ -467,9 +467,9 @@ data Direction a b =
 data Constraint = LT Linear_poly Rational | GT Linear_poly Rational | LEQ Linear_poly Rational
   | GEQ Linear_poly Rational | EQ Linear_poly Rational | LTPP Linear_poly Linear_poly
   | GTPP Linear_poly Linear_poly | LEQPP Linear_poly Linear_poly
-  | GEQPP Linear_poly Linear_poly | EQPP Linear_poly Linear_poly;
+  | GEQPP Linear_poly Linear_poly | EQPP Linear_poly Linear_poly deriving Prelude.Show;
 
-data Ns_constraint a = LEQ_ns Linear_poly a | GEQ_ns Linear_poly a;
+data Ns_constraint a = LEQ_ns Linear_poly a | GEQ_ns Linear_poly a deriving Prelude.Show;
 
 plus_nat :: Nat -> Nat -> Nat;
 plus_nat m n = Nat (integer_of_nat m + integer_of_nat n);
@@ -914,7 +914,7 @@ delta_0_val_min :: [Ns_constraint QDelta] -> (Nat -> QDelta) -> Rational;
 delta_0_val_min [] vl = one_rat;
 delta_0_val_min (h : t) vl = 
   let
-    min a b = if a <= b then a else b; 
+    min a b = if a <= b then a else b; -- For some reason, the min below complains about 'No instance for (Ord Rational)'
   in
     min (delta_0_val_min t vl) (delta_0_val h vl);
 
@@ -1431,5 +1431,35 @@ simplex_index = solve_exec_code;
 
 simplex :: [Constraint] -> Sum [Nat] (Mapping Nat Rational);
 simplex cs = simplex_index (zip (upt zero_nat (size_list cs)) cs);
+        
+-- Functions used for debugging state
+
+-- assert_all_code_get_state ::
+--   forall a b.
+--     (Eq a, Eq b,
+--       Lrv b) => [(Nat, Linear_poly)] ->
+--                   [(a, Atom b)] -> Sum [a] (State a b);
+-- assert_all_code_get_state t asa = let {
+--                           s = assert_all_state_code t asa;
+--                         } in (if u s then Inl (the (u_c s)) else Inr s);
+
+-- solve_exec_ns_code_get_state ::
+--   forall a b.
+--     (Eq a) => [(a, Ns_constraint QDelta)] -> (Maybe (Mapping Nat QDelta -> Mapping Nat QDelta), Sum [a] (State a QDelta));
+-- solve_exec_ns_code_get_state s =
+--   (case preprocess s of {
+--     (t, (asa, (trans_v, []))) -> (case assert_all_code_get_state t asa of {
+--                                    Inl a -> (Just trans_v, Inl a);
+--                                    Inr v -> (Just trans_v, Inr v);
+--                                  });
+--     (_, (_, (_, i : _))) -> (Nothing, Inl [i]);
+--   });
+  
+-- simplex_index_phase1 ::
+--   forall a. (Eq a) => [(a, Constraint)] -> (Maybe (Mapping Nat QDelta -> Mapping Nat QDelta), Sum [a] (State a QDelta));
+-- simplex_index_phase1 cs = solve_exec_ns_code_get_state (to_ns cs);
+
+-- simplex_phase1 :: [Constraint] -> (Maybe (Mapping Nat QDelta -> Mapping Nat QDelta), Sum [Nat] (State Nat QDelta));
+-- simplex_phase1 cs = simplex_index_phase1 (zip (upt zero_nat (size_list cs)) cs);
 
 }
