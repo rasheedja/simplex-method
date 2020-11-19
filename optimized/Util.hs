@@ -20,6 +20,13 @@ data PolyConstraint =
   GEQ VarConstMap Rational      | 
   EQ VarConstMap Rational       deriving (Show, Eq);
 
+getRhs :: PolyConstraint -> Rational
+getRhs (Util.LT _ r) = r
+getRhs (Util.GT _ r) = r
+getRhs (Util.LEQ _ r) = r
+getRhs (Util.GEQ _ r) = r
+getRhs (Util.EQ _ r) = r
+
 varConstMapToLinearPoly :: VarConstMap -> Linear_poly
 varConstMapToLinearPoly vcm = LinearPoly (Fmap_of_list (map (\(v,r) -> (nat_of_integer v, r)) vcm))
 
@@ -75,21 +82,30 @@ optSimplex pcs varToMaximize minOrMax = simplexHelper (map polyConstraintToConst
         both f (a, b) = (f a, f b)
 
 -- Perform the two phase simplex method with a given objective function to maximize and a system of constraints
--- assumes objFunction and system is not empty
-twoPhaseSimplex :: VarConstMap -> [PolyConstraint] -> Maybe [(Integer, PolyConstraint)]
+-- assumes objFunction and system is not empty. Returns the a pair with the first item being the variable representing
+-- the objective function and the second item being the values of all variables appearing in the system (including the
+-- objective function).
+twoPhaseSimplex :: VarConstMap -> [PolyConstraint] -> Maybe (Integer, [(Integer, Rational)])
 twoPhaseSimplex objFunction system = 
   if null artificialVars
-    then Just $ simplexPivot ((objectiveVar, Util.EQ objFunction 0) : systemWithBasicVars)
+    then Just $ displayResults $ simplexPivot ((objectiveVar, Util.EQ objFunction 0) : systemWithBasicVars)
     else 
       case Data.List.lookup objectiveVar removeArtificialVarsFromPhase1Tableau of
         Nothing -> trace "objective row not found in phase 1 tableau" Nothing
         Just (Util.EQ _ r) ->
           if r == 0 
-            then Just $ simplexPivot $ (objectiveVar, newObjFunction) : tail removeArtificialVarsFromPhase1Tableau
+            then Just $ displayResults $ simplexPivot $ (objectiveVar, newObjFunction) : tail removeArtificialVarsFromPhase1Tableau
             else trace "rhs not zero after phase 1, thus original tableau is infeasible" Nothing
         _ -> trace "objective row is not in EQ form" Nothing
 
   where
+    displayResults :: [(Integer, PolyConstraint)] -> (Integer, [(Integer, Rational)])
+    displayResults tableau =
+      (
+        objectiveVar,
+        map (second getRhs) $ filter (\(basicVar,_) -> basicVar `notElem` slackVars ++ artificialVars) tableau
+      )
+
     maxVar =
       Prelude.max
       (maximum $ map 
