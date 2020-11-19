@@ -9,7 +9,7 @@ import Control.Arrow
 
 import Debug.Trace (trace)
 
-data Opt = Max | Min
+-- data Opt = Max | Min
 
 type VarConstMap = [(Integer, Rational)]
 
@@ -19,6 +19,8 @@ data PolyConstraint =
   LEQ VarConstMap Rational      | 
   GEQ VarConstMap Rational      | 
   EQ VarConstMap Rational       deriving (Show, Eq);
+
+data ObjectiveFunction = Max VarConstMap | Min VarConstMap
 
 getRhs :: PolyConstraint -> Rational
 getRhs (Util.LT _ r) = r
@@ -59,36 +61,36 @@ showSimplexResult result =
       )
 
 
-optSimplex :: [PolyConstraint] -> Integer -> Opt -> (Bool, [Maybe (Integer, Integer)])
-optSimplex pcs varToMaximize minOrMax = simplexHelper (map polyConstraintToConstraint pcs) (nat_of_integer varToMaximize) Nothing
-  where
-    simplexHelper :: [Constraint] -> Nat -> Maybe (Sum [Nat] (Mapping Nat Rational)) -> (Bool, [Maybe (Integer, Integer)])
-    simplexHelper cs' varToMaximize mPreviousSimplexResult =
-      case simplexResult of
-        Inl unsatl ->
-          case mPreviousSimplexResult of
-            Just previousSimplexResult -> showSimplexResult previousSimplexResult
-            Nothing -> showSimplexResult simplexResult
-        Inr mapping ->
-          case lookupa mapping varToMaximize of
-            Nothing -> trace "Var to maximize not found" $ undefined
-            Just r  -> 
-              trace (show (both integer_of_int (quotient_of r))) $
-              case minOrMax of
-                Max -> simplexHelper ((Simplex.GT (LinearPoly (Fmap_of_list [(varToMaximize, 1)])) r) : cs') varToMaximize (Just simplexResult)
-                Min -> simplexHelper ((Simplex.LT (LinearPoly (Fmap_of_list [(varToMaximize, 1)])) r) : cs') varToMaximize (Just simplexResult)
-      where
-        simplexResult = simplex cs'
-        both f (a, b) = (f a, f b)
+-- optSimplex :: [PolyConstraint] -> Integer -> Opt -> (Bool, [Maybe (Integer, Integer)])
+-- optSimplex pcs varToMaximize minOrMax = simplexHelper (map polyConstraintToConstraint pcs) (nat_of_integer varToMaximize) Nothing
+--   where
+--     simplexHelper :: [Constraint] -> Nat -> Maybe (Sum [Nat] (Mapping Nat Rational)) -> (Bool, [Maybe (Integer, Integer)])
+--     simplexHelper cs' varToMaximize mPreviousSimplexResult =
+--       case simplexResult of
+--         Inl unsatl ->
+--           case mPreviousSimplexResult of
+--             Just previousSimplexResult -> showSimplexResult previousSimplexResult
+--             Nothing -> showSimplexResult simplexResult
+--         Inr mapping ->
+--           case lookupa mapping varToMaximize of
+--             Nothing -> trace "Var to maximize not found" $ undefined
+--             Just r  -> 
+--               trace (show (both integer_of_int (quotient_of r))) $
+--               case minOrMax of
+--                 Max -> simplexHelper ((Simplex.GT (LinearPoly (Fmap_of_list [(varToMaximize, 1)])) r) : cs') varToMaximize (Just simplexResult)
+--                 Min -> simplexHelper ((Simplex.LT (LinearPoly (Fmap_of_list [(varToMaximize, 1)])) r) : cs') varToMaximize (Just simplexResult)
+--       where
+--         simplexResult = simplex cs'
+--         both f (a, b) = (f a, f b)
 
 -- Perform the two phase simplex method with a given objective function to maximize and a system of constraints
 -- assumes objFunction and system is not empty. Returns the a pair with the first item being the variable representing
 -- the objective function and the second item being the values of all variables appearing in the system (including the
 -- objective function).
-twoPhaseSimplex :: VarConstMap -> [PolyConstraint] -> Maybe (Integer, [(Integer, Rational)])
+twoPhaseSimplex :: ObjectiveFunction -> [PolyConstraint] -> Maybe (Integer, [(Integer, Rational)])
 twoPhaseSimplex objFunction system = 
   if null artificialVars
-    then Just $ displayResults $ simplexPivot ((objectiveVar, Util.EQ objFunction 0) : systemWithBasicVars)
+    then Just $ displayResults $ simplexPivot ((objectiveVar, Util.EQ objectiveRow 0) : systemWithBasicVars)
     else 
       case Data.List.lookup objectiveVar removeArtificialVarsFromPhase1Tableau of
         Nothing -> trace "objective row not found in phase 1 tableau" Nothing
@@ -99,11 +101,24 @@ twoPhaseSimplex objFunction system =
         _ -> trace "objective row is not in EQ form" Nothing
 
   where
+    objectiveRow =
+      case objFunction of
+        Max objective -> map (second negate) objective
+        Min objective -> objective -- Turning Min into Max, negation cancels out
+
     displayResults :: [(Integer, PolyConstraint)] -> (Integer, [(Integer, Rational)])
     displayResults tableau =
       (
         objectiveVar,
-        map (second getRhs) $ filter (\(basicVar,_) -> basicVar `notElem` slackVars ++ artificialVars) tableau
+        case objFunction of
+          Max _ -> 
+            map 
+            (second getRhs) 
+            $ filter (\(basicVar,_) -> basicVar `notElem` slackVars ++ artificialVars) tableau
+          Min _ -> 
+            map -- We maximized -objVar, so we negate the objVar to get the final value
+            (\(basicVar, pc) -> if basicVar == objectiveVar then (basicVar, negate (getRhs pc)) else (basicVar, getRhs pc))
+            $ filter (\(basicVar,_) -> basicVar `notElem` slackVars ++ artificialVars) tableau
       )
 
     maxVar =
@@ -117,7 +132,7 @@ twoPhaseSimplex objFunction system =
           Util.EQ vcm _  -> maximum (map fst vcm)
       ) 
       system)
-      (maximum (map fst objFunction)) -- This is not logically needed since if a variable does not appear to the system, 
+      (maximum (map fst objectiveRow)) -- This is not logically needed since if a variable does not appear to the system, 
                                       -- we can set this variable to infinity (since we assume all variables are >=0).
                                       -- But, this is safer.  
 
@@ -141,7 +156,7 @@ twoPhaseSimplex objFunction system =
       )
       phase1Tableau
 
-    objFunctionVars = map fst objFunction
+    objFunctionVars = map fst objectiveRow
 
     phase1RowsInObjFunction = filter (\(var, _) -> var `elem` objFunctionVars) removeArtificialVarsFromPhase1Tableau
 
@@ -167,7 +182,7 @@ twoPhaseSimplex objFunction system =
                 -- trace (show var ++ ":::" ++ show row)
                 mulRow row coeff                -- TODO: think about why we do not negate this coeff. Rows are already in LHS so this is fine?
         )
-        objFunction
+        objectiveRow
 
     -- System in standard form, a tableau using only EQ. Add slack vars where necessary. This may give you
     -- an infeasible system if slack vars are negative. If a constraint is already EQ, set the basic var to Nothing
