@@ -36,6 +36,50 @@ lhs (LEQ vcm _) = vcm
 lhs (GEQ vcm _) = vcm
 lhs (EQ vcm _) = vcm
 
+updateRhs :: PolyConstraint -> Rational -> PolyConstraint
+updateRhs (LT vcm _) r = LT vcm r
+updateRhs (GT vcm _) r = GT vcm r
+updateRhs (EQ vcm _) r = EQ vcm r
+updateRhs (LEQ vcm _) r = LEQ vcm r
+updateRhs (GEQ vcm _) r = GEQ vcm r
+
+updateLhs :: PolyConstraint -> VarConstMap -> PolyConstraint
+updateLhs (LT _ r) vcm = LT vcm r 
+updateLhs (GT _ r) vcm = GT vcm r 
+updateLhs (EQ _ r) vcm = EQ vcm r 
+updateLhs (LEQ _ r) vcm = LEQ vcm r 
+updateLhs (GEQ _ r) vcm = GEQ vcm r 
+
+updatePc :: PolyConstraint -> VarConstMap -> Rational -> PolyConstraint
+updatePc (LT _ _) = LT
+updatePc (GT _ _) = GT
+updatePc (EQ _ _) = EQ
+updatePc (LEQ _ _) = LEQ
+updatePc (GEQ _ _) = GEQ
+
+filterOutVars :: PolyConstraint -> [Integer] -> PolyConstraint
+filterOutVars (Util.EQ vcm r) vars = Util.EQ (filter (\(v, _) -> v `notElem` vars) vcm) r
+filterOutVars (Util.LT vcm r) vars = Util.LT (filter (\(v, _) -> v `notElem` vars) vcm) r
+filterOutVars (Util.GT vcm r) vars = Util.GT (filter (\(v, _) -> v `notElem` vars) vcm) r
+filterOutVars (Util.LEQ vcm r) vars = Util.LEQ (filter (\(v, _) -> v `notElem` vars) vcm) r
+filterOutVars (Util.GEQ vcm r) vars = Util.GEQ (filter (\(v, _) -> v `notElem` vars) vcm) r
+
+filterInVars :: PolyConstraint -> [Integer] -> PolyConstraint
+filterInVars (Util.EQ vcm r) vars = Util.EQ (filter (\(v, _) -> v `elem` vars) vcm) r
+filterInVars (Util.LT vcm r) vars = Util.LT (filter (\(v, _) -> v `elem` vars) vcm) r
+filterInVars (Util.GT vcm r) vars = Util.GT (filter (\(v, _) -> v `elem` vars) vcm) r
+filterInVars (Util.LEQ vcm r) vars = Util.LEQ (filter (\(v, _) -> v `elem` vars) vcm) r
+filterInVars (Util.GEQ vcm r) vars = Util.GEQ (filter (\(v, _) -> v `elem` vars) vcm) r
+
+-- Add a sorted list of VarConstMaps, folding where the variables are equal
+addVarConstMap :: [(Integer, Rational)] -> [(Integer, Rational)]
+addVarConstMap []                          = []
+addVarConstMap [(v, c)]                    = [(v, c)]
+addVarConstMap ((v1, c1) : (v2, c2) : vcm) =
+  if v1 == v2
+    then addVarConstMap $ (v1, c1 + c2) : vcm
+    else (v1, c1) : addVarConstMap ((v2, c2) : vcm)
+
 varConstMapToLinearPoly :: VarConstMap -> S.Linear_poly
 varConstMapToLinearPoly vcm = S.LinearPoly (S.Fmap_of_list (map (first S.nat_of_integer) vcm))
 
@@ -97,13 +141,13 @@ showSimplexResult result =
 twoPhaseSimplex :: ObjectiveFunction -> [PolyConstraint] -> Maybe (Integer, [(Integer, Rational)])
 twoPhaseSimplex objFunction system = 
   if null artificialVars
-    then Just $ displayResults $ simplexPivot ((objectiveVar, EQ objectiveRow 0) : systemWithBasicVars)
+    then displayResults <$> simplexPivot ((objectiveVar, EQ objectiveRow 0) : systemWithBasicVars)
     else 
       case lookup objectiveVar removeArtificialVarsFromPhase1Tableau of
         Nothing -> trace "objective row not found in phase 1 tableau" Nothing
         Just (EQ _ r) ->
           if r == 0 
-            then Just $ displayResults $ simplexPivot $ (objectiveVar, newObjFunction) : tail removeArtificialVarsFromPhase1Tableau
+            then fmap displayResults $ simplexPivot $ (objectiveVar, newObjFunction) : tail removeArtificialVarsFromPhase1Tableau
             else trace "rhs not zero after phase 1, thus original tableau is infeasible" Nothing
         _ -> trace "objective row is not in EQ form" Nothing
 
@@ -157,11 +201,8 @@ twoPhaseSimplex objFunction system =
 
     removeArtificialVarsFromPhase1Tableau = 
       map
-      (\case
-        (basicVar, EQ vcm r) -> (basicVar, EQ (filter (\(var, _) -> var `notElem` artificialVars) vcm) r)
-        _ -> undefined
-      )
-      phase1Tableau
+      (\(basicVar, pc) -> (basicVar, filterOutVars pc artificialVars))
+      (S.the phase1Tableau) -- FIXME: Unsafe
 
     objFunctionVars = map fst objectiveRow
 
@@ -169,15 +210,12 @@ twoPhaseSimplex objFunction system =
 
     phase1RowsInObjFunctionWithoutBasicVarsInLHS = 
       map 
-      (\case
-        (basicVar, EQ vcm r) -> (basicVar, EQ (filter (\(var, _) -> var /= basicVar) vcm) r)
-        _ -> undefined
-      ) 
+      (\(basicVar, pc) -> (basicVar, filterOutVars pc [basicVar])) 
       phase1RowsInObjFunction
 
     newObjFunction =
       foldl1
-      addRows
+      (addRows)
       $ map
         (
           \(var, coeff) ->
@@ -267,29 +305,30 @@ twoPhaseSimplex objFunction system =
         finalSum = foldl addRows initialObjective rowsToAdd 
         negatedSum = 
           case finalSum of
-            EQ vcm r -> EQ ((objectiveVar, 1) : map (second (* (-1))) vcm) (r * (-1))
-            _             -> undefined
+            pc -> updatePc pc ((objectiveVar, 1) : map (second (* (-1))) (lhs pc)) (rhs pc * (-1))
+            -- EQ vcm r -> EQ ((objectiveVar, 1) : map (second (* (-1))) vcm) (r * (-1))
         negatedSumWithoutZeroCoeffs = 
           case negatedSum of
-            EQ vcm r -> EQ (filter (\(_,c) -> c /= 0) vcm) r
-
+            pc -> updateLhs pc (filter (\(_, c) -> c /= 0) (lhs pc))
+            -- EQ vcm r -> EQ (filter (\(_,c) -> c /= 0) vcm) r
 
 -- Perform the simplex pivot algorithm on a system with artificial vars and the first row being the objective function
-simplexPivot :: [(Integer, PolyConstraint)] -> [(Integer, PolyConstraint)]
-simplexPivot tableau = dictionaryFormToTableau . simplexPhase2Loop $ tableauInDictionaryForm tableau
+simplexPivot :: [(Integer, PolyConstraint)] -> Maybe [(Integer, PolyConstraint)]
+simplexPivot tableau = 
+  case simplexPhase2Loop $ tableauInDictionaryForm tableau of
+    Just resultsInDictForm -> Just $ dictionaryFormToTableau resultsInDictForm  
+    Nothing -> Nothing
   where
-    simplexPhase2Loop :: [(S.Nat, S.Linear_poly)] -> [(S.Nat, S.Linear_poly)]
+    simplexPhase2Loop :: [(S.Nat, S.Linear_poly)] -> Maybe [(S.Nat, S.Linear_poly)]
     simplexPhase2Loop normalizedTableau =
-      case mostNegative (head normalizedTableau) of
-        Nothing -> normalizedTableau
+      case mostPositive (head normalizedTableau) of
+        Nothing -> Just normalizedTableau
         Just pivotNonBasicVar -> 
           let
             mPivotBasicVar = ratioTest (tail normalizedTableau) pivotNonBasicVar Nothing Nothing
           in
             case mPivotBasicVar of
-              Nothing -> 
-                trace ("Ratio test failed on non-basic var: " ++ show pivotNonBasicVar)
-                undefined
+              Nothing -> trace ("Ratio test failed on non-basic var: " ++ show pivotNonBasicVar) Nothing
               Just pivotBasicVar -> 
                 -- trace (show pivotNonBasicVar)
                 -- trace (show pivotBasicVar)
@@ -308,8 +347,7 @@ simplexPivot tableau = dictionaryFormToTableau . simplexPhase2Loop $ tableauInDi
         Nothing                         -> ratioTest xs mostNegativeVar mCurrentMinBasicVar mCurrentMin
         Just currentCoeff ->
           case lookup (S.Nat (-1)) lp' of
-            Nothing  -> 
-              undefined -- Shouldn't happen
+            Nothing  -> trace "RHS not found in row in dict form" Nothing
             Just rhs ->
               if currentCoeff >= 0 || rhs > 0 
                 then 
@@ -326,22 +364,20 @@ simplexPivot tableau = dictionaryFormToTableau . simplexPhase2Loop $ tableauInDi
       where
         S.Fmap_of_list lp' = S.linear_poly_map lp
 
-    mostNegative :: (S.Nat, S.Linear_poly) -> Maybe S.Nat
-    mostNegative (_, lp) = 
-      if largestCoeff <= 0 
-        then Nothing
-        else Just largestVar
+    mostPositive :: (S.Nat, S.Linear_poly) -> Maybe S.Nat
+    mostPositive (_, lp) = 
+      case findLargestCoeff lp' Nothing of
+        Just (largestVar, largestCoeff) ->
+          if largestCoeff <= 0 
+            then Nothing
+            else Just largestVar
+        Nothing -> trace "No variables in first row when looking for most positive" Nothing
 
       where
-        (largestVar, largestCoeff) = findLargestCoeff lp' Nothing
-
         S.Fmap_of_list lp' = S.linear_poly_map lp
 
-        findLargestCoeff :: [(S.Nat, Rational)] -> Maybe (S.Nat, Rational) -> (S.Nat, Rational)
-        findLargestCoeff [] mCurrentMax                  = 
-          case mCurrentMax of
-            Just currentMax -> currentMax
-            _ -> undefined
+        findLargestCoeff :: [(S.Nat, Rational)] -> Maybe (S.Nat, Rational) -> Maybe (S.Nat, Rational)
+        findLargestCoeff [] mCurrentMax                  = mCurrentMax
         findLargestCoeff ((var, coeff) : xs) mCurrentMax = 
           if var == S.Nat (-1) 
             then findLargestCoeff xs mCurrentMax
@@ -378,30 +414,16 @@ simplexPivot tableau = dictionaryFormToTableau . simplexPhase2Loop $ tableauInDi
         varMap' = filter (\(v,_) -> v /= S.Nat (-1)) varMap
 
 mulRow :: PolyConstraint -> Rational -> PolyConstraint
-mulRow pc c =
-  case pc of
-    EQ vcm r -> EQ (map (second (*c)) vcm) (c * r)
-    _ -> undefined
+mulRow pc c = updatePc pc (map (second (*c)) (lhs pc)) (rhs pc * c)
 
 addRows :: PolyConstraint -> PolyConstraint -> PolyConstraint
-addRows pc1 pc2 = 
-  case pc1 of
-    EQ vcm1 r1 ->
-      case pc2 of
-        EQ vcm2 r2 ->
-          EQ (addVarMapList sortedVarMaps) (r1 + r2)
-          where
-            sortedVarMaps = sort $ vcm1 ++ vcm2
-
-            addVarMapList :: [(Integer, Rational)] -> [(Integer, Rational)]
-            addVarMapList []                          = []
-            addVarMapList [(v, c)]                    = [(v, c)]
-            addVarMapList ((v1, c1) : (v2, c2) : vcm) =
-              if v1 == v2
-                then addVarMapList $ (v1, c1 + c2) : vcm
-                else (v1, c1) : addVarMapList ((v2, c2) : vcm)
-        _ -> undefined
-    _ -> undefined
+addRows (Util.EQ vcm1 r1) (Util.EQ vcm2 r2)   = Util.EQ (addVarConstMap (sort (vcm1 ++ vcm2))) (r1 + r2)
+addRows (Util.LT vcm1 r1) (Util.LT vcm2 r2)   = Util.LT (addVarConstMap (sort (vcm1 ++ vcm2))) (r1 + r2)
+addRows (Util.GT vcm1 r1) (Util.GT vcm2 r2)   = Util.GT (addVarConstMap (sort (vcm1 ++ vcm2))) (r1 + r2)
+addRows (Util.LEQ vcm1 r1) (Util.LEQ vcm2 r2) = Util.LEQ (addVarConstMap (sort (vcm1 ++ vcm2))) (r1 + r2)
+addRows (Util.GEQ vcm1 r1) (Util.GEQ vcm2 r2) = Util.GEQ (addVarConstMap (sort (vcm1 ++ vcm2))) (r1 + r2)
+addRows _ _                                   = undefined -- FIXME: Unsafe. Can only add rows with matching data constructors
+                                                          -- Leaving it like this is easier for folding
 
 -- removeBasicVarsFromOtherRows :: [(Integer, PolyConstraint)] -> [(Integer, PolyConstraint)]
 -- removeBasicVarsFromOtherRows pcs = addAllRowsToTableau pcs pcs
