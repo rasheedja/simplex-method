@@ -2,8 +2,8 @@
 {-# LANGUAGE TupleSections #-}
 module Util where
 
-import Simplex;
-import Prelude;
+import qualified Simplex as S;
+import Prelude hiding (LT, GT, EQ);
 import Data.List
 import Control.Arrow
 
@@ -23,39 +23,39 @@ data PolyConstraint =
 data ObjectiveFunction = Max VarConstMap | Min VarConstMap
 
 getRhs :: PolyConstraint -> Rational
-getRhs (Util.LT _ r) = r
-getRhs (Util.GT _ r) = r
-getRhs (Util.LEQ _ r) = r
-getRhs (Util.GEQ _ r) = r
-getRhs (Util.EQ _ r) = r
+getRhs (LT _ r) = r
+getRhs (GT _ r) = r
+getRhs (LEQ _ r) = r
+getRhs (GEQ _ r) = r
+getRhs (EQ _ r) = r
 
-varConstMapToLinearPoly :: VarConstMap -> Linear_poly
-varConstMapToLinearPoly vcm = LinearPoly (Fmap_of_list (map (\(v,r) -> (nat_of_integer v, r)) vcm))
+varConstMapToLinearPoly :: VarConstMap -> S.Linear_poly
+varConstMapToLinearPoly vcm = S.LinearPoly (S.Fmap_of_list (map (first S.nat_of_integer) vcm))
 
-polyConstraintToConstraint :: PolyConstraint -> Constraint
+polyConstraintToConstraint :: PolyConstraint -> S.Constraint
 polyConstraintToConstraint pc =
   case pc of
-    Util.LT vcm r -> Simplex.LT (varConstMapToLinearPoly vcm) r
-    Util.GT vcm r -> Simplex.GT (varConstMapToLinearPoly vcm) r
-    Util.LEQ vcm r -> Simplex.LEQ (varConstMapToLinearPoly vcm) r
-    Util.GEQ vcm r -> Simplex.GEQ (varConstMapToLinearPoly vcm) r
-    Util.EQ vcm r -> Simplex.EQ (varConstMapToLinearPoly vcm) r
+    LT vcm r -> S.LT (varConstMapToLinearPoly vcm) r
+    GT vcm r -> S.GT (varConstMapToLinearPoly vcm) r
+    LEQ vcm r -> S.LEQ (varConstMapToLinearPoly vcm) r
+    GEQ vcm r -> S.GEQ (varConstMapToLinearPoly vcm) r
+    EQ vcm r -> S.EQ (varConstMapToLinearPoly vcm) r
 
-showSimplexResult :: Sum [Nat] (Mapping Nat Rational) -> (Bool, [Maybe (Integer, Integer)])
+showSimplexResult :: S.Sum [S.Nat] (S.Mapping S.Nat Rational) -> (Bool, [Maybe (Integer, Integer)])
 showSimplexResult result =
   case result of
-    Inl unsatl  -> 
-      (False, map (\n -> Just ((integer_of_nat n), 1)) unsatl)
-    Inr mapping ->
+    S.Inl unsatl  -> 
+      (False, map (\n -> Just (S.integer_of_nat n, 1)) unsatl)
+    S.Inr mapping ->
       (True,
       map
       (\i ->
-        case lookupa mapping (nat_of_integer i) of
+        case S.lookupa mapping (S.nat_of_integer i) of
           Nothing -> Nothing
           Just r -> Just (n, d)
             where
-              (n, d) = (integer_of_int n', integer_of_int d')
-              (n', d') = quotient_of r
+              (n, d) = (S.integer_of_int n', S.integer_of_int d')
+              (n', d') = S.quotient_of r
       )
       [0..3]
       )
@@ -90,11 +90,11 @@ showSimplexResult result =
 twoPhaseSimplex :: ObjectiveFunction -> [PolyConstraint] -> Maybe (Integer, [(Integer, Rational)])
 twoPhaseSimplex objFunction system = 
   if null artificialVars
-    then Just $ displayResults $ simplexPivot ((objectiveVar, Util.EQ objectiveRow 0) : systemWithBasicVars)
+    then Just $ displayResults $ simplexPivot ((objectiveVar, EQ objectiveRow 0) : systemWithBasicVars)
     else 
-      case Data.List.lookup objectiveVar removeArtificialVarsFromPhase1Tableau of
+      case lookup objectiveVar removeArtificialVarsFromPhase1Tableau of
         Nothing -> trace "objective row not found in phase 1 tableau" Nothing
-        Just (Util.EQ _ r) ->
+        Just (EQ _ r) ->
           if r == 0 
             then Just $ displayResults $ simplexPivot $ (objectiveVar, newObjFunction) : tail removeArtificialVarsFromPhase1Tableau
             else trace "rhs not zero after phase 1, thus original tableau is infeasible" Nothing
@@ -122,14 +122,14 @@ twoPhaseSimplex objFunction system =
       )
 
     maxVar =
-      Prelude.max
+      max
       (maximum $ map 
       (\case
-          Util.LT vcm _  -> maximum (map fst vcm)
-          Util.GT vcm _  -> maximum (map fst vcm)
-          Util.LEQ vcm _ -> maximum (map fst vcm)
-          Util.GEQ vcm _ -> maximum (map fst vcm)
-          Util.EQ vcm _  -> maximum (map fst vcm)
+          LT vcm _  -> maximum (map fst vcm)
+          GT vcm _  -> maximum (map fst vcm)
+          LEQ vcm _ -> maximum (map fst vcm)
+          GEQ vcm _ -> maximum (map fst vcm)
+          EQ vcm _  -> maximum (map fst vcm)
       ) 
       system)
       (maximum (map fst objectiveRow)) -- This is not logically needed since if a variable does not appear to the system, 
@@ -151,7 +151,7 @@ twoPhaseSimplex objFunction system =
     removeArtificialVarsFromPhase1Tableau = 
       map
       (\case
-        (basicVar, Util.EQ vcm r) -> (basicVar, Util.EQ (filter (\(var, _) -> var `notElem` artificialVars) vcm) r)
+        (basicVar, EQ vcm r) -> (basicVar, EQ (filter (\(var, _) -> var `notElem` artificialVars) vcm) r)
         _ -> undefined
       )
       phase1Tableau
@@ -163,7 +163,7 @@ twoPhaseSimplex objFunction system =
     phase1RowsInObjFunctionWithoutBasicVarsInLHS = 
       map 
       (\case
-        (basicVar, Util.EQ vcm r) -> (basicVar, Util.EQ (filter (\(var, _) -> var /= basicVar) vcm) r)
+        (basicVar, EQ vcm r) -> (basicVar, EQ (filter (\(var, _) -> var /= basicVar) vcm) r)
         _ -> undefined
       ) 
       phase1RowsInObjFunction
@@ -174,10 +174,10 @@ twoPhaseSimplex objFunction system =
       $ map
         (
           \(var, coeff) ->
-            case Data.List.lookup var phase1RowsInObjFunctionWithoutBasicVarsInLHS of
+            case lookup var phase1RowsInObjFunctionWithoutBasicVarsInLHS of
               Nothing -> 
                 -- trace ("var " ++ show var ++ " not found") $
-                Util.EQ [(var, coeff * (-1))] 0 -- moving var to LHS
+                EQ [(var, coeff * (-1))] 0 -- moving var to LHS
               Just row ->
                 -- trace (show var ++ ":::" ++ show row)
                 mulRow row coeff                -- TODO: think about why we do not negate this coeff. Rows are already in LHS so this is fine?
@@ -195,24 +195,24 @@ twoPhaseSimplex objFunction system =
         addSlackVarsToSystem :: [PolyConstraint] -> Integer -> [Integer] -> ([(Maybe Integer, PolyConstraint)], [Integer])
         addSlackVarsToSystem []  _       sVars = ([], sVars)
 
-        addSlackVarsToSystem (Util.EQ v r : xs) maxVar sVars = 
-          -- addSlackVarsToSystem (Util.GEQ v r : Util.LEQ v r : xs) maxVar sVars
-          ((Nothing, Util.EQ v r) : newSystem, newSlackVars) 
+        addSlackVarsToSystem (EQ v r : xs) maxVar sVars = 
+          -- addSlackVarsToSystem (GEQ v r : LEQ v r : xs) maxVar sVars
+          ((Nothing, EQ v r) : newSystem, newSlackVars) 
           where
             (newSystem, newSlackVars) = addSlackVarsToSystem xs maxVar sVars
-        addSlackVarsToSystem (Util.LEQ v r : xs) maxVar  sVars = ((Just newSlackVar, Util.EQ (v ++ [(newSlackVar, 1)]) r) : newSystem, newSlackVars)
+        addSlackVarsToSystem (LEQ v r : xs) maxVar  sVars = ((Just newSlackVar, EQ (v ++ [(newSlackVar, 1)]) r) : newSystem, newSlackVars)
           where
             newSlackVar = maxVar + 1
             (newSystem, newSlackVars) = addSlackVarsToSystem xs newSlackVar (newSlackVar : sVars)
-        addSlackVarsToSystem (Util.LT v r : xs) maxVar   sVars = ((Just newSlackVar, Util.EQ (v ++ [(newSlackVar, 1)]) r) : newSystem, newSlackVars) -- TODO: Could add some delta to the coefficient of the slack variable to make this valid? 
+        addSlackVarsToSystem (LT v r : xs) maxVar   sVars = ((Just newSlackVar, EQ (v ++ [(newSlackVar, 1)]) r) : newSystem, newSlackVars) -- TODO: Could add some delta to the coefficient of the slack variable to make this valid? 
           where
             newSlackVar = maxVar + 1
             (newSystem, newSlackVars) = addSlackVarsToSystem xs newSlackVar (newSlackVar : sVars)
-        addSlackVarsToSystem (Util.GEQ v r : xs) maxVar  sVars = ((Just newSlackVar, Util.EQ (v ++ [(newSlackVar, -1)]) r) : newSystem, newSlackVars)
+        addSlackVarsToSystem (GEQ v r : xs) maxVar  sVars = ((Just newSlackVar, EQ (v ++ [(newSlackVar, -1)]) r) : newSystem, newSlackVars)
           where
             newSlackVar = maxVar + 1
             (newSystem, newSlackVars) = addSlackVarsToSystem xs newSlackVar (newSlackVar : sVars)
-        addSlackVarsToSystem (Util.GT v r : xs) maxVar   sVars = ((Just newSlackVar, Util.EQ (v ++ [(newSlackVar, -1)]) r) : newSystem, newSlackVars) -- TODO: Could add some delta to the coefficient of the slack variable to make this valid? 
+        addSlackVarsToSystem (GT v r : xs) maxVar   sVars = ((Just newSlackVar, EQ (v ++ [(newSlackVar, -1)]) r) : newSystem, newSlackVars) -- TODO: Could add some delta to the coefficient of the slack variable to make this valid? 
           where
             newSlackVar = maxVar + 1
             (newSystem, newSlackVars) = addSlackVarsToSystem xs newSlackVar (newSlackVar : sVars)
@@ -228,19 +228,19 @@ twoPhaseSimplex objFunction system =
       where
         addArtificialVarsToSystem :: [(Maybe Integer, PolyConstraint)] -> Integer -> ([(Integer, PolyConstraint)], [Integer])
         addArtificialVarsToSystem [] _                                = ([],[])
-        addArtificialVarsToSystem ((mVar, Util.EQ v r) : pcs) maxVar  =
+        addArtificialVarsToSystem ((mVar, EQ v r) : pcs) maxVar  =
           case mVar of
             Nothing ->
               if r >= 0 
-                then ((newArtificialVar, Util.EQ (v ++ [(newArtificialVar, 1)]) r) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar)
+                then ((newArtificialVar, EQ (v ++ [(newArtificialVar, 1)]) r) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar)
                 else 
-                  ((newArtificialVar, Util.EQ (invertedMap ++ [(newArtificialVar, 1)]) (r * (-1))) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar)
+                  ((newArtificialVar, EQ (invertedMap ++ [(newArtificialVar, 1)]) (r * (-1))) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar)
                   where
                     invertedMap = map (second (* (-1))) v
             Just basicVar ->
               if r >= 0
-                then ((basicVar, Util.EQ v r) : newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
-                else ((newArtificialVar, Util.EQ (invertedMap ++ [(newArtificialVar, 1)]) (r * (-1))) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar) 
+                then ((basicVar, EQ v r) : newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
+                else ((newArtificialVar, EQ (invertedMap ++ [(newArtificialVar, 1)]) (r * (-1))) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar) 
                   where
                     invertedMap = map (second (* (-1))) v
           where
@@ -255,23 +255,23 @@ twoPhaseSimplex objFunction system =
     addArtificialObjective :: [(Integer, PolyConstraint)] -> [Integer] -> Integer -> [(Integer, PolyConstraint)]
     addArtificialObjective pcs artificialVars objectiveVar = (objectiveVar, negatedSumWithoutZeroCoeffs) : pcs
       where
-        initialObjective = Util.EQ (map (, -1) artificialVars) 0
+        initialObjective = EQ (map (, -1) artificialVars) 0
         rowsToAdd = map snd $ filter (\(i, _) -> i `elem` artificialVars) pcs
-        finalSum = Data.List.foldl addRows initialObjective rowsToAdd 
+        finalSum = foldl addRows initialObjective rowsToAdd 
         negatedSum = 
           case finalSum of
-            Util.EQ vcm r -> Util.EQ ((objectiveVar, 1) : map (second (* (-1))) vcm) (r * (-1))
+            EQ vcm r -> EQ ((objectiveVar, 1) : map (second (* (-1))) vcm) (r * (-1))
             _             -> undefined
         negatedSumWithoutZeroCoeffs = 
           case negatedSum of
-            Util.EQ vcm r -> Util.EQ (filter (\(_,c) -> c /= 0) vcm) r
+            EQ vcm r -> EQ (filter (\(_,c) -> c /= 0) vcm) r
 
 
 -- Perform the simplex pivot algorithm on a system with artificial vars and the first row being the objective function
 simplexPivot :: [(Integer, PolyConstraint)] -> [(Integer, PolyConstraint)]
 simplexPivot tableau = dictionaryFormToTableau . simplexPhase2Loop $ tableauInDictionaryForm tableau
   where
-    simplexPhase2Loop :: [(Nat, Linear_poly)] -> [(Nat, Linear_poly)]
+    simplexPhase2Loop :: [(S.Nat, S.Linear_poly)] -> [(S.Nat, S.Linear_poly)]
     simplexPhase2Loop normalizedTableau =
       case mostNegative (head normalizedTableau) of
         Nothing -> normalizedTableau
@@ -290,17 +290,17 @@ simplexPivot tableau = dictionaryFormToTableau . simplexPhase2Loop $ tableauInDi
                 -- trace (show newTableau)
                 simplexPhase2Loop newTableau 
                 where
-                  newTableau = pivot_tableau_code pivotBasicVar pivotNonBasicVar normalizedTableau
+                  newTableau = S.pivot_tableau_code pivotBasicVar pivotNonBasicVar normalizedTableau
 
     -- pivotBasicVar    = ratioTest (tail invertedLinPoly) pivotNonBasicVar Nothing Nothing
 
-    ratioTest :: [(Nat, Linear_poly)] -> Nat -> Maybe Nat -> Maybe Rational -> Maybe Nat
+    ratioTest :: [(S.Nat, S.Linear_poly)] -> S.Nat -> Maybe S.Nat -> Maybe Rational -> Maybe S.Nat
     ratioTest []                    _               mCurrentMinBasicVar _           = mCurrentMinBasicVar
     ratioTest ((basicVar, lp) : xs) mostNegativeVar mCurrentMinBasicVar mCurrentMin =
-      case Prelude.lookup mostNegativeVar lp' of
+      case lookup mostNegativeVar lp' of
         Nothing                         -> ratioTest xs mostNegativeVar mCurrentMinBasicVar mCurrentMin
         Just currentCoeff ->
-          case Prelude.lookup (Nat (-1)) lp' of
+          case lookup (S.Nat (-1)) lp' of
             Nothing  -> 
               undefined -- Shouldn't happen
             Just rhs ->
@@ -317,9 +317,9 @@ simplexPivot tableau = dictionaryFormToTableau . simplexPhase2Loop $ tableauInDi
                         else ratioTest xs mostNegativeVar mCurrentMinBasicVar mCurrentMin
 
       where
-        Fmap_of_list lp' = linear_poly_map lp
+        S.Fmap_of_list lp' = S.linear_poly_map lp
 
-    mostNegative :: (Nat, Linear_poly) -> Maybe Nat
+    mostNegative :: (S.Nat, S.Linear_poly) -> Maybe S.Nat
     mostNegative (_, lp) = 
       if largestCoeff <= 0 
         then Nothing
@@ -328,15 +328,15 @@ simplexPivot tableau = dictionaryFormToTableau . simplexPhase2Loop $ tableauInDi
       where
         (largestVar, largestCoeff) = findLargestCoeff lp' Nothing
 
-        Fmap_of_list lp' = linear_poly_map lp
+        S.Fmap_of_list lp' = S.linear_poly_map lp
 
-        findLargestCoeff :: [(Nat, Rational)] -> Maybe (Nat, Rational) -> (Nat, Rational)
+        findLargestCoeff :: [(S.Nat, Rational)] -> Maybe (S.Nat, Rational) -> (S.Nat, Rational)
         findLargestCoeff [] mCurrentMax                  = 
           case mCurrentMax of
             Just currentMax -> currentMax
             _ -> undefined
         findLargestCoeff ((var, coeff) : xs) mCurrentMax = 
-          if var == (Nat (-1)) 
+          if var == S.Nat (-1) 
             then findLargestCoeff xs mCurrentMax
             else 
               case mCurrentMax of
@@ -351,38 +351,38 @@ simplexPivot tableau = dictionaryFormToTableau . simplexPhase2Loop $ tableauInDi
     -- is in the LHS, each row is equal to the basic variable which is 
     -- defined in the first  element of the pair.
     -- We use (Nat -1) to represent a rational constant (The RHS in the tableau).
-    tableauInDictionaryForm :: [(Integer, PolyConstraint)] -> [(Nat, Linear_poly)]
+    tableauInDictionaryForm :: [(Integer, PolyConstraint)] -> [(S.Nat, S.Linear_poly)]
     tableauInDictionaryForm []                      = []
     tableauInDictionaryForm ((basicVar, pc) : pcs)  =
       case pc of
-        Util.EQ vcm r ->  (Nat basicVar, LinearPoly (Fmap_of_list ((Nat (-1), r * (-1)) : map (\(var, coeff) -> (Nat var, coeff * (-1))) (filter (\(v,_) -> v /= basicVar) vcm)))) : tableauInDictionaryForm pcs
+        EQ vcm r ->  (S.Nat basicVar, S.LinearPoly (S.Fmap_of_list ((S.Nat (-1), r * (-1)) : map (\(var, coeff) -> (S.Nat var, coeff * (-1))) (filter (\(v,_) -> v /= basicVar) vcm)))) : tableauInDictionaryForm pcs
 
     -- Converts a list of rows in dictionary form to a tableau
-    dictionaryFormToTableau :: [(Nat, Linear_poly)] -> [(Integer, PolyConstraint)]
+    dictionaryFormToTableau :: [(S.Nat, S.Linear_poly)] -> [(Integer, PolyConstraint)]
     dictionaryFormToTableau [] = []
-    dictionaryFormToTableau ((Nat basicVar, LinearPoly (Fmap_of_list varMap)) : rows) = 
-        (basicVar, Util.EQ ((basicVar, 1) : map (\(v,c) -> (integer_of_nat v, c * (-1))) varMap') (r * (-1))) : dictionaryFormToTableau rows
+    dictionaryFormToTableau ((S.Nat basicVar, S.LinearPoly (S.Fmap_of_list varMap)) : rows) = 
+        (basicVar, EQ ((basicVar, 1) : map (\(v,c) -> (S.integer_of_nat v, c * (-1))) varMap') (r * (-1))) : dictionaryFormToTableau rows
       where
         r = 
-          case Data.List.lookup (Nat (-1)) varMap of
+          case lookup (S.Nat (-1)) varMap of
             Just r -> r
             Nothing -> trace "RHS not found in dictionary, setting to zero" 0
 
-        varMap' = filter (\(v,_) -> v /= Nat (-1)) varMap
+        varMap' = filter (\(v,_) -> v /= S.Nat (-1)) varMap
 
 mulRow :: PolyConstraint -> Rational -> PolyConstraint
 mulRow pc c =
   case pc of
-    Util.EQ vcm r -> Util.EQ (map (second (*c)) vcm) (c * r)
+    EQ vcm r -> EQ (map (second (*c)) vcm) (c * r)
     _ -> undefined
 
 addRows :: PolyConstraint -> PolyConstraint -> PolyConstraint
 addRows pc1 pc2 = 
   case pc1 of
-    Util.EQ vcm1 r1 ->
+    EQ vcm1 r1 ->
       case pc2 of
-        Util.EQ vcm2 r2 ->
-          Util.EQ (addVarMapList sortedVarMaps) (r1 + r2)
+        EQ vcm2 r2 ->
+          EQ (addVarMapList sortedVarMaps) (r1 + r2)
           where
             sortedVarMaps = sort $ vcm1 ++ vcm2
 
