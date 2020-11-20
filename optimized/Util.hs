@@ -22,12 +22,19 @@ data PolyConstraint =
 
 data ObjectiveFunction = Max VarConstMap | Min VarConstMap
 
-getRhs :: PolyConstraint -> Rational
-getRhs (LT _ r) = r
-getRhs (GT _ r) = r
-getRhs (LEQ _ r) = r
-getRhs (GEQ _ r) = r
-getRhs (EQ _ r) = r
+rhs :: PolyConstraint -> Rational
+rhs (LT _ r) = r
+rhs (GT _ r) = r
+rhs (LEQ _ r) = r
+rhs (GEQ _ r) = r
+rhs (EQ _ r) = r
+
+lhs :: PolyConstraint -> VarConstMap
+lhs (LT vcm _) = vcm
+lhs (GT vcm _) = vcm
+lhs (LEQ vcm _) = vcm
+lhs (GEQ vcm _) = vcm
+lhs (EQ vcm _) = vcm
 
 varConstMapToLinearPoly :: VarConstMap -> S.Linear_poly
 varConstMapToLinearPoly vcm = S.LinearPoly (S.Fmap_of_list (map (first S.nat_of_integer) vcm))
@@ -113,11 +120,11 @@ twoPhaseSimplex objFunction system =
         case objFunction of
           Max _ -> 
             map 
-            (second getRhs) 
+            (second rhs) 
             $ filter (\(basicVar,_) -> basicVar `notElem` slackVars ++ artificialVars) tableau
           Min _ -> 
             map -- We maximized -objVar, so we negate the objVar to get the final value
-            (\(basicVar, pc) -> if basicVar == objectiveVar then (basicVar, negate (getRhs pc)) else (basicVar, getRhs pc))
+            (\(basicVar, pc) -> if basicVar == objectiveVar then (basicVar, negate (rhs pc)) else (basicVar, rhs pc))
             $ filter (\(basicVar,_) -> basicVar `notElem` slackVars ++ artificialVars) tableau
       )
 
