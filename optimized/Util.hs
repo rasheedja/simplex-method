@@ -5,7 +5,7 @@ module Util where
 import qualified Simplex as S;
 import Prelude hiding (LT, GT, EQ);
 import Data.List
-import Control.Arrow
+import Data.Bifunctor
 
 import Debug.Trace (trace)
 
