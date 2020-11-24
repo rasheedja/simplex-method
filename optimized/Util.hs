@@ -167,7 +167,7 @@ twoPhaseSimplex objFunction system =
                                       -- we can set this variable to infinity (since we assume all variables are >=0).
                                       -- But, this is safer.  
 
-    (systemWithSlackVars, slackVars)      = systemInStandardForm system maxVar
+    (systemWithSlackVars, slackVars)      = systemInStandardForm system maxVar []
 
     maxVarWithSlackVars = if null slackVars then maxVar else maximum slackVars
 
@@ -212,27 +212,19 @@ twoPhaseSimplex objFunction system =
     -- System in standard form, a tableau using only EQ. Add slack vars where necessary. This may give you
     -- an infeasible system if slack vars are negative. If a constraint is already EQ, set the basic var to Nothing
     -- Final system is a list of equalities for the given system. To be feasible, all vars must be >= 0.
-    systemInStandardForm :: [PolyConstraint] -> Integer -> ([(Maybe Integer, PolyConstraint)], [Integer])
-    systemInStandardForm pcs maxVar = (finalSystem, finalSlackVars)
+    systemInStandardForm :: [PolyConstraint] -> Integer -> [Integer] -> ([(Maybe Integer, PolyConstraint)], [Integer])
+    systemInStandardForm []  _       sVars = ([], sVars)
+    systemInStandardForm (EQ v r : xs) maxVar sVars = ((Nothing, EQ v r) : newSystem, newSlackVars) 
       where
-        (finalSystem, finalSlackVars) = addSlackVarsToSystem pcs maxVar []
-
-        addSlackVarsToSystem :: [PolyConstraint] -> Integer -> [Integer] -> ([(Maybe Integer, PolyConstraint)], [Integer])
-        addSlackVarsToSystem []  _       sVars = ([], sVars)
-
-        addSlackVarsToSystem (EQ v r : xs) maxVar sVars = 
-          -- addSlackVarsToSystem (GEQ v r : LEQ v r : xs) maxVar sVars
-          ((Nothing, EQ v r) : newSystem, newSlackVars) 
-          where
-            (newSystem, newSlackVars) = addSlackVarsToSystem xs maxVar sVars
-        addSlackVarsToSystem (LEQ v r : xs) maxVar  sVars = ((Just newSlackVar, EQ (v ++ [(newSlackVar, 1)]) r) : newSystem, newSlackVars)
-          where
-            newSlackVar = maxVar + 1
-            (newSystem, newSlackVars) = addSlackVarsToSystem xs newSlackVar (newSlackVar : sVars)
-        addSlackVarsToSystem (GEQ v r : xs) maxVar  sVars = ((Just newSlackVar, EQ (v ++ [(newSlackVar, -1)]) r) : newSystem, newSlackVars)
-          where
-            newSlackVar = maxVar + 1
-            (newSystem, newSlackVars) = addSlackVarsToSystem xs newSlackVar (newSlackVar : sVars)
+        (newSystem, newSlackVars) = systemInStandardForm xs maxVar sVars
+    systemInStandardForm (LEQ v r : xs) maxVar  sVars = ((Just newSlackVar, EQ (v ++ [(newSlackVar, 1)]) r) : newSystem, newSlackVars)
+      where
+        newSlackVar = maxVar + 1
+        (newSystem, newSlackVars) = systemInStandardForm xs newSlackVar (newSlackVar : sVars)
+    systemInStandardForm (GEQ v r : xs) maxVar  sVars = ((Just newSlackVar, EQ (v ++ [(newSlackVar, -1)]) r) : newSystem, newSlackVars)
+      where
+        newSlackVar = maxVar + 1
+        (newSystem, newSlackVars) = systemInStandardForm xs newSlackVar (newSlackVar : sVars)
 
     -- Add artificial vars to a system.
     -- Artificial vars are added when:
@@ -241,30 +233,27 @@ twoPhaseSimplex objFunction system =
     --  Final system will be a feasible artificial system.
     -- We keep track of artificial vars so they can be eliminated once phase 1 is complete
     systemWithArtificialVars :: [(Maybe Integer, PolyConstraint)] -> Integer -> ([(Integer, PolyConstraint)], [Integer])
-    systemWithArtificialVars polyConstraints maxVar = addArtificialVarsToSystem polyConstraints maxVar
+    systemWithArtificialVars [] _                                = ([],[])
+    systemWithArtificialVars ((mVar, EQ v r) : pcs) maxVar  =
+      case mVar of
+        Nothing ->
+          if r >= 0 
+            then ((newArtificialVar, EQ (v ++ [(newArtificialVar, 1)]) r) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar)
+            else 
+              ((newArtificialVar, EQ (invertedMap ++ [(newArtificialVar, 1)]) (r * (-1))) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar)
+              where
+                invertedMap = map (second (* (-1))) v
+        Just basicVar ->
+          if r >= 0
+            then ((basicVar, EQ v r) : newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
+            else ((newArtificialVar, EQ (invertedMap ++ [(newArtificialVar, 1)]) (r * (-1))) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar) 
+              where
+                invertedMap = map (second (* (-1))) v
       where
-        addArtificialVarsToSystem :: [(Maybe Integer, PolyConstraint)] -> Integer -> ([(Integer, PolyConstraint)], [Integer])
-        addArtificialVarsToSystem [] _                                = ([],[])
-        addArtificialVarsToSystem ((mVar, EQ v r) : pcs) maxVar  =
-          case mVar of
-            Nothing ->
-              if r >= 0 
-                then ((newArtificialVar, EQ (v ++ [(newArtificialVar, 1)]) r) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar)
-                else 
-                  ((newArtificialVar, EQ (invertedMap ++ [(newArtificialVar, 1)]) (r * (-1))) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar)
-                  where
-                    invertedMap = map (second (* (-1))) v
-            Just basicVar ->
-              if r >= 0
-                then ((basicVar, EQ v r) : newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
-                else ((newArtificialVar, EQ (invertedMap ++ [(newArtificialVar, 1)]) (r * (-1))) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar) 
-                  where
-                    invertedMap = map (second (* (-1))) v
-          where
-            newArtificialVar = maxVar + 1
-            (newSystemWithNewMaxVar, artificialVarsWithNewMaxVar) = addArtificialVarsToSystem pcs newArtificialVar
+        newArtificialVar = maxVar + 1
+        (newSystemWithNewMaxVar, artificialVarsWithNewMaxVar) = systemWithArtificialVars pcs newArtificialVar
 
-            (newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar) = addArtificialVarsToSystem pcs maxVar
+        (newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar) = systemWithArtificialVars pcs maxVar
 
     -- Create an artificial objective using the given list of artificialVars and the tableau.
     -- The artificial objective is the negative sum of all artificial vars.
