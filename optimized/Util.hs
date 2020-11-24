@@ -221,7 +221,7 @@ twoPhaseSimplex objFunction system =
       where
         newSlackVar = maxVar + 1
         (newSystem, newSlackVars) = systemInStandardForm xs newSlackVar (newSlackVar : sVars)
-    systemInStandardForm (GEQ v r : xs) maxVar  sVars = ((Just newSlackVar, EQ (v ++ [(newSlackVar, -1)]) r) : newSystem, newSlackVars)
+    systemInStandardForm (GEQ v r : xs) maxVar  sVars = ((Just newSlackVar, EQ (v ++ [(newSlackVar, 1)]) r) : newSystem, newSlackVars)
       where
         newSlackVar = maxVar + 1
         (newSystem, newSlackVars) = systemInStandardForm xs newSlackVar (newSlackVar : sVars)
