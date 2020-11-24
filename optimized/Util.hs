@@ -3,7 +3,7 @@
 module Util where
 
 import qualified Simplex as S;
-import Prelude hiding (LT, GT, EQ);
+import Prelude hiding (EQ);
 import Data.List
 import Data.Bifunctor
 
@@ -14,60 +14,44 @@ import Debug.Trace (trace)
 type VarConstMap = [(Integer, Rational)]
 
 data PolyConstraint =
-  LT VarConstMap Rational       | 
-  GT VarConstMap Rational       | 
   LEQ VarConstMap Rational      | 
   GEQ VarConstMap Rational      | 
   EQ VarConstMap Rational       deriving (Show, Eq);
-
+  
 data ObjectiveFunction = Max VarConstMap | Min VarConstMap
 
 rhs :: PolyConstraint -> Rational
-rhs (LT _ r) = r
-rhs (GT _ r) = r
 rhs (LEQ _ r) = r
 rhs (GEQ _ r) = r
 rhs (EQ _ r) = r
 
 lhs :: PolyConstraint -> VarConstMap
-lhs (LT vcm _) = vcm
-lhs (GT vcm _) = vcm
 lhs (LEQ vcm _) = vcm
 lhs (GEQ vcm _) = vcm
 lhs (EQ vcm _) = vcm
 
 updateRhs :: PolyConstraint -> Rational -> PolyConstraint
-updateRhs (LT vcm _) r = LT vcm r
-updateRhs (GT vcm _) r = GT vcm r
 updateRhs (EQ vcm _) r = EQ vcm r
 updateRhs (LEQ vcm _) r = LEQ vcm r
 updateRhs (GEQ vcm _) r = GEQ vcm r
 
 updateLhs :: PolyConstraint -> VarConstMap -> PolyConstraint
-updateLhs (LT _ r) vcm = LT vcm r 
-updateLhs (GT _ r) vcm = GT vcm r 
 updateLhs (EQ _ r) vcm = EQ vcm r 
 updateLhs (LEQ _ r) vcm = LEQ vcm r 
 updateLhs (GEQ _ r) vcm = GEQ vcm r 
 
 updatePc :: PolyConstraint -> VarConstMap -> Rational -> PolyConstraint
-updatePc (LT _ _) = LT
-updatePc (GT _ _) = GT
 updatePc (EQ _ _) = EQ
 updatePc (LEQ _ _) = LEQ
 updatePc (GEQ _ _) = GEQ
 
 filterOutVars :: PolyConstraint -> [Integer] -> PolyConstraint
 filterOutVars (Util.EQ vcm r) vars = Util.EQ (filter (\(v, _) -> v `notElem` vars) vcm) r
-filterOutVars (Util.LT vcm r) vars = Util.LT (filter (\(v, _) -> v `notElem` vars) vcm) r
-filterOutVars (Util.GT vcm r) vars = Util.GT (filter (\(v, _) -> v `notElem` vars) vcm) r
 filterOutVars (Util.LEQ vcm r) vars = Util.LEQ (filter (\(v, _) -> v `notElem` vars) vcm) r
 filterOutVars (Util.GEQ vcm r) vars = Util.GEQ (filter (\(v, _) -> v `notElem` vars) vcm) r
 
 filterInVars :: PolyConstraint -> [Integer] -> PolyConstraint
 filterInVars (Util.EQ vcm r) vars = Util.EQ (filter (\(v, _) -> v `elem` vars) vcm) r
-filterInVars (Util.LT vcm r) vars = Util.LT (filter (\(v, _) -> v `elem` vars) vcm) r
-filterInVars (Util.GT vcm r) vars = Util.GT (filter (\(v, _) -> v `elem` vars) vcm) r
 filterInVars (Util.LEQ vcm r) vars = Util.LEQ (filter (\(v, _) -> v `elem` vars) vcm) r
 filterInVars (Util.GEQ vcm r) vars = Util.GEQ (filter (\(v, _) -> v `elem` vars) vcm) r
 
@@ -86,8 +70,6 @@ varConstMapToLinearPoly vcm = S.LinearPoly (S.Fmap_of_list (map (first S.nat_of_
 polyConstraintToConstraint :: PolyConstraint -> S.Constraint
 polyConstraintToConstraint pc =
   case pc of
-    LT vcm r -> S.LT (varConstMapToLinearPoly vcm) r
-    GT vcm r -> S.GT (varConstMapToLinearPoly vcm) r
     LEQ vcm r -> S.LEQ (varConstMapToLinearPoly vcm) r
     GEQ vcm r -> S.GEQ (varConstMapToLinearPoly vcm) r
     EQ vcm r -> S.EQ (varConstMapToLinearPoly vcm) r
@@ -176,8 +158,6 @@ twoPhaseSimplex objFunction system =
       max
       (maximum $ map 
       (\case
-          LT vcm _  -> maximum (map fst vcm)
-          GT vcm _  -> maximum (map fst vcm)
           LEQ vcm _ -> maximum (map fst vcm)
           GEQ vcm _ -> maximum (map fst vcm)
           EQ vcm _  -> maximum (map fst vcm)
@@ -215,7 +195,7 @@ twoPhaseSimplex objFunction system =
 
     newObjFunction =
       foldl1
-      (addRows)
+      addRows
       $ map
         (
           \(var, coeff) ->
@@ -249,15 +229,7 @@ twoPhaseSimplex objFunction system =
           where
             newSlackVar = maxVar + 1
             (newSystem, newSlackVars) = addSlackVarsToSystem xs newSlackVar (newSlackVar : sVars)
-        addSlackVarsToSystem (LT v r : xs) maxVar   sVars = ((Just newSlackVar, EQ (v ++ [(newSlackVar, 1)]) r) : newSystem, newSlackVars) -- TODO: Could add some delta to the coefficient of the slack variable to make this valid? 
-          where
-            newSlackVar = maxVar + 1
-            (newSystem, newSlackVars) = addSlackVarsToSystem xs newSlackVar (newSlackVar : sVars)
         addSlackVarsToSystem (GEQ v r : xs) maxVar  sVars = ((Just newSlackVar, EQ (v ++ [(newSlackVar, -1)]) r) : newSystem, newSlackVars)
-          where
-            newSlackVar = maxVar + 1
-            (newSystem, newSlackVars) = addSlackVarsToSystem xs newSlackVar (newSlackVar : sVars)
-        addSlackVarsToSystem (GT v r : xs) maxVar   sVars = ((Just newSlackVar, EQ (v ++ [(newSlackVar, -1)]) r) : newSystem, newSlackVars) -- TODO: Could add some delta to the coefficient of the slack variable to make this valid? 
           where
             newSlackVar = maxVar + 1
             (newSystem, newSlackVars) = addSlackVarsToSystem xs newSlackVar (newSlackVar : sVars)
@@ -418,8 +390,6 @@ mulRow pc c = updatePc pc (map (second (*c)) (lhs pc)) (rhs pc * c)
 
 addRows :: PolyConstraint -> PolyConstraint -> PolyConstraint
 addRows (Util.EQ vcm1 r1) (Util.EQ vcm2 r2)   = Util.EQ (addVarConstMap (sort (vcm1 ++ vcm2))) (r1 + r2)
-addRows (Util.LT vcm1 r1) (Util.LT vcm2 r2)   = Util.LT (addVarConstMap (sort (vcm1 ++ vcm2))) (r1 + r2)
-addRows (Util.GT vcm1 r1) (Util.GT vcm2 r2)   = Util.GT (addVarConstMap (sort (vcm1 ++ vcm2))) (r1 + r2)
 addRows (Util.LEQ vcm1 r1) (Util.LEQ vcm2 r2) = Util.LEQ (addVarConstMap (sort (vcm1 ++ vcm2))) (r1 + r2)
 addRows (Util.GEQ vcm1 r1) (Util.GEQ vcm2 r2) = Util.GEQ (addVarConstMap (sort (vcm1 ++ vcm2))) (r1 + r2)
 addRows _ _                                   = undefined -- FIXME: Unsafe. Can only add rows with matching data constructors
