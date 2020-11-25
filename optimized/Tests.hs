@@ -23,7 +23,7 @@ test1 =
 test2 :: (ObjectiveFunction, [PolyConstraint])
 test2 =
   (
-    Max [(1, -1), (2, 1), (3, -1)],
+    Max [(1, 1), (2, -1), (3, 1)],
     [
       Util.LEQ [(1, 2), (2, -1), (3, 2)] 4,
       Util.LEQ [(1, 2), (2, -3), (3, 1)] (-5),
@@ -33,30 +33,32 @@ test2 =
 
 -- From page 49 of 'Linear and Integer Programming Made Easy'
 -- Solution: obj = -5, 3 = 2, 4 = 1, objVar was negated so actual val is 5 wa
+-- requires two phases
 test3 :: (ObjectiveFunction, [PolyConstraint])
 test3 =
   (
-    Min [(0, -1), (1, -1), (2, -1), (3, -2), (4, -1)],
+    Min [(1, 1), (2, 1), (3, 2), (4, 1)],
     [
       Util.EQ [(1, 1), (3, 2), (4, -2)] 2,
       Util.EQ [(2, 1), (3, 1), (4, 4)] 6
     ]
   )
 
--- From page 52 of 'Linear and Integer Programming Made Easy'
+-- Adapted from page 52 of 'Linear and Integer Programming Made Easy'
+-- Removed variables which do not appear in the system (these should be artificial variables)
 -- Solution: obj = 20, 3 = 6, 4 = 16 wq
 test4 :: (ObjectiveFunction, [PolyConstraint])
 test4 =
   (
-    Max [(0, 1), (3, 2), (4, -2), (5, -1)],
+    Max [(3, -2), (4, 2), (5, 1)],
     [
-      Util.EQ [(1, 1), (3, -2), (4, 1), (5, 1)] 4,
-      Util.EQ [(2, 1), (3, 3), (4, -1), (5, 2)] 2
+      Util.EQ [(3, -2), (4, 1), (5, 1)] 4,
+      Util.EQ [(3, 3), (4, -1), (5, 2)] 2
     ]
   )
 
 -- From page 59 of 'Linear and Integer Programming Made Easy'
--- Solution: obj = 40/3, 1 = 0, 2 = 40/3
+-- Solution: obj = 150, 1 = 0, 2 = 150
 -- requires two phases
 test5 :: (ObjectiveFunction, [PolyConstraint])
 test5 =
@@ -94,3 +96,37 @@ test7 =
     ]
   )
   
+-- x1l = 1, x2l = 2, y = 3
+testPolyPaver :: (ObjectiveFunction, [PolyConstraint])
+testPolyPaver =
+  (
+    Max [(1 , 1), (2, 1), (3, 1)],
+    [
+        Util.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)),
+        Util.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1r) + (dx2r * x2r)),
+        Util.LEQ [(3, 1)] 0
+    ]
+  )
+  where
+    x1l = 0.0
+    x1r = 3.0
+    x2l = 0.0
+    x2r = 3.0
+    dx1l = (-1)
+    dx1r = (-1.1)
+    dx2l = (-1.1)
+    dx2r = (-1.2)
+    yl = 1
+    yr = 1.1
+    -- system :: (S.ObjectiveFunction, [S.PolyConstraint])
+    -- system = 
+    --   (S.Max [(3, rational 1)],
+    --   [
+    --     S.GEQ [(1, rational 1)] x1lR,
+    --     S.LEQ [(1, rational 1)] x1rR,
+    --     S.LEQ [(2, rational 1)] x2lR,
+    --     S.LEQ [(2, rational 1)] x2rR,
+    --     S.LEQ [(1, dx1lR), (2, dx2lR), (3, (rational (-1)))] (-ylR + (dx1lR * x1lR) + (dx2lR * x2lR)),
+    --     S.GEQ [(1, dx1rR), (2, dx2rR), (3, (rational (-1)))] (-yrR + (dx1rR * x1rR) + (dx2rR * x2rR))
+    --   ]
+    --   )

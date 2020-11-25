@@ -6,6 +6,7 @@ import qualified Simplex as S;
 import Prelude hiding (EQ);
 import Data.List
 import Data.Bifunctor
+import Data.Maybe (fromMaybe)
 
 import Debug.Trace (trace)
 
@@ -18,7 +19,15 @@ data PolyConstraint =
   GEQ VarConstMap Rational      | 
   EQ VarConstMap Rational       deriving (Show, Eq);
   
-data ObjectiveFunction = Max VarConstMap | Min VarConstMap
+data ObjectiveFunction = Max VarConstMap | Min VarConstMap deriving Show
+
+isMax :: ObjectiveFunction -> Bool
+isMax (Max _) = True
+isMax (Min _) = False
+
+getObjective :: ObjectiveFunction -> VarConstMap
+getObjective (Max o) = o
+getObjective (Min o) = o
 
 rhs :: PolyConstraint -> Rational
 rhs (LEQ _ r) = r
@@ -123,21 +132,19 @@ showSimplexResult result =
 twoPhaseSimplex :: ObjectiveFunction -> [PolyConstraint] -> Maybe (Integer, [(Integer, Rational)])
 twoPhaseSimplex objFunction system = 
   if null artificialVars
-    then displayResults <$> simplexPivot ((objectiveVar, EQ objectiveRow 0) : systemWithBasicVars)
+    then displayResults . dictionaryFormToTableau <$> simplexPivot (createObjectiveDict objFunction objectiveVar : systemWithBasicVarsAsDictionary)
     else 
-      case lookup objectiveVar removeArtificialVarsFromPhase1Tableau of
+      case lookup (S.Nat objectiveVar) eliminateArtificialVarsFromPhase1Tableau of
         Nothing -> trace "objective row not found in phase 1 tableau" Nothing
-        Just (EQ _ r) ->
-          if r == 0 
-            then fmap displayResults $ simplexPivot $ (objectiveVar, newObjFunction) : tail removeArtificialVarsFromPhase1Tableau
+        Just (S.LinearPoly (S.Fmap_of_list lp)) ->
+          if fromMaybe 0 (lookup (S.Nat (-1)) lp) == 0 
+            then trace "starting phase 2" displayResults . dictionaryFormToTableau <$> simplexPivot ((createObjectiveDict phase2ObjFunction objectiveVar) : (tail eliminateArtificialVarsFromPhase1Tableau))
             else trace "rhs not zero after phase 1, thus original tableau is infeasible" Nothing
-        _ -> trace "objective row is not in EQ form" Nothing
 
   where
-    objectiveRow =
-      case objFunction of
-        Max objective -> map (second negate) objective
-        Min objective -> objective -- Turning Min into Max, negation cancels out
+    createObjectiveDict :: ObjectiveFunction -> Integer -> (S.Nat, S.Linear_poly)
+    createObjectiveDict (Max obj) objectiveVar = (S.Nat objectiveVar, S.LinearPoly (S.Fmap_of_list (map (first S.Nat) obj)))
+    createObjectiveDict (Min obj) objectiveVar = (S.Nat objectiveVar, S.LinearPoly (S.Fmap_of_list (map (bimap S.Nat negate) obj)))
 
     displayResults :: [(Integer, PolyConstraint)] -> (Integer, [(Integer, Rational)])
     displayResults tableau =
@@ -163,7 +170,7 @@ twoPhaseSimplex objFunction system =
           EQ vcm _  -> maximum (map fst vcm)
       ) 
       system)
-      (maximum (map fst objectiveRow)) -- This is not logically needed since if a variable does not appear to the system, 
+      (maximum objFunctionVars) -- This is not logically needed since if a variable does not appear to the system, 
                                       -- we can set this variable to infinity (since we assume all variables are >=0).
                                       -- But, this is safer.  
 
@@ -177,37 +184,68 @@ twoPhaseSimplex objFunction system =
 
     objectiveVar  = finalMaxVar + 1
 
-    phase1Tableau = simplexPivot $ addArtificialObjective systemWithBasicVars artificialVars objectiveVar
+    artificialObjective = createArtificialObjective systemWithBasicVars artificialVars
 
-    removeArtificialVarsFromPhase1Tableau = 
+    systemWithBasicVarsAsDictionary = tableauInDictionaryForm systemWithBasicVars
+
+    phase1Dict = trace (show artificialObjective) $ S.the $ simplexPivot (createObjectiveDict artificialObjective objectiveVar : systemWithBasicVarsAsDictionary) -- FIXME: Unsafe
+
+    eliminateArtificialVarsFromPhase1Tableau = 
       map
-      (\(basicVar, pc) -> (basicVar, filterOutVars pc artificialVars))
-      (S.the phase1Tableau) -- FIXME: Unsafe
+      (\(basicVar, S.LinearPoly pc) -> (basicVar, S.LinearPoly (S.fmfilter (\v -> S.integer_of_nat v `notElem` artificialVars) pc)))
+      phase1Dict
 
-    objFunctionVars = map fst objectiveRow
+    objFunctionVars = map (fst) (getObjective objFunction)
 
-    phase1RowsInObjFunction = filter (\(var, _) -> var `elem` objFunctionVars) removeArtificialVarsFromPhase1Tableau
+    -- phase1RowsInObjFunction = filter (\(var, _) -> var `elem` objFunctionVars) removeArtificialVarsFromPhase1Tableau
 
-    phase1RowsInObjFunctionWithoutBasicVarsInLHS = 
-      map 
-      (\(basicVar, pc) -> (basicVar, filterOutVars pc [basicVar])) 
-      phase1RowsInObjFunction
+    -- phase1RowsInObjFunctionWithoutBasicVarsInLHS = 
+    --   map 
+    --   (\(basicVar, pc) -> (basicVar, filterOutVars pc [basicVar])) 
+    --   phase1RowsInObjFunction
 
-    newObjFunction =
-      foldl1
-      addRows
-      $ map
-        (
-          \(var, coeff) ->
-            case lookup var phase1RowsInObjFunctionWithoutBasicVarsInLHS of
-              Nothing -> 
-                -- trace ("var " ++ show var ++ " not found") $
-                EQ [(var, coeff * (-1))] 0 -- moving var to LHS
-              Just row ->
-                -- trace (show var ++ ":::" ++ show row)
-                mulRow row coeff                -- TODO: think about why we do not negate this coeff. Rows are already in LHS so this is fine?
-        )
-        objectiveRow
+    phase2ObjFunction = 
+      let 
+        newObjective = foldObjectiveDict (sort phase2Objective)
+      in 
+        if isMax objFunction then Max newObjective else Min newObjective
+
+    -- Simplify objective dictionary by adding together coefficients of the same variable
+    -- Finish with a varConstMap
+    foldObjectiveDict :: VarConstMap -> VarConstMap
+    foldObjectiveDict [] = []
+    foldObjectiveDict [(v1, c1)] = [(v1, c1)]
+    foldObjectiveDict ((v1, c1) : (v2, c2) : xs) =
+      if v1 == v2 
+        then foldObjectiveDict ((v1, c1 + c2) : xs)
+        else (v1, c1) : foldObjectiveDict ((v2, c2) : xs)
+
+    phase2Objective = 
+      concatMap
+        (\(var,coeff) ->
+          case lookup (S.Nat var) phase1Dict of
+            Nothing -> [(var, coeff)]
+            Just (S.LinearPoly (S.Fmap_of_list linPoly)) -> map (bimap S.integer_of_nat (*coeff)) $ filter (\(S.Nat var, _) -> var `notElem` artificialVars) linPoly
+        )  
+        (getObjective objFunction)
+
+    --FIXME: NEED TO LOOK AT COEFF
+    -- newObjFunction =
+    --   foldl1
+    --   addRows
+    --   $ map
+    --     ((
+    --       \(var, coeff) ->
+    --         case lookup var phase1RowsInObjFunctionWithoutBasicVarsInLHS of
+    --           Nothing -> 
+    --             -- trace ("var " ++ show var ++ " not found") $
+    --             EQ [(var, coeff * (-1))] 0 -- moving var to LHS
+    --           Just row ->
+    --             -- trace (show var ++ ":::" ++ show row)
+    --             mulRow row coeff                -- TODO: think about why we do not negate this coeff. Rows are already in LHS so this is fine?
+    --     )
+    --     . first S.integer_of_nat)
+    --     objectiveRow
 
     -- System in standard form, a tableau using only EQ. Add slack vars where necessary. This may give you
     -- an infeasible system if slack vars are negative. If a constraint is already EQ, set the basic var to Nothing
@@ -232,25 +270,25 @@ twoPhaseSimplex objFunction system =
     --  Slack var is equal to a negative value (this is infeasible, all vars need to be >= 0)
     --  Final system will be a feasible artificial system.
     -- We keep track of artificial vars so they can be eliminated once phase 1 is complete
+    -- If an artificial var would normally be negative, we negate the row so we can keep artificial variables equal to 1
     systemWithArtificialVars :: [(Maybe Integer, PolyConstraint)] -> Integer -> ([(Integer, PolyConstraint)], [Integer])
     systemWithArtificialVars [] _                                = ([],[])
     systemWithArtificialVars ((mVar, EQ v r) : pcs) maxVar  =
       case mVar of
         Nothing ->
           if r >= 0 
-            then ((newArtificialVar, EQ (v ++ [(newArtificialVar, 1)]) r) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar)
+            then 
+              ((newArtificialVar, EQ (v ++ [(newArtificialVar, 1)]) r) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar)
             else 
-              ((newArtificialVar, EQ (invertedMap ++ [(newArtificialVar, 1)]) (r * (-1))) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar)
-              where
-                invertedMap = map (second (* (-1))) v
+              ((newArtificialVar, EQ (negatedV ++ [(newArtificialVar, 1)]) (negate r)) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar)
         Just basicVar ->
           if r >= 0
             then ((basicVar, EQ v r) : newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
-            else ((newArtificialVar, EQ (invertedMap ++ [(newArtificialVar, 1)]) (r * (-1))) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar) 
-              where
-                invertedMap = map (second (* (-1))) v
+            else ((newArtificialVar, EQ (negatedV ++ [(newArtificialVar, 1)]) (negate r)) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar) 
       where
         newArtificialVar = maxVar + 1
+        negatedV = map (second negate) v
+
         (newSystemWithNewMaxVar, artificialVarsWithNewMaxVar) = systemWithArtificialVars pcs newArtificialVar
 
         (newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar) = systemWithArtificialVars pcs maxVar
@@ -258,43 +296,52 @@ twoPhaseSimplex objFunction system =
     -- Create an artificial objective using the given list of artificialVars and the tableau.
     -- The artificial objective is the negative sum of all artificial vars.
     -- Artificial vars are equal to the row for which they are the basic variable.
-    addArtificialObjective :: [(Integer, PolyConstraint)] -> [Integer] -> Integer -> [(Integer, PolyConstraint)]
-    addArtificialObjective pcs artificialVars objectiveVar = (objectiveVar, negatedSumWithoutZeroCoeffs) : pcs
+    -- FIXME: Use dict here, cleaner
+    createArtificialObjective :: [(Integer, PolyConstraint)] -> [Integer] -> ObjectiveFunction
+    createArtificialObjective pcs artificialVars = Max objective
       where
-        initialObjective = EQ (map (, -1) artificialVars) 0
+        initialObjective = EQ [] 0
         rowsToAdd = map snd $ filter (\(i, _) -> i `elem` artificialVars) pcs
         finalSum = foldl addRows initialObjective rowsToAdd 
-        negatedSum = 
+        negatedFinalSumWithoutArtificialVarsAndZeroCoeffs = 
           case finalSum of
-            pc -> updatePc pc ((objectiveVar, 1) : map (second (* (-1))) (lhs pc)) (rhs pc * (-1))
-            -- EQ vcm r -> EQ ((objectiveVar, 1) : map (second (* (-1))) vcm) (r * (-1))
-        negatedSumWithoutZeroCoeffs = 
-          case negatedSum of
-            pc -> updateLhs pc (filter (\(_, c) -> c /= 0) (lhs pc))
-            -- EQ vcm r -> EQ (filter (\(_,c) -> c /= 0) vcm) r
+            -- pc -> updateLhs pc (filter (\(i, c) -> c /= 0 && i `notElem` artificialVars) (lhs pc))
+            EQ vcm r -> EQ (map (second negate) (filter (\(i,c) -> c /= 0 && i `notElem` artificialVars) vcm)) (negate r)
+        objective = (-1, rhs negatedFinalSumWithoutArtificialVarsAndZeroCoeffs) : map (second negate) (lhs negatedFinalSumWithoutArtificialVarsAndZeroCoeffs)
+          -- The objective is the sum of the negations of artificial vars
+          -- We substitute the artificial vars using their values
+          -- Because of this, we negate the rhs (since we need -artificialVar)
+          -- We do not negate the other variables because they are negated twice, cancelling out any negation
+          -- They are negated once when isolating the artificial var, and negated again when doing -artificialVar
 
 -- Perform the simplex pivot algorithm on a system with artificial vars and the first row being the objective function
-simplexPivot :: [(Integer, PolyConstraint)] -> Maybe [(Integer, PolyConstraint)]
+simplexPivot :: [(S.Nat, S.Linear_poly)] -> Maybe [(S.Nat, S.Linear_poly)]
 simplexPivot tableau = 
-  case simplexPhase2Loop $ tableauInDictionaryForm tableau of
-    Just resultsInDictForm -> Just $ dictionaryFormToTableau resultsInDictForm  
+  case simplexPhase2Loop $ tableau of
+    Just resultsInDictForm -> Just resultsInDictForm  
     Nothing -> Nothing
   where
     simplexPhase2Loop :: [(S.Nat, S.Linear_poly)] -> Maybe [(S.Nat, S.Linear_poly)]
     simplexPhase2Loop normalizedTableau =
       case mostPositive (head normalizedTableau) of
-        Nothing -> Just normalizedTableau
+        Nothing -> 
+          trace ("all pos \n")
+          trace (show normalizedTableau)
+          Just normalizedTableau
         Just pivotNonBasicVar -> 
           let
             mPivotBasicVar = ratioTest (tail normalizedTableau) pivotNonBasicVar Nothing Nothing
           in
             case mPivotBasicVar of
-              Nothing -> trace ("Ratio test failed on non-basic var: " ++ show pivotNonBasicVar) Nothing
+              Nothing -> trace ("Ratio test failed on non-basic var: " ++ show pivotNonBasicVar ++ "\n" ++ show normalizedTableau) Nothing
               Just pivotBasicVar -> 
                 -- trace (show pivotNonBasicVar)
                 -- trace (show pivotBasicVar)
                 -- trace (show invertedLinPoly)
                 -- trace (show newTableau)
+                -- trace ("\n" ++ show newTableau)
+                trace ("one neg \n")
+                trace (show normalizedTableau)
                 simplexPhase2Loop newTableau 
                 where
                   newTableau = S.pivot_tableau_code pivotBasicVar pivotNonBasicVar normalizedTableau
@@ -310,15 +357,17 @@ simplexPivot tableau =
           case lookup (S.Nat (-1)) lp' of
             Nothing  -> trace "RHS not found in row in dict form" Nothing
             Just rhs ->
-              if currentCoeff >= 0 || rhs > 0 
+              if currentCoeff >= 0 || rhs < 0
                 then 
                   -- trace (show currentCoeff)
-                  ratioTest xs mostNegativeVar mCurrentMinBasicVar mCurrentMin -- Both coeffs need to be negative. rhs is allowed to be zero
-                else 
+                  ratioTest xs mostNegativeVar mCurrentMinBasicVar mCurrentMin -- rhs was already in RHS in original tableau, so should be above zero
+                                                                               -- Coeff needs to be negative since it has been moved to the RHS
+                                                                               -- TODO: better name for rhs, maybe rational? 
+                else
                   case mCurrentMin of
-                    Nothing         -> ratioTest xs mostNegativeVar (Just basicVar) (Just (rhs / currentCoeff))
+                    Nothing         -> ratioTest xs mostNegativeVar (Just basicVar) (Just ((rhs / currentCoeff)))
                     Just currentMin ->
-                      if (rhs / currentCoeff) <= currentMin
+                      if (rhs / currentCoeff) >= currentMin
                         then ratioTest xs mostNegativeVar (Just basicVar) (Just (rhs / currentCoeff))
                         else ratioTest xs mostNegativeVar mCurrentMinBasicVar mCurrentMin
 
@@ -350,29 +399,41 @@ simplexPivot tableau =
                     then findLargestCoeff xs mCurrentMax
                     else findLargestCoeff xs (Just (var, coeff))
 
-    -- Converts a Tableau to dictionary form.
-    -- In dictionary form, every variable apart from the basic variable in a row
-    -- is in the LHS, each row is equal to the basic variable which is 
-    -- defined in the first  element of the pair.
-    -- We use (Nat -1) to represent a rational constant (The RHS in the tableau).
-    tableauInDictionaryForm :: [(Integer, PolyConstraint)] -> [(S.Nat, S.Linear_poly)]
-    tableauInDictionaryForm []                      = []
-    tableauInDictionaryForm ((basicVar, pc) : pcs)  =
-      case pc of
-        EQ vcm r ->  (S.Nat basicVar, S.LinearPoly (S.Fmap_of_list ((S.Nat (-1), r * (-1)) : map (\(var, coeff) -> (S.Nat var, coeff * (-1))) (filter (\(v,_) -> v /= basicVar) vcm)))) : tableauInDictionaryForm pcs
-
-    -- Converts a list of rows in dictionary form to a tableau
-    dictionaryFormToTableau :: [(S.Nat, S.Linear_poly)] -> [(Integer, PolyConstraint)]
-    dictionaryFormToTableau [] = []
-    dictionaryFormToTableau ((S.Nat basicVar, S.LinearPoly (S.Fmap_of_list varMap)) : rows) = 
-        (basicVar, EQ ((basicVar, 1) : map (\(v,c) -> (S.integer_of_nat v, c * (-1))) varMap') (r * (-1))) : dictionaryFormToTableau rows
+-- Converts a Tableau to dictionary form.
+-- We do this by isolating the basic variable on the left.
+-- This function is implemented in a more general way but in the current implementation, 
+-- the basic variable coefficient will be 1 or -1.
+-- If the basic variable coefficient is 1 for a certain row, this function return the
+-- equivalent of (basicVariable, (rhs) : -(coeffOfVar*nonBasicVars))
+-- If the basic variable coefficient is -1 for a certain row, this function return the
+-- equivalent of (basicVariable, -(rhs) : (coeffOfVar*nonBasicVars))
+tableauInDictionaryForm :: [(Integer, PolyConstraint)] -> [(S.Nat, S.Linear_poly)]
+tableauInDictionaryForm []                      = []
+tableauInDictionaryForm ((basicVar, pc) : pcs)  =
+  case pc of
+    EQ vcm r ->  
+      -- trace (show basicVars) $
+      -- trace (show nonBasicVars)
+      (S.Nat basicVar, S.LinearPoly (S.Fmap_of_list ((S.Nat (-1), r / basicCoeff) : map (\(var, coeff) -> (S.Nat var, (coeff * (-1)) / basicCoeff)) nonBasicVars))) : tableauInDictionaryForm pcs
       where
-        r = 
-          case lookup (S.Nat (-1)) varMap of
-            Just r -> r
-            Nothing -> trace "RHS not found in dictionary, setting to zero" 0
+        basicCoeff = if null basicVars then 1 else snd $ head basicVars
+        (basicVars, nonBasicVars) = partition (\(v, _) -> (v == basicVar)) vcm
+      -- (S.Nat basicVar, S.LinearPoly (S.Fmap_of_list ((S.Nat (-1), r * (-1)) : map (\(var, coeff) -> (S.Nat var, coeff * (-1))) (filter (\(v,_) -> v /= basicVar) vcm)))) : tableauInDictionaryForm pcs
 
-        varMap' = filter (\(v,_) -> v /= S.Nat (-1)) varMap
+-- Converts a list of rows in dictionary form to a tableau, i.e. Move all variables from the rhs to the lhs
+dictionaryFormToTableau :: [(S.Nat, S.Linear_poly)] -> [(Integer, PolyConstraint)]
+dictionaryFormToTableau [] = []
+dictionaryFormToTableau ((S.Nat basicVar, S.LinearPoly (S.Fmap_of_list varMap)) : rows) = 
+    (basicVar, EQ ((basicVar, 1) : map (\(v,c) -> (S.integer_of_nat v, c * (-1))) varMap') r) : dictionaryFormToTableau rows
+  where
+    r = 
+      case lookup (S.Nat (-1)) varMap of
+        Just r -> r
+        Nothing -> 
+          -- trace "RHS not found in dictionary, setting to zero" 
+          0
+
+    varMap' = filter (\(v,_) -> v /= S.Nat (-1)) varMap
 
 mulRow :: PolyConstraint -> Rational -> PolyConstraint
 mulRow pc c = updatePc pc (map (second (*c)) (lhs pc)) (rhs pc * c)
