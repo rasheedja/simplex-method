@@ -57,6 +57,17 @@ foldSumVarConstMap ((v1, c1) : (v2, c2) : vcm) =
     then foldSumVarConstMap $ (v1, c1 + c2) : vcm
     else (v1, c1) : foldSumVarConstMap ((v2, c2) : vcm)
 
+
+varConstMapToLinearPoly :: VarConstMap -> S.Linear_poly
+varConstMapToLinearPoly vcm = S.LinearPoly (S.Fmap_of_list (map (first S.nat_of_integer) vcm))
+
+polyConstraintToConstraint :: PolyConstraint -> S.Constraint
+polyConstraintToConstraint pc =
+  case pc of
+    LEQ vcm r -> S.LEQ (varConstMapToLinearPoly vcm) r
+    GEQ vcm r -> S.GEQ (varConstMapToLinearPoly vcm) r
+    EQ vcm r -> S.EQ (varConstMapToLinearPoly vcm) r
+
 -- |Perform the two phase simplex method with a given objective function to maximize and a system of constraints
 -- assumes objFunction and system is not empty. Returns the a pair with the first item being the variable representing
 -- the objective function and the second item being the values of all variables appearing in the system (including the
