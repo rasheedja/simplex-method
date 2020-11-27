@@ -252,21 +252,21 @@ simplexPivot dictionary =
       case lookup mostNegativeVar lp of
         Nothing                         -> ratioTest xs mostNegativeVar mCurrentMinBasicVar mCurrentMin
         Just currentCoeff ->
-          case lookup (-1) lp of
-            Nothing  -> trace "RHS not found in row in dict form" Nothing
-            Just rhs ->
-              if currentCoeff >= 0 || rhs < 0
-                then 
-                  -- trace (show currentCoeff)
-                  ratioTest xs mostNegativeVar mCurrentMinBasicVar mCurrentMin -- rhs was already in right side in original tableau, so should be above zero
-                                                                               -- Coeff needs to be negative since it has been moved to the RHS
-                else
-                  case mCurrentMin of
-                    Nothing         -> ratioTest xs mostNegativeVar (Just basicVar) (Just (rhs / currentCoeff))
-                    Just currentMin ->
-                      if (rhs / currentCoeff) >= currentMin
-                        then ratioTest xs mostNegativeVar (Just basicVar) (Just (rhs / currentCoeff))
-                        else ratioTest xs mostNegativeVar mCurrentMinBasicVar mCurrentMin
+          let 
+            rhs = fromMaybe 0 (lookup (-1) lp)
+          in
+            if currentCoeff >= 0 || rhs < 0
+              then 
+                -- trace (show currentCoeff)
+                ratioTest xs mostNegativeVar mCurrentMinBasicVar mCurrentMin -- rhs was already in right side in original tableau, so should be above zero
+                                                                              -- Coeff needs to be negative since it has been moved to the RHS
+              else
+                case mCurrentMin of
+                  Nothing         -> ratioTest xs mostNegativeVar (Just basicVar) (Just (rhs / currentCoeff))
+                  Just currentMin ->
+                    if (rhs / currentCoeff) >= currentMin
+                      then ratioTest xs mostNegativeVar (Just basicVar) (Just (rhs / currentCoeff))
+                      else ratioTest xs mostNegativeVar mCurrentMinBasicVar mCurrentMin
 
     mostPositive :: (Integer, VarConstMap) -> Maybe Integer
     mostPositive (_, lp) = 
