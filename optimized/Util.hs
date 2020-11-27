@@ -190,17 +190,18 @@ twoPhaseSimplex objFunction system =
         Just basicVar ->
           case lookup basicVar v of
             Just basicVarCoeff ->
-              if r >= 0
-                then 
-                  if basicVarCoeff >= 0
-                    then ((basicVar, (v, r)) : newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
-                    else ((newArtificialVar, (v ++ [(newArtificialVar, 1)], r)) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar) -- Slack var is negative, r is positive (when original constraint was GEQ)
-                else 
-                  if basicVarCoeff <= 0
-                    then ((basicVar, (v, r)) : newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
-                    else 
-                      trace (show v ++ "\n" ++ show r ++ "\n" ++ show basicVar ++ "\n\n\n\n")
-                      ((newArtificialVar, (v ++ [(newArtificialVar, -1)], r)) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar) -- Slack var is negative, r is negative (when original constraint was LEQ)
+              if r == 0
+                then ((basicVar, (v, r)) : newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
+                else
+                  if r > 0
+                    then 
+                      if basicVarCoeff >= 0 -- Should only be 1 in the standard call path
+                        then ((basicVar, (v, r)) : newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
+                        else ((newArtificialVar, (v ++ [(newArtificialVar, 1)], r)) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar) -- Slack var is negative, r is positive (when original constraint was GEQ)
+                    else -- r < 0
+                      if basicVarCoeff <= 0 -- Should only be -1 in the standard call path
+                        then ((basicVar, (v, r)) : newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
+                        else ((newArtificialVar, (v ++ [(newArtificialVar, -1)], r)) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar) -- Slack var is negative, r is negative (when original constraint was LEQ)
       where
         newArtificialVar = maxVar + 1
         negatedV = map (second negate) v
