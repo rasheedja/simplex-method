@@ -96,28 +96,37 @@ test7 =
     ]
   )
   
--- x1l = 1, x2l = 2, y = 3
+-- x1l = 1, x2l = 2, y = 3 
 testPolyPaver :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaver =
   (
-    Max [(1 , 1), (2, 1), (3, 1)],
+    Min [(2 , 1)],
     [
-        Util.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)),
-        Util.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1r) + (dx2r * x2r)),
-        Util.LEQ [(3, 1)] 0
+        Util.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        Util.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        -- Util.GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
+        Util.LEQ [(1, 1)] x1r,
+        -- Util.GEQ [(2, 1)] x2l,
+        Util.LEQ [(2, 1)] x2r,
+        Util.EQ [(3, 1)] 0 -- When this is LEQ, it cannot solve phase 1.
+                           -- This is because all variables in the system must be >= 0
+                           -- To solve this, we can split y (3) into two variables, y1 (4) and y2 (5)
+                           -- With y(3) = y1(4) - y2(5)
+
+                           -- We can also simply negate the y, the constraint that -y >= 0 is already assumed
     ]
   )
   where
     x1l = 0.0
-    x1r = 3.0
+    x1r = 2.5
     x2l = 0.0
-    x2r = 3.0
-    dx1l = (-1)
-    dx1r = (-1.1)
-    dx2l = (-1.1)
-    dx2r = (-1.2)
-    yl = 1
-    yr = 1.1
+    x2r = 2.5
+    dx1l = -1
+    dx1r = -0.9
+    dx2l = -0.9
+    dx2r = -0.8
+    yl = 4
+    yr = 5
     -- system :: (S.ObjectiveFunction, [S.PolyConstraint])
     -- system = 
     --   (S.Max [(3, rational 1)],
@@ -130,3 +139,228 @@ testPolyPaver =
     --     S.GEQ [(1, dx1rR), (2, dx2rR), (3, (rational (-1)))] (-yrR + (dx1rR * x1rR) + (dx2rR * x2rR))
     --   ]
     --   )
+
+-- x1l = 1, x2l = 2, y = 3
+testPolyPaver2 :: (ObjectiveFunction, [PolyConstraint])
+testPolyPaver2 =
+  (
+    Max [(1 , 1), (2, 1)],
+    [
+        Util.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        Util.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        -- Util.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
+        Util.LEQ [(1, 1)] x1r,
+        -- Util.GEQ [(2, 1)] x2l,
+        Util.LEQ [(2, 1)] x2r,
+        Util.EQ [(3, 1)] 0
+    ]
+  )
+  where
+    x1l = 0.0
+    x1r = 1.5
+    x2l = 0.0
+    x2r = 1.5
+    dx1l = -1
+    dx1r = -0.9
+    dx2l = -0.9
+    dx2r = -0.8
+    yl = 4
+    yr = 5
+
+testPolyPaver3 :: (ObjectiveFunction, [PolyConstraint])
+testPolyPaver3 =
+  (
+    Max [(2 , 1)],
+    [
+        Util.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        Util.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        -- Util.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
+        Util.LEQ [(1, 1)] x1r,
+        -- Util.GEQ [(2, 1)] x2l,
+        Util.LEQ [(2, 1)] x2r,
+        Util.EQ [(3, 1)] 0
+    ]
+  )
+  where
+    x1l = 0.0
+    x1r = 3.5
+    x2l = 0.0
+    x2r = 3.5
+    dx1l = -1
+    dx1r = -0.9
+    dx2l = -0.9
+    dx2r = -0.8
+    yl = 4
+    yr = 5
+
+-- x1l = 1, x2l = 2, y1 = 3, y2 = 4
+testPolyPaverTwoYs :: (ObjectiveFunction, [PolyConstraint])
+testPolyPaverTwoYs =
+  (
+    Max [(3 , 1), (4, -1)],
+    [
+        Util.LEQ [(1, dx1l), (2, dx2l), (3, -1), (4, 1)] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        Util.GEQ [(1, dx1r), (2, dx2r), (3, -1), (4, 1)] ((-yr) + (dx1r * x1r) + (dx2r * x2r)), -- -5
+        -- Util.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
+        Util.LEQ [(1, 1)] x1r,
+        -- Util.GEQ [(2, 1)] x2l,
+        Util.LEQ [(2, 1)] x2r,
+        Util.LEQ [(3, 1), (4, -1)] 0 -- When this is LEQ, it cannot solve phase 1.
+                           -- This is because all variables in the system must be >= 0
+                           -- To solve this, we can split y (3) into two variables, y1 (4) and y2 (5)
+                           -- With y(3) = y1(4) - y2(5)
+    ]
+  )
+  where
+    x1l = 0.0
+    x1r = 2.5
+    x2l = 0.0
+    x2r = 2.5
+    dx1l = -1
+    dx1r = -0.9
+    dx2l = -0.9
+    dx2r = -0.8
+    yl = 4
+    yr = 5
+
+-- x1l = 1, x2l = 2, y1 = 3, y2 = 4
+testPolyPaverTwoYs2 :: (ObjectiveFunction, [PolyConstraint])
+testPolyPaverTwoYs2 =
+  (
+    Max [(3 , 1), (4, -1)],
+    [
+        Util.LEQ [(1, dx1l), (2, dx2l), (3, -1), (4, 1)] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        Util.GEQ [(1, dx1r), (2, dx2r), (3, -1), (4, 1)] ((-yr) + (dx1r * x1r) + (dx2r * x2r)), -- -5
+        -- Util.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
+        Util.LEQ [(1, 1)] x1r,
+        -- Util.GEQ [(2, 1)] x2l,
+        Util.LEQ [(2, 1)] x2r,
+        Util.LEQ [(3, 1), (4, -1)] 0 -- When this is LEQ, it cannot solve phase 1.
+                           -- This is because all variables in the system must be >= 0
+                           -- To solve this, we can split y (3) into two variables, y1 (4) and y2 (5)
+                           -- With y(3) = y1(4) - y2(5)
+    ]
+  )
+  where
+    x1l = 0.0
+    x1r = 1.5
+    x2l = 0.0
+    x2r = 1.5
+    dx1l = -1
+    dx1r = -0.9
+    dx2l = -0.9
+    dx2r = -0.8
+    yl = 4
+    yr = 5
+
+-- x1l = 1, x2l = 2, y1 = 3, y2 = 4
+testPolyPaverTwoYs3 :: (ObjectiveFunction, [PolyConstraint])
+testPolyPaverTwoYs3 =
+  (
+    Max [(3 , 1), (4, -1)],
+    [
+        Util.LEQ [(1, dx1l), (2, dx2l), (3, -1), (4, 1)] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        Util.GEQ [(1, dx1r), (2, dx2r), (3, -1), (4, 1)] ((-yr) + (dx1r * x1r) + (dx2r * x2r)), -- -5
+        -- Util.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
+        Util.LEQ [(1, 1)] x1r,
+        -- Util.GEQ [(2, 1)] x2l,
+        Util.LEQ [(2, 1)] x2r,
+        Util.LEQ [(3, 1), (4, -1)] 0 -- When this is LEQ, it cannot solve phase 1.
+                           -- This is because all variables in the system must be >= 0
+                           -- To solve this, we can split y (3) into two variables, y1 (4) and y2 (5)
+                           -- With y(3) = y1(4) - y2(5)
+    ]
+  )
+  where
+    x1l = 0.0
+    x1r = 3.5
+    x2l = 0.0
+    x2r = 3.5
+    dx1l = -1
+    dx1r = -0.9
+    dx2l = -0.9
+    dx2r = -0.8
+    yl = 4
+    yr = 5
+
+-- Should be infeasible
+testPolyPaverTwoFs :: (ObjectiveFunction, [PolyConstraint])
+testPolyPaverTwoFs =
+  (
+    Min [(2 , 1)],
+    [
+        Util.LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
+        Util.GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
+        Util.LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
+        Util.GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
+        -- Util.GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
+        Util.LEQ [(1, 1)] x1r,
+        -- Util.GEQ [(2, 1)] x2l,
+        Util.LEQ [(2, 1)] x2r,
+        Util.EQ [(3, 1)] 0,
+        Util.EQ [(4, 1)] 0 -- When this is LEQ, it cannot solve phase 1.
+                           -- This is because all variables in the system must be >= 0
+                           -- To solve this, we can split y (3) into two variables, y1 (4) and y2 (5)
+                           -- With y(3) = y1(4) - y2(5)
+
+                           -- We can also simply negate the y, the constraint that -y >= 0 is already assumed
+    ]
+  )
+  where
+    x1l = 0.0
+    x1r = 2.5
+    x2l = 0.0
+    x2r = 2.5
+    f1dx1l = -1
+    f1dx1r = -0.9
+    f1dx2l = -0.9
+    f1dx2r = -0.8
+    f1yl = 4
+    f1yr = 5    
+    f2dx1l = -1
+    f2dx1r = -0.9
+    f2dx2l = -0.9
+    f2dx2r = -0.8
+    f2yl = 1
+    f2yr = 2
+
+-- Should be feasible
+testPolyPaverTwoFs2 :: (ObjectiveFunction, [PolyConstraint])
+testPolyPaverTwoFs2 =
+  (
+    Min [(2 , 1)],
+    [
+        Util.LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
+        Util.GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
+        Util.LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
+        Util.GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
+        -- Util.GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
+        Util.LEQ [(1, 1)] x1r,
+        -- Util.GEQ [(2, 1)] x2l,
+        Util.LEQ [(2, 1)] x2r,
+        Util.EQ [(3, 1)] 0, -- When this is LEQ, it cannot solve phase 1.
+        Util.EQ [(4, 1)] 0 -- When this is LEQ, it cannot solve phase 1.
+                           -- This is because all variables in the system must be >= 0
+                           -- To solve this, we can split y (3) into two variables, y1 (4) and y2 (5)
+                           -- With y(3) = y1(4) - y2(5)
+
+                           -- We can also simply negate the y, the constraint that -y >= 0 is already assumed
+    ]
+  )
+  where
+    x1l = 0.0
+    x1r = 2.5
+    x2l = 0.0
+    x2r = 2.5
+    f1dx1l = -1
+    f1dx1r = -0.9
+    f1dx2l = -0.9
+    f1dx2r = -0.8
+    f1yl = 4
+    f1yr = 5    
+    f2dx1l = -0.66
+    f2dx1r = -0.66
+    f2dx2l = -0.66
+    f2dx2r = -0.66
+    f2yl = 3
+    f2yr = 4
