@@ -1,0 +1,51 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 002f268a831946e723d3e85cd23e440c1cedaf7e1d858fbc33aa2544bb6dbbb6
+
+name:           simplex-haskell
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/rasheedja/simplex-haskell#readme>
+homepage:       https://github.com/rasheedja/simplex-haskell#readme
+bug-reports:    https://github.com/rasheedja/simplex-haskell/issues
+author:         Junaid Rasheed
+maintainer:     rasheeja@aston.ac.uk
+copyright:      BSD-3
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+
+source-repository head
+  type: git
+  location: https://github.com/rasheedja/simplex-haskell
+
+library
+  exposed-modules:
+      Simplex
+      Tests
+  other-modules:
+      Paths_simplex_haskell
+  hs-source-dirs:
+      src
+  build-depends:
+      base >=4.7 && <5
+  default-language: Haskell2010
+
+test-suite simplex-haskell-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_simplex_haskell
+  hs-source-dirs:
+      test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , simplex-haskell
+  default-language: Haskell2010

@@ -1,0 +1,37 @@
+name:                simplex-haskell
+version:             0.1.0.0
+github:              "rasheedja/simplex-haskell"
+license:             BSD3
+author:              "Junaid Rasheed"
+maintainer:          "rasheeja@aston.ac.uk"
+copyright:           "BSD-3"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/rasheedja/simplex-haskell#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+
+library:
+  source-dirs: src
+
+tests:
+  simplex-haskell-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - simplex-haskell
