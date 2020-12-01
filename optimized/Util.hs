@@ -1,8 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 module Util where
-
-import qualified Simplex as S;
 import Prelude hiding (EQ);
 import Data.List
 import Data.Bifunctor
@@ -56,17 +54,6 @@ foldSumVarConstMap ((v1, c1) : (v2, c2) : vcm) =
   if v1 == v2
     then foldSumVarConstMap $ (v1, c1 + c2) : vcm
     else (v1, c1) : foldSumVarConstMap ((v2, c2) : vcm)
-
-
-varConstMapToLinearPoly :: VarConstMap -> S.Linear_poly
-varConstMapToLinearPoly vcm = S.LinearPoly (S.Fmap_of_list (map (first S.nat_of_integer) vcm))
-
-polyConstraintToConstraint :: PolyConstraint -> S.Constraint
-polyConstraintToConstraint pc =
-  case pc of
-    LEQ vcm r -> S.LEQ (varConstMapToLinearPoly vcm) r
-    GEQ vcm r -> S.GEQ (varConstMapToLinearPoly vcm) r
-    EQ vcm r -> S.EQ (varConstMapToLinearPoly vcm) r
 
 -- |Perform the two phase simplex method with a given objective function to maximize and a system of constraints
 -- assumes objFunction and system is not empty. Returns the a pair with the first item being the variable representing
@@ -204,7 +191,6 @@ twoPhaseSimplex objFunction system =
                         else ((newArtificialVar, (v ++ [(newArtificialVar, -1)], r)) : newSystemWithNewMaxVar, newArtificialVar : artificialVarsWithNewMaxVar) -- Slack var is negative, r is negative (when original constraint was LEQ)
       where
         newArtificialVar = maxVar + 1
-        negatedV = map (second negate) v
 
         (newSystemWithNewMaxVar, artificialVarsWithNewMaxVar) = systemWithArtificialVars pcs newArtificialVar
 
@@ -238,13 +224,7 @@ simplexPivot dictionary =
           Just pivotBasicVar -> 
             trace "one pos \n"
             trace (show dictionary)
-            simplexPivot $ map (\(S.Nat v, S.LinearPoly (S.Fmap_of_list vcm)) -> (v, map (first S.integer_of_nat) vcm)) newDictionary 
-            where
-              newDictionary = 
-                S.pivot_tableau_code 
-                (S.Nat pivotBasicVar) 
-                (S.Nat pivotNonBasicVar) 
-                $ map (bimap S.Nat (S.LinearPoly . S.Fmap_of_list . map (first S.Nat))) dictionary
+            simplexPivot (pivot pivotBasicVar pivotNonBasicVar dictionary )
   where
     ratioTest :: DictionaryForm -> Integer -> Maybe Integer -> Maybe Rational -> Maybe Integer
     ratioTest []                    _               mCurrentMinBasicVar _           = mCurrentMinBasicVar
@@ -314,3 +294,35 @@ dictionaryFormToTableau ((basicVar, row) : rows) =
   where
     (rationalConstant, nonBasicVars) = partition (\(v,_) -> v == (-1)) row
     r = if null rationalConstant then 0 else (snd . head) rationalConstant -- If there is no rational constant found in the right side, the rational constant is 0.
+
+-- |Pivot a dictionary using the two given variables.
+-- The first variable is the leaving (non-basic) variable.
+-- The second variable is the entering (basic) variable.
+-- Will expect the entering variable to be present in the
+-- row containing the leaving variable.
+-- Will expect each row to have a unique basic variable.
+-- Will expect each basic variable to not appear on the RHS
+-- of any equation
+pivot :: Integer -> Integer -> DictionaryForm -> DictionaryForm
+pivot leavingVariable enteringVariable rows =
+  case lookup enteringVariable basicRow of
+    Just nonBasicCoeff ->
+      updatedRows
+      where
+        -- Move entering variable to basis, update other variables in row appropriately
+        pivotEquation = (enteringVariable, map (second (/ negate nonBasicCoeff)) ((leavingVariable, -1) : filter ((enteringVariable /=) . fst) basicRow))
+        -- Substitute pivot equation into other rows
+        updatedRows =
+          map
+          (\(basicVar, vMap) ->
+            if leavingVariable == basicVar
+              then pivotEquation
+              else
+                case lookup enteringVariable vMap of
+                  Just subsCoeff -> (basicVar, (foldSumVarConstMap . sort) (map (second (subsCoeff *)) (snd pivotEquation) ++ filter ((enteringVariable /=) . fst) vMap))
+                  Nothing -> (basicVar, vMap)
+          )
+          rows
+    Nothing -> trace "non basic variable not found in basic row" undefined
+  where
+    (_, basicRow) = head $ filter ((leavingVariable ==) . fst) rows
