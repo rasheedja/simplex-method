@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
-module Util where
+module Simplex where
 import Prelude hiding (EQ);
 import Data.List
 import Data.Bifunctor

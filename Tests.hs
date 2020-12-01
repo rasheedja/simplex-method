@@ -1,6 +1,5 @@
 module Tests where
 
-import Util as Util
 import Simplex
 
 -- From page 50 of 'Linear and Integer Programming Made Easy'
@@ -10,10 +9,10 @@ test1 =
   (
     Max [(1, 3), (2, 5)],
     [
-      Util.LEQ [(1, 3), (2, 1)] 15,
-      Util.LEQ [(1, 1), (2, 1)] 7,
-      Util.LEQ [(2, 1)] 4,
-      Util.LEQ [(1, -1), (2, 2)] 6
+      Simplex.LEQ [(1, 3), (2, 1)] 15,
+      Simplex.LEQ [(1, 1), (2, 1)] 7,
+      Simplex.LEQ [(2, 1)] 4,
+      Simplex.LEQ [(1, -1), (2, 2)] 6
     ]
   )
 
@@ -25,9 +24,9 @@ test2 =
   (
     Max [(1, 1), (2, -1), (3, 1)],
     [
-      Util.LEQ [(1, 2), (2, -1), (3, 2)] 4,
-      Util.LEQ [(1, 2), (2, -3), (3, 1)] (-5),
-      Util.LEQ [(1, -1), (2, 1), (3, -2)] (-1)
+      Simplex.LEQ [(1, 2), (2, -1), (3, 2)] 4,
+      Simplex.LEQ [(1, 2), (2, -3), (3, 1)] (-5),
+      Simplex.LEQ [(1, -1), (2, 1), (3, -2)] (-1)
     ]
   )
 
@@ -39,8 +38,8 @@ test3 =
   (
     Min [(1, 1), (2, 1), (3, 2), (4, 1)],
     [
-      Util.EQ [(1, 1), (3, 2), (4, -2)] 2,
-      Util.EQ [(2, 1), (3, 1), (4, 4)] 6
+      Simplex.EQ [(1, 1), (3, 2), (4, -2)] 2,
+      Simplex.EQ [(2, 1), (3, 1), (4, 4)] 6
     ]
   )
 
@@ -52,8 +51,8 @@ test4 =
   (
     Max [(3, -2), (4, 2), (5, 1)],
     [
-      Util.EQ [(3, -2), (4, 1), (5, 1)] 4,
-      Util.EQ [(3, 3), (4, -1), (5, 2)] 2
+      Simplex.EQ [(3, -2), (4, 1), (5, 1)] 4,
+      Simplex.EQ [(3, 3), (4, -1), (5, 2)] 2
     ]
   )
 
@@ -65,8 +64,8 @@ test5 =
   (
     Max [(1, 2), (2, 1)],
     [
-      Util.LEQ [(1, 4), (2, 1)] 150,
-      Util.LEQ [(1, 2), (2, -3)] (-40)
+      Simplex.LEQ [(1, 4), (2, 1)] 150,
+      Simplex.LEQ [(1, 2), (2, -3)] (-40)
     ]
   )
 
@@ -77,9 +76,9 @@ test6 =
   (
     Min [(1, -6), (2, -4), (3, 2)],
     [
-      Util.LEQ [(1, 1), (2, 1), (3, 4)] 20,
-      Util.LEQ [(2, -5), (3, 5)] 100,
-      Util.LEQ [(1, 1), (3, 1), (1, 1)] 400
+      Simplex.LEQ [(1, 1), (2, 1), (3, 4)] 20,
+      Simplex.LEQ [(2, -5), (3, 5)] 100,
+      Simplex.LEQ [(1, 1), (3, 1), (1, 1)] 400
     ]
   )
 
@@ -90,9 +89,9 @@ test7 =
   (
     Max [(1, 3), (2, 5), (3, 2)],
     [
-      Util.LEQ [(1, 5), (2, 1), (3, 4)] 50,
-      Util.LEQ [(1, 1), (2, -1), (3, 1)] 150,
-      Util.LEQ [(1, 2), (2, 1), (3, 2)] 100
+      Simplex.LEQ [(1, 5), (2, 1), (3, 4)] 50,
+      Simplex.LEQ [(1, 1), (2, -1), (3, 1)] 150,
+      Simplex.LEQ [(1, 2), (2, 1), (3, 2)] 100
     ]
   )
   
@@ -102,13 +101,13 @@ testPolyPaver =
   (
     Min [(2 , 1)],
     [
-        Util.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Util.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        -- Util.GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
-        Util.LEQ [(1, 1)] x1r,
-        -- Util.GEQ [(2, 1)] x2l,
-        Util.LEQ [(2, 1)] x2r,
-        Util.EQ [(3, 1)] 0 -- When this is LEQ, it cannot solve phase 1.
+        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        -- Simplex.GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
+        Simplex.LEQ [(1, 1)] x1r,
+        -- Simplex.GEQ [(2, 1)] x2l,
+        Simplex.LEQ [(2, 1)] x2r,
+        Simplex.EQ [(3, 1)] 0 -- When this is LEQ, it cannot solve phase 1.
                            -- This is because all variables in the system must be >= 0
                            -- To solve this, we can split y (3) into two variables, y1 (4) and y2 (5)
                            -- With y(3) = y1(4) - y2(5)
@@ -146,13 +145,13 @@ testPolyPaver2 =
   (
     Max [(1 , 1), (2, 1)],
     [
-        Util.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Util.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        -- Util.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
-        Util.LEQ [(1, 1)] x1r,
-        -- Util.GEQ [(2, 1)] x2l,
-        Util.LEQ [(2, 1)] x2r,
-        Util.EQ [(3, 1)] 0
+        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        -- Simplex.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
+        Simplex.LEQ [(1, 1)] x1r,
+        -- Simplex.GEQ [(2, 1)] x2l,
+        Simplex.LEQ [(2, 1)] x2r,
+        Simplex.EQ [(3, 1)] 0
     ]
   )
   where
@@ -172,13 +171,13 @@ testPolyPaver3 =
   (
     Max [(2 , 1)],
     [
-        Util.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Util.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        -- Util.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
-        Util.LEQ [(1, 1)] x1r,
-        -- Util.GEQ [(2, 1)] x2l,
-        Util.LEQ [(2, 1)] x2r,
-        Util.EQ [(3, 1)] 0
+        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        -- Simplex.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
+        Simplex.LEQ [(1, 1)] x1r,
+        -- Simplex.GEQ [(2, 1)] x2l,
+        Simplex.LEQ [(2, 1)] x2r,
+        Simplex.EQ [(3, 1)] 0
     ]
   )
   where
@@ -199,13 +198,13 @@ testPolyPaverTwoYs =
   (
     Max [(3 , 1), (4, -1)],
     [
-        Util.LEQ [(1, dx1l), (2, dx2l), (3, -1), (4, 1)] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Util.GEQ [(1, dx1r), (2, dx2r), (3, -1), (4, 1)] ((-yr) + (dx1r * x1r) + (dx2r * x2r)), -- -5
-        -- Util.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
-        Util.LEQ [(1, 1)] x1r,
-        -- Util.GEQ [(2, 1)] x2l,
-        Util.LEQ [(2, 1)] x2r,
-        Util.LEQ [(3, 1), (4, -1)] 0 -- When this is LEQ, it cannot solve phase 1.
+        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, -1), (4, 1)] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, -1), (4, 1)] ((-yr) + (dx1r * x1r) + (dx2r * x2r)), -- -5
+        -- Simplex.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
+        Simplex.LEQ [(1, 1)] x1r,
+        -- Simplex.GEQ [(2, 1)] x2l,
+        Simplex.LEQ [(2, 1)] x2r,
+        Simplex.LEQ [(3, 1), (4, -1)] 0 -- When this is LEQ, it cannot solve phase 1.
                            -- This is because all variables in the system must be >= 0
                            -- To solve this, we can split y (3) into two variables, y1 (4) and y2 (5)
                            -- With y(3) = y1(4) - y2(5)
@@ -229,13 +228,13 @@ testPolyPaverTwoYs2 =
   (
     Max [(3 , 1), (4, -1)],
     [
-        Util.LEQ [(1, dx1l), (2, dx2l), (3, -1), (4, 1)] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Util.GEQ [(1, dx1r), (2, dx2r), (3, -1), (4, 1)] ((-yr) + (dx1r * x1r) + (dx2r * x2r)), -- -5
-        -- Util.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
-        Util.LEQ [(1, 1)] x1r,
-        -- Util.GEQ [(2, 1)] x2l,
-        Util.LEQ [(2, 1)] x2r,
-        Util.LEQ [(3, 1), (4, -1)] 0 -- When this is LEQ, it cannot solve phase 1.
+        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, -1), (4, 1)] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, -1), (4, 1)] ((-yr) + (dx1r * x1r) + (dx2r * x2r)), -- -5
+        -- Simplex.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
+        Simplex.LEQ [(1, 1)] x1r,
+        -- Simplex.GEQ [(2, 1)] x2l,
+        Simplex.LEQ [(2, 1)] x2r,
+        Simplex.LEQ [(3, 1), (4, -1)] 0 -- When this is LEQ, it cannot solve phase 1.
                            -- This is because all variables in the system must be >= 0
                            -- To solve this, we can split y (3) into two variables, y1 (4) and y2 (5)
                            -- With y(3) = y1(4) - y2(5)
@@ -259,13 +258,13 @@ testPolyPaverTwoYs3 =
   (
     Max [(3 , 1), (4, -1)],
     [
-        Util.LEQ [(1, dx1l), (2, dx2l), (3, -1), (4, 1)] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Util.GEQ [(1, dx1r), (2, dx2r), (3, -1), (4, 1)] ((-yr) + (dx1r * x1r) + (dx2r * x2r)), -- -5
-        -- Util.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
-        Util.LEQ [(1, 1)] x1r,
-        -- Util.GEQ [(2, 1)] x2l,
-        Util.LEQ [(2, 1)] x2r,
-        Util.LEQ [(3, 1), (4, -1)] 0 -- When this is LEQ, it cannot solve phase 1.
+        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, -1), (4, 1)] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, -1), (4, 1)] ((-yr) + (dx1r * x1r) + (dx2r * x2r)), -- -5
+        -- Simplex.GEQ [(1, 1)] x1l, -- It doesn't like having rhs be 0 for a GEQ, probably because the simplex tableau should ignore this
+        Simplex.LEQ [(1, 1)] x1r,
+        -- Simplex.GEQ [(2, 1)] x2l,
+        Simplex.LEQ [(2, 1)] x2r,
+        Simplex.LEQ [(3, 1), (4, -1)] 0 -- When this is LEQ, it cannot solve phase 1.
                            -- This is because all variables in the system must be >= 0
                            -- To solve this, we can split y (3) into two variables, y1 (4) and y2 (5)
                            -- With y(3) = y1(4) - y2(5)
@@ -289,16 +288,16 @@ testPolyPaverTwoFs =
   (
     Min [(2 , 1)],
     [
-        Util.LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
-        Util.GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
-        Util.LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
-        Util.GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
-        -- Util.GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
-        Util.LEQ [(1, 1)] x1r,
-        -- Util.GEQ [(2, 1)] x2l,
-        Util.LEQ [(2, 1)] x2r,
-        Util.EQ [(3, 1)] 0,
-        Util.EQ [(4, 1)] 0 -- When this is LEQ, it cannot solve phase 1.
+        Simplex.LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
+        Simplex.GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
+        Simplex.LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
+        Simplex.GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
+        -- Simplex.GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
+        Simplex.LEQ [(1, 1)] x1r,
+        -- Simplex.GEQ [(2, 1)] x2l,
+        Simplex.LEQ [(2, 1)] x2r,
+        Simplex.EQ [(3, 1)] 0,
+        Simplex.EQ [(4, 1)] 0 -- When this is LEQ, it cannot solve phase 1.
                            -- This is because all variables in the system must be >= 0
                            -- To solve this, we can split y (3) into two variables, y1 (4) and y2 (5)
                            -- With y(3) = y1(4) - y2(5)
@@ -330,16 +329,16 @@ testPolyPaverTwoFs2 =
   (
     Min [(2 , 1)],
     [
-        Util.LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
-        Util.GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
-        Util.LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
-        Util.GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
-        -- Util.GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
-        Util.LEQ [(1, 1)] x1r,
-        -- Util.GEQ [(2, 1)] x2l,
-        Util.LEQ [(2, 1)] x2r,
-        Util.EQ [(3, 1)] 0, -- When this is LEQ, it cannot solve phase 1.
-        Util.EQ [(4, 1)] 0 -- When this is LEQ, it cannot solve phase 1.
+        Simplex.LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
+        Simplex.GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
+        Simplex.LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
+        Simplex.GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
+        -- Simplex.GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
+        Simplex.LEQ [(1, 1)] x1r,
+        -- Simplex.GEQ [(2, 1)] x2l,
+        Simplex.LEQ [(2, 1)] x2r,
+        Simplex.EQ [(3, 1)] 0, -- When this is LEQ, it cannot solve phase 1.
+        Simplex.EQ [(4, 1)] 0 -- When this is LEQ, it cannot solve phase 1.
                            -- This is because all variables in the system must be >= 0
                            -- To solve this, we can split y (3) into two variables, y1 (4) and y2 (5)
                            -- With y(3) = y1(4) - y2(5)
