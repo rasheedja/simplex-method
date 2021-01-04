@@ -28,7 +28,6 @@ source-repository head
 library
   exposed-modules:
       Simplex
-      Tests
   other-modules:
       Paths_simplex_haskell
   hs-source-dirs:
