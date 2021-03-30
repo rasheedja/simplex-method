@@ -12,12 +12,28 @@ import Debug.Trace (trace)
 
 type VarConstMap = [(Integer, Rational)]
 
+
 data PolyConstraint =
   LEQ VarConstMap Rational      | 
   GEQ VarConstMap Rational      | 
   EQ VarConstMap Rational       deriving (Show, Eq);
-  
+
+
 data ObjectiveFunction = Max VarConstMap | Min VarConstMap deriving Show
+
+prettyShowVarConstMap :: [(Integer, Rational)] -> String
+prettyShowVarConstMap [] = ""
+prettyShowVarConstMap [(v, c)]  = show c ++ "v" ++ show v
+prettyShowVarConstMap ((v, c) : vcs) = prettyShowVarConstMap [(v, c)] ++ " + " ++ prettyShowVarConstMap vcs
+
+prettyShowPolyConstraint :: PolyConstraint -> String
+prettyShowPolyConstraint (LEQ vcm r) = prettyShowVarConstMap vcm ++ " <= " ++ show r
+prettyShowPolyConstraint (GEQ vcm r) = prettyShowVarConstMap vcm ++ " >= " ++ show r
+prettyShowPolyConstraint (EQ vcm r)  = prettyShowVarConstMap vcm ++ " == " ++ show r
+
+prettyShowObjectiveFunction :: ObjectiveFunction -> String
+prettyShowObjectiveFunction (Min vcm) = "min: " ++ prettyShowVarConstMap vcm
+prettyShowObjectiveFunction (Max vcm) = "max: " ++ prettyShowVarConstMap vcm
 
 -- |Type representing a tableau of equations.
 -- Each item in the list is a row. The first item
@@ -89,7 +105,6 @@ twoPhaseSimplex objFunction system =
                   else trace "rhs not zero after phase 1, thus original tableau is infeasible" Nothing
         Nothing ->
           trace "Phase 1 tableau was infeasible (?)" Nothing
-
   where
     createObjectiveDict :: ObjectiveFunction -> Integer -> (Integer, VarConstMap)
     createObjectiveDict (Max obj) objectiveVar = (objectiveVar, obj)
