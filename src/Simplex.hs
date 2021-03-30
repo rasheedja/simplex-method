@@ -4,7 +4,7 @@ module Simplex where
 import Prelude hiding (EQ);
 import Data.List
 import Data.Bifunctor
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
 
 import Debug.Trace (trace)
 
@@ -71,6 +71,54 @@ foldSumVarConstMap ((v1, c1) : (v2, c2) : vcm) =
     then foldSumVarConstMap $ (v1, c1 + c2) : vcm
     else (v1, c1) : foldSumVarConstMap ((v2, c2) : vcm)
 
+-- |Find a feasible solution for the given system by performing the first phase of the two-phase simplex method
+findFeasibleSolution :: [PolyConstraint] -> Maybe [(Integer, Rational)]
+findFeasibleSolution system = 
+  if null artificialVars
+    then Just $ displayResults systemWithBasicVars -- No artificial vars, we have a feasible system
+    else 
+      case simplexPivot (createObjectiveDict artificialObjective objectiveVar : systemWithBasicVarsAsDictionary) of
+        Just phase1Dict ->
+          let
+            eliminateArtificialVarsFromPhase1Tableau = map (second (filter (\(v, _) -> v `notElem` artificialVars))) phase1Dict
+          in
+            case lookup objectiveVar eliminateArtificialVarsFromPhase1Tableau of
+              Nothing -> trace "objective row not found in phase 1 tableau" Nothing -- Should this be an error?
+              Just row ->
+                if fromMaybe 0 (lookup (-1) row) == 0
+                  then Just $ displayResults $ dictionaryFormToTableau eliminateArtificialVarsFromPhase1Tableau
+                  else trace "rhs not zero after phase 1, thus original tableau is infeasible" Nothing 
+        Nothing -> Nothing
+  where
+    displayResults :: Tableau -> [(Integer, Rational)]
+    displayResults results =
+      map
+      (\(basicVar, (_, rhs)) -> (basicVar, rhs))
+      results
+
+    maxVar =
+      maximum $ map 
+      (\case
+          LEQ vcm _ -> maximum (map fst vcm)
+          GEQ vcm _ -> maximum (map fst vcm)
+          EQ vcm _  -> maximum (map fst vcm)
+      ) 
+      system
+
+    (systemWithSlackVars, slackVars) = systemInStandardForm system maxVar []
+
+    maxVarWithSlackVars = if null slackVars then maxVar else maximum slackVars
+
+    (systemWithBasicVars, artificialVars) = systemWithArtificialVars systemWithSlackVars maxVarWithSlackVars 
+
+    finalMaxVar        = if null artificialVars then maxVarWithSlackVars else maximum artificialVars
+
+    systemWithBasicVarsAsDictionary = tableauInDictionaryForm systemWithBasicVars
+    
+    artificialObjective = createArtificialObjective systemWithBasicVarsAsDictionary artificialVars
+    
+    objectiveVar  = finalMaxVar + 1
+
 -- |Perform the two phase simplex method with a given objective function to maximize and a system of constraints
 -- assumes objFunction and system is not empty. Returns the a pair with the first item being the variable representing
 -- the objective function and the second item being the values of all variables appearing in the system (including the
@@ -106,10 +154,6 @@ twoPhaseSimplex objFunction system =
         Nothing ->
           trace "Phase 1 tableau was infeasible (?)" Nothing
   where
-    createObjectiveDict :: ObjectiveFunction -> Integer -> (Integer, VarConstMap)
-    createObjectiveDict (Max obj) objectiveVar = (objectiveVar, obj)
-    createObjectiveDict (Min obj) objectiveVar = (objectiveVar, map (second negate) obj)
-
     displayResults :: Tableau -> (Integer, [(Integer, Rational)])
     displayResults tableau =
       (
@@ -153,6 +197,11 @@ twoPhaseSimplex objFunction system =
     systemWithBasicVarsAsDictionary = tableauInDictionaryForm systemWithBasicVars
 
     objFunctionVars = map (fst) (getObjective objFunction)
+
+
+createObjectiveDict :: ObjectiveFunction -> Integer -> (Integer, VarConstMap)
+createObjectiveDict (Max obj) objectiveVar = (objectiveVar, obj)
+createObjectiveDict (Min obj) objectiveVar = (objectiveVar, map (second negate) obj)
 
 -- |System in standard form, a system of only equations. Add slack vars where necessary. This may give you
 -- an infeasible system if slack vars are negative when original variables are zero. If a constraint 
