@@ -62,6 +62,58 @@ getObjective :: ObjectiveFunction -> VarConstMap
 getObjective (Max o) = o
 getObjective (Min o) = o
 
+-- |Simplifies a system PolyConstraints by first removing duplicate elements
+-- and then simplifying LEQ and GEQ with same lhs and rhs (and other similar situations) into EQ
+simplifySystem :: [PolyConstraint] -> [PolyConstraint]
+simplifySystem = reduceSystem . nub
+  where
+    reduceSystem :: [PolyConstraint] -> [PolyConstraint]
+    reduceSystem [] = []
+    -- Reduce LEQ with matching GEQ and EQ into EQ
+    reduceSystem ((LEQ lhs rhs) : pcs) =
+      let
+        matchingConstraints =
+          filter
+          (\case
+            GEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+            EQ  lhs' rhs' -> lhs == lhs' && rhs == rhs'
+            _             -> False
+          )
+          pcs
+      in
+        if null matchingConstraints
+          then LEQ lhs rhs : reduceSystem pcs
+          else EQ lhs rhs  : reduceSystem (pcs \\ matchingConstraints)
+    -- Reduce GEQ with matching LEQ and EQ into EQ
+    reduceSystem ((GEQ lhs rhs) : pcs) =
+      let
+        matchingConstraints =
+          filter
+          (\case
+            LEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+            EQ  lhs' rhs' -> lhs == lhs' && rhs == rhs'
+            _             -> False
+          )
+          pcs
+      in
+        if null matchingConstraints
+          then GEQ lhs rhs : reduceSystem pcs
+          else EQ lhs rhs  : reduceSystem (pcs \\ matchingConstraints)
+    -- Reduce EQ with matching LEQ and GEQ into EQ
+    reduceSystem ((EQ lhs rhs) : pcs) =
+      let
+        matchingConstraints =
+          filter
+          (\case
+            LEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+            GEQ  lhs' rhs' -> lhs == lhs' && rhs == rhs'
+            _             -> False
+          )
+          pcs
+      in
+        if null matchingConstraints
+          then EQ lhs rhs : reduceSystem pcs
+          else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
 -- |Add a sorted list of VarConstMaps, folding where the variables are equal
 foldSumVarConstMap :: [(Integer, Rational)] -> [(Integer, Rational)]
 foldSumVarConstMap []                          = []
@@ -73,7 +125,7 @@ foldSumVarConstMap ((v1, c1) : (v2, c2) : vcm) =
 
 -- |Find a feasible solution for the given system by performing the first phase of the two-phase simplex method
 findFeasibleSolution :: [PolyConstraint] -> Maybe [(Integer, Rational)]
-findFeasibleSolution system = 
+findFeasibleSolution unsimplifiedSystem = 
   if null artificialVars
     then Just $ displayResults systemWithBasicVars -- No artificial vars, we have a feasible system
     else 
@@ -95,6 +147,8 @@ findFeasibleSolution system =
       map
       (\(basicVar, (_, rhs)) -> (basicVar, rhs))
       results
+
+    system = simplifySystem unsimplifiedSystem
 
     maxVar =
       maximum $ map 
@@ -124,7 +178,7 @@ findFeasibleSolution system =
 -- the objective function and the second item being the values of all variables appearing in the system (including the
 -- objective function).
 twoPhaseSimplex :: ObjectiveFunction -> [PolyConstraint] -> Maybe (Integer, [(Integer, Rational)])
-twoPhaseSimplex objFunction system = 
+twoPhaseSimplex objFunction unsimplifiedSystem = 
   if null artificialVars
     then displayResults . dictionaryFormToTableau <$> simplexPivot (createObjectiveDict objFunction objectiveVar : systemWithBasicVarsAsDictionary)
     else 
@@ -154,6 +208,8 @@ twoPhaseSimplex objFunction system =
         Nothing ->
           trace "Phase 1 tableau was infeasible (?)" Nothing
   where
+    system = simplifySystem unsimplifiedSystem
+
     displayResults :: Tableau -> (Integer, [(Integer, Rational)])
     displayResults tableau =
       (
