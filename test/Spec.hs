@@ -67,7 +67,10 @@ testsResults =
     , Just (17,[(17,45 % 22),(2,5 % 2),(1,45 % 22),(4,0 % 1)])
     , Just (17,[(17,5 % 2),(2,5 % 2),(1,5 % 2),(4,0 % 1)])
     , Just (17,[(17,45 % 22),(2,45 % 22),(1,5 % 2),(4,0 % 1)])
-
+    , Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)])
+    , Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)])
+    , Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)])
+    , Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)])
   ]
 
 testsList =
@@ -115,8 +118,128 @@ testsList =
     testPolyPaverTwoFs5,
     testPolyPaverTwoFs6,
     testPolyPaverTwoFs7,
-    testPolyPaverTwoFs8
+    testPolyPaverTwoFs8,
+    testLeqGeqBugMin1,
+    testLeqGeqBugMax1,
+    testLeqGeqBugMin2,
+    testLeqGeqBugMax2
   ]
+
+testLeqGeqBugMin1 =
+  (
+    Min [(1, 1)],
+    [
+      GEQ [(1,1 % 1)] (3 % 1),
+      LEQ [(1,1 % 1)] (3 % 1),
+      GEQ [(2,1 % 1)] (3 % 1),
+      LEQ [(2,1 % 1)] (3 % 1)
+    ]
+  )
+  
+testLeqGeqBugMax1 =
+  (
+    Min [(1, 1)],
+    [
+      GEQ [(1,1 % 1)] (3 % 1),
+      LEQ [(1,1 % 1)] (3 % 1),
+      GEQ [(2,1 % 1)] (3 % 1),
+      LEQ [(2,1 % 1)] (3 % 1)
+    ]
+  )
+
+testLeqGeqBugMin2 =
+  (
+    Min [(1, 1)],
+    [
+      GEQ [(1,1 % 1)] (3 % 1),
+      LEQ [(1,1 % 1)] (3 % 1),
+      GEQ [(2,1 % 1)] (3 % 1),
+      LEQ [(2,1 % 1)] (3 % 1)
+    ]
+  )
+  
+testLeqGeqBugMax2 =
+  (
+    Min [(1, 1)],
+    [
+      GEQ [(1,1 % 1)] (3 % 1),
+      LEQ [(1,1 % 1)] (3 % 1),
+      GEQ [(2,1 % 1)] (3 % 1),
+      LEQ [(2,1 % 1)] (3 % 1)
+    ]
+  )
+
+-- testManual :: (ObjectiveFunction, [PolyConstraint])
+-- testManual
+
+testB :: (ObjectiveFunction, [PolyConstraint])
+testB = 
+  (
+    Min [(1, 1)],
+    [
+      GEQ [(1,1 % 1)] (0 % 1),
+      LEQ [(1,1 % 1)] (2 % 1),
+      GEQ [(2,1 % 1),(1,(-3) % 1)] ((-7) % 1),
+      LEQ [(2,1 % 1),(1,3 % 1)] (5 % 1),
+      GEQ [(2,1 % 1)] (0 % 1)]
+  )
+
+
+testOriginal :: (ObjectiveFunction, [PolyConstraint])
+testOriginal =
+  (
+    Max [(1, 1)],
+    [
+      GEQ [(1, 1)] (-1),
+      LEQ [(1, 1)] 1,
+      LEQ [(1, 3), (2, -1)] ((-(-1)) + (3 * (-1))),
+      GEQ [(1, 3), (2, -1)] ((-(-1)) + (3 * (-1))),
+      LEQ [(2, 1)] 0
+    ]
+  )
+
+testP1 :: (ObjectiveFunction, [PolyConstraint])
+testP1 =
+  (
+    Max [(1, 1)],
+    [
+      GEQ [(1, 1)] (-1),
+      LEQ [(1, 1)] 1,
+      LEQ [(1, 3), (2, 1)] ((-(-1)) + (3 * (-1))),
+      GEQ [(1, 3), (2, 1)] ((-(-1)) + (3 * (-1))),
+      GEQ [(2, -1)] 0
+    ]
+  )
+
+testP2 :: (ObjectiveFunction, [PolyConstraint])
+testP2 =
+  (
+    Max [(1, 1)],
+    [
+      GEQ [(1, 1)] 0,
+      LEQ [(1, 1)] 2,
+      LEQ [(1, 3), (2, 1)] (1 - 3),
+      GEQ [(1, 3), (2, 1)] (1 - 3),
+      GEQ [(2, 1)] 0
+    ]
+  )
+
+
+testBug :: (ObjectiveFunction, [PolyConstraint])
+testBug =
+  ( 
+    -- Function, Y = X^3
+    Max [(1, 1)],  -- Should enclose [-1,0], for resulting enclosure, need to do -1
+    [
+      GEQ [(1,1 % 1)] (0 % 1), -- X >= 0 (transformed from -1)
+      LEQ [(1,1 % 1)] (2 % 1), -- X <= 2 (transformed from 2)
+      LEQ [(2,1 % 1),(1,3 % 1)] (1 % 1), -- Y + 3X <= 1
+      GEQ [(2,1 % 1),(1,3 % 1)] (1 % 1), -- Y + 3X >= 1
+      GEQ [(2,1 % 1)] (0 % 1)            -- Y >= 0
+    ]
+
+  )
+
 
 -- From page 50 of 'Linear and Integer Programming Made Easy'
 -- Solution: obj = 29, 1 = 3, 2 = 4, 
