@@ -4,6 +4,14 @@ module SoplexTranslator where
 
 import Simplex
 import Data.Ratio
+import Data.List
+import Data.Scientific
+import System.Process
+import System.IO.Unsafe
+import System.Exit 
+
+soplexPath :: String
+soplexPath = "/home/junaid/Research/opt/soplex/soplex-5.0.1/bin/soplex"
 
 translateToLp :: (ObjectiveFunction, [PolyConstraint]) -> String
 translateToLp (obj, cons) = 
@@ -60,3 +68,28 @@ varConstMapToString =
   concatMap 
   (\(v, c) -> 
     rationalAsDecimal 100 c ++ " x" ++ show v ++ " ")
+
+findObjectiveValueUsingSoplex :: (ObjectiveFunction, [PolyConstraint]) -> IO (Maybe Rational)
+findObjectiveValueUsingSoplex system =
+  do
+    writeFile soplexFile soplexInput
+    (exitCode, output, errDetails) <- readProcessWithExitCode soplexPath [soplexFile] []
+    case exitCode of
+      ExitSuccess   -> return $ parseObjectiveValue output
+      ExitFailure _ -> error $ "Error when running SoPlex on generated soplex.lp. Error message: " ++ show errDetails
+  where
+    soplexInput = translateToLp system
+    soplexFile  = "soplex.lp"
+
+parseObjectiveValue :: String -> Maybe Rational
+parseObjectiveValue output =
+  if "[optimal]" `elem` outputList
+    then toRational . (read :: String -> Scientific) <$> findObjectiveValue outputList
+    else Nothing
+  where
+    outputList = words output
+
+    findObjectiveValue :: [String] -> Maybe String
+    findObjectiveValue []                                             = Nothing
+    findObjectiveValue ("Objective" : "value" : ":" : objectiveValue : _) = Just objectiveValue
+    findObjectiveValue (_ : xs)                                       = findObjectiveValue xs
