@@ -123,11 +123,17 @@ foldSumVarConstMap ((v1, c1) : (v2, c2) : vcm) =
     then foldSumVarConstMap $ (v1, c1 + c2) : vcm
     else (v1, c1) : foldSumVarConstMap ((v2, c2) : vcm)
 
+displayTableauResults :: Tableau -> [(Integer, Rational)]
+displayTableauResults = map (\(basicVar, (_, rhs)) -> (basicVar, rhs))
+
+displayDictionaryResults :: DictionaryForm -> [(Integer, Rational)]
+displayDictionaryResults dict = displayTableauResults$ dictionaryFormToTableau dict
+
 -- |Find a feasible solution for the given system by performing the first phase of the two-phase simplex method
-findFeasibleSolution :: [PolyConstraint] -> Maybe [(Integer, Rational)]
+findFeasibleSolution :: [PolyConstraint] -> Maybe (DictionaryForm, [Integer], [Integer], Integer)
 findFeasibleSolution unsimplifiedSystem = 
-  if null artificialVars
-    then Just $ displayResults systemWithBasicVars -- No artificial vars, we have a feasible system
+  if null artificialVars -- No artificial vars, we have a feasible system
+    then Just (systemWithBasicVarsAsDictionary, slackVars, artificialVars, objectiveVar)
     else 
       case simplexPivot (createObjectiveDict artificialObjective objectiveVar : systemWithBasicVarsAsDictionary) of
         Just phase1Dict ->
@@ -138,16 +144,10 @@ findFeasibleSolution unsimplifiedSystem =
               Nothing -> trace "objective row not found in phase 1 tableau" Nothing -- Should this be an error?
               Just row ->
                 if fromMaybe 0 (lookup (-1) row) == 0
-                  then Just $ displayResults $ dictionaryFormToTableau eliminateArtificialVarsFromPhase1Tableau
+                  then Just (eliminateArtificialVarsFromPhase1Tableau, slackVars, artificialVars, objectiveVar)
                   else trace "rhs not zero after phase 1, thus original tableau is infeasible" Nothing 
         Nothing -> Nothing
   where
-    displayResults :: Tableau -> [(Integer, Rational)]
-    displayResults results =
-      map
-      (\(basicVar, (_, rhs)) -> (basicVar, rhs))
-      results
-
     system = simplifySystem unsimplifiedSystem
 
     maxVar =
@@ -173,43 +173,12 @@ findFeasibleSolution unsimplifiedSystem =
     
     objectiveVar  = finalMaxVar + 1
 
--- |Perform the two phase simplex method with a given objective function to maximize and a system of constraints
--- assumes objFunction and system is not empty. Returns the a pair with the first item being the variable representing
--- the objective function and the second item being the values of all variables appearing in the system (including the
--- objective function).
-twoPhaseSimplex :: ObjectiveFunction -> [PolyConstraint] -> Maybe (Integer, [(Integer, Rational)])
-twoPhaseSimplex objFunction unsimplifiedSystem = 
+optimizeFeasibleSystem :: ObjectiveFunction -> [(Integer, [(Integer, Rational)])] -> [Integer] -> [Integer] -> Integer -> Maybe (Integer, [(Integer, Rational)])
+optimizeFeasibleSystem objFunction phase1Dict slackVars artificialVars objectiveVar =
   if null artificialVars
-    then displayResults . dictionaryFormToTableau <$> simplexPivot (createObjectiveDict objFunction objectiveVar : systemWithBasicVarsAsDictionary)
-    else 
-      case simplexPivot (createObjectiveDict artificialObjective objectiveVar : systemWithBasicVarsAsDictionary) of
-        Just phase1Dict ->
-          let 
-                eliminateArtificialVarsFromPhase1Tableau = map (second (filter (\(v, _) -> v `notElem` artificialVars))) phase1Dict
-
-                phase2Objective = 
-                  (foldSumVarConstMap . sort) $
-                    concatMap
-                    (\(var, coeff) ->
-                      case lookup var phase1Dict of
-                        Nothing -> [(var, coeff)]
-                        Just row -> map (second (*coeff)) $ filter (\(var, _) -> var `notElem` artificialVars) row
-                    )  
-                    (getObjective objFunction)
-
-                phase2ObjFunction = if isMax objFunction then Max phase2Objective else Min phase2Objective
-          in
-            case lookup objectiveVar eliminateArtificialVarsFromPhase1Tableau of
-              Nothing -> trace "objective row not found in phase 1 tableau" Nothing
-              Just row ->
-                if fromMaybe 0 (lookup (-1) row) == 0 
-                  then trace "starting phase 2" displayResults . dictionaryFormToTableau <$> simplexPivot (createObjectiveDict phase2ObjFunction objectiveVar : tail eliminateArtificialVarsFromPhase1Tableau)
-                  else trace "rhs not zero after phase 1, thus original tableau is infeasible" Nothing
-        Nothing ->
-          trace "Phase 1 tableau was infeasible (?)" Nothing
+    then displayResults . dictionaryFormToTableau <$> simplexPivot (createObjectiveDict objFunction objectiveVar : phase1Dict)
+    else displayResults . dictionaryFormToTableau <$> simplexPivot (createObjectiveDict phase2ObjFunction objectiveVar : tail phase1Dict)
   where
-    system = simplifySystem unsimplifiedSystem
-
     displayResults :: Tableau -> (Integer, [(Integer, Rational)])
     displayResults tableau =
       (
@@ -225,35 +194,26 @@ twoPhaseSimplex objFunction unsimplifiedSystem =
             $ filter (\(basicVar,_) -> basicVar `notElem` slackVars ++ artificialVars) tableau
       )
 
-    maxVar =
-      max
-      (maximum $ map 
-      (\case
-          LEQ vcm _ -> maximum (map fst vcm)
-          GEQ vcm _ -> maximum (map fst vcm)
-          EQ vcm _  -> maximum (map fst vcm)
-      ) 
-      system)
-      (maximum objFunctionVars) -- This is not logically needed since if a variable does not appear to the system, 
-                                      -- we can set this variable to infinity (since we assume all variables are >=0).
-                                      -- But, this is safer.  
+    phase2Objective = 
+      (foldSumVarConstMap . sort) $
+        concatMap
+        (\(var, coeff) ->
+          case lookup var phase1Dict of
+            Nothing -> [(var, coeff)]
+            Just row -> map (second (*coeff)) row
+        )  
+        (getObjective objFunction)
 
-    (systemWithSlackVars, slackVars)      = systemInStandardForm system maxVar []
-
-    maxVarWithSlackVars = if null slackVars then maxVar else maximum slackVars
-
-    (systemWithBasicVars, artificialVars) = systemWithArtificialVars systemWithSlackVars maxVarWithSlackVars 
-
-    finalMaxVar        = if null artificialVars then maxVarWithSlackVars else maximum artificialVars
-
-    objectiveVar  = finalMaxVar + 1
-
-    artificialObjective = createArtificialObjective systemWithBasicVarsAsDictionary artificialVars
-
-    systemWithBasicVarsAsDictionary = tableauInDictionaryForm systemWithBasicVars
-
-    objFunctionVars = map (fst) (getObjective objFunction)
-
+    phase2ObjFunction = if isMax objFunction then Max phase2Objective else Min phase2Objective
+-- |Perform the two phase simplex method with a given objective function to maximize and a system of constraints
+-- assumes objFunction and system is not empty. Returns the a pair with the first item being the variable representing
+-- the objective function and the second item being the values of all variables appearing in the system (including the
+-- objective function).
+twoPhaseSimplex :: ObjectiveFunction -> [PolyConstraint] -> Maybe (Integer, [(Integer, Rational)])
+twoPhaseSimplex objFunction unsimplifiedSystem = 
+  case findFeasibleSolution unsimplifiedSystem of
+    Just r@(phase1Dict, slackVars, artificialVars, objectiveVar) -> optimizeFeasibleSystem objFunction phase1Dict slackVars artificialVars objectiveVar
+    Nothing -> Nothing
 
 createObjectiveDict :: ObjectiveFunction -> Integer -> (Integer, VarConstMap)
 createObjectiveDict (Max obj) objectiveVar = (objectiveVar, obj)
@@ -446,3 +406,10 @@ pivot leavingVariable enteringVariable rows =
     Nothing -> trace "non basic variable not found in basic row" undefined
   where
     (_, basicRow) = head $ filter ((leavingVariable ==) . fst) rows
+
+extractObjectiveValue :: Maybe (Integer, [(Integer, Rational)]) -> Maybe Rational
+extractObjectiveValue Nothing                  = Nothing
+extractObjectiveValue (Just (objVar, results)) =
+  case lookup objVar results of
+    Nothing -> error "Objective not found in results when extracting objective value"
+    r -> r
