@@ -5,8 +5,10 @@ import Prelude hiding (EQ);
 import Data.List
 import Data.Bifunctor
 import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Ratio ((%))
+-- import Debug.Trace (trace)
 
-import Debug.Trace (trace)
+trace s a = a
 
 -- data Opt = Max | Min
 
