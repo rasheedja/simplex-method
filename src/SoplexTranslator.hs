@@ -93,3 +93,38 @@ parseObjectiveValue output =
     findObjectiveValue []                                             = Nothing
     findObjectiveValue ("Objective" : "value" : ":" : objectiveValue : _) = Just objectiveValue
     findObjectiveValue (_ : xs)                                       = findObjectiveValue xs
+
+testOutput :: String
+testOutput =
+  "SoPlex version 5.0.1 [mode: optimized] [precision: 8 byte] [rational: GMP 6.2.0] [githash: fcd2a2a5]\
+\Copyright (c) 1996-2020 Konrad-Zuse-Zentrum fuer Informationstechnik Berlin (ZIB)\
+
+\Reading (real) LP file <1.lp> . . .\
+\Reading took 0.00 seconds.\
+
+\LP has 4 rows 2 columns and 7 nonzeros.\
+
+\Equilibrium scaling LP (persistent)\
+\Simplifier removed 1 rows, 0 columns, 1 nonzeros, 0 col bounds, 0 row bounds\
+\Reduced LP has 3 rows 2 columns 6 nonzeros\
+\Equilibrium scaling LP\
+\type |   time |   iters | facts |    shift | viol sum | viol num | obj value \
+\  E  |    0.0 |       0 |     1 | 3.00e+00 | 1.00e+00 |        1 | 2.00000000e+01\
+\  L  |    0.0 |       1 |     2 | 0.00e+00 | 6.00e+00 |        1 | 2.60000000e+01\
+\  L  |    0.0 |       2 |     3 | 0.00e+00 | 0.00e+00 |        0 | 2.90000000e+01\
+\--- unscaling internal solution\
+\--- unsimplifying solution and basis\
+\--- unscaling external solution\
+\--- verifying computed solution\
+\  E  |    0.0 |       0 |     1 | 0.00e+00 | 0.00e+00 |        0 | 2.90000000e+01\
+\  E  |    0.0 |       0 |     1 | 0.00e+00 | 0.00e+00 |        0 | 2.90000000e+01\
+\--- unscaling external solution\
+\--- verifying computed solution\
+
+\SoPlex status       : problem is solved [optimal]\
+\Solving time (sec)  : 0.00\
+\Iterations          : 2\
+\Objective value     : 2.90000000e+01\
+
+
+\  "
