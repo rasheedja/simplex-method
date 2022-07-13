@@ -2,125 +2,81 @@ import Simplex
 import Data.Ratio ((%))
 
 main :: IO ()
-main = 
-  let 
-    testResults = zipWith
-                  (==) testsResults
-                  (map (uncurry twoPhaseSimplex) testsList)
-  in
-    if and testResults 
-      then putStrLn "All tests passed"
-      else putStrLn "At least one test failed"
+main = runTests testsList
 
-testsResults :: [Maybe (Integer, [(Integer, Rational)])]
-testsResults =
-  [
-      Just (7,[(7,29 % 1),(1,3 % 1),(2,4 % 1)])
-    , Just (7,[(7,0 % 1)])
-    , Nothing
-    , Just (11,[(11,237 % 7),(1,24 % 7),(2,33 % 7)])
-    , Just (9,[(9,3 % 5),(2,14 % 5),(3,17 % 5)])
-    , Nothing
-    , Just (8,[(8,1 % 1),(2,2 % 1),(1,3 % 1)])
-    , Just (8,[(8,(-1) % 4),(2,9 % 2),(1,17 % 4)])
-    , Just (7,[(7,5 % 1),(3,2 % 1),(4,1 % 1)])
-    , Just (7,[(7,8 % 1),(1,2 % 1),(2,6 % 1)])
-    , Just (8,[(8,20 % 1),(4,16 % 1),(3,6 % 1)])
-    , Just (8,[(8,6 % 1),(4,2 % 1),(5,2 % 1)])
-    , Just (6,[(6,150 % 1),(2,150 % 1)])
-    , Just (6,[(6,40 % 3),(2,40 % 3)])
-    , Nothing
-    , Just (6,[(6,75 % 1),(1,75 % 2)])
-    , Just (7,[(7,(-120) % 1),(1,20 % 1)])
-    , Just (7,[(7,10 % 1),(3,5 % 1)])
-    , Nothing
-    , Nothing
-    , Just (7,[(7,250 % 1),(2,50 % 1)])
-    , Just (7,[(7,0 % 1)])
-    , Nothing
-    , Just (10,[(10,300 % 1),(3,150 % 1)])
-    , Just (12,[(12,7 % 4),(2,5 % 2),(1,7 % 4),(3,0 % 1)])
-    , Just (12,[(12,5 % 2),(2,5 % 3),(1,5 % 2),(3,0 % 1)])
-    , Just (12,[(12,5 % 3),(2,5 % 3),(1,5 % 2),(3,0 % 1)])
-    , Just (12,[(12,5 % 2),(2,5 % 2),(1,5 % 2),(3,0 % 1)])
-    , Nothing
-    , Nothing
-    , Nothing
-    , Nothing
-    , Just (12,[(12,7 % 2),(2,5 % 9),(1,7 % 2),(3,0 % 1)])
-    , Just (12,[(12,17 % 20),(2,7 % 2),(1,17 % 20),(3,0 % 1)])
-    , Just (12,[(12,7 % 2),(2,7 % 2),(1,22 % 9)])
-    , Just (12,[(12,5 % 9),(2,5 % 9),(1,7 % 2),(3,0 % 1)])
-    , Nothing
-    , Nothing
-    , Nothing
-    , Nothing
-    , Just (17,[(17,5 % 2),(2,45 % 22),(1,5 % 2),(4,0 % 1)])
-    , Just (17,[(17,45 % 22),(2,5 % 2),(1,45 % 22),(4,0 % 1)])
-    , Just (17,[(17,5 % 2),(2,5 % 2),(1,5 % 2),(4,0 % 1)])
-    , Just (17,[(17,45 % 22),(2,45 % 22),(1,5 % 2),(4,0 % 1)])
-    , Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)])
-    , Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)])
-    , Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)])
-    , Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)])
-    , Just (10,[(10,(-370) % 1),(2,26 % 1),(1,5 % 3)])
-    , Just (8,[(8,(-2) % 9),(1,14 % 9),(2,8 % 9)])
-    , Just (7,[(7,(-8) % 1),(2,2 % 1)])
-  ]
+runTests [] = putStrLn "All tests passed"
+runTests (((testObjective, testConstraints), expectedResult) : tests) =
+  let testResult = twoPhaseSimplex testObjective testConstraints in
+  if testResult == expectedResult 
+    then runTests tests
+    else do
+      putStrLn "The following test failed: \n" 
+      putStrLn ("Objective Function (Non-prettified): " ++ show testObjective)
+      putStrLn ("Constraints        (Non-prettified): " ++ show testConstraints)
+      putStrLn "====================================\n"
+      putStrLn ("Objective Function (Prettified): " ++ prettyShowObjectiveFunction testObjective)
+      putStrLn "Constraints        (Prettified): "
+      putStrLn (concatMap ((\c -> "\t" ++ prettyShowPolyConstraint c ++ "\n")) testConstraints)
+      putStrLn "====================================\n"
+      putStrLn ("Expected Solution      (Full): " ++ show expectedResult)
+      putStrLn ("Actual Solution        (Full): " ++ show testResult)
+      putStrLn ("Expected Solution (Objective): " ++ show (extractObjectiveValue  expectedResult))
+      putStrLn ("Actual Solution   (Objective): " ++ show (extractObjectiveValue  testResult))
 
+testsList :: [((ObjectiveFunction, [PolyConstraint]), Maybe (Integer, [(Integer, Rational)]))]
 testsList =
   [
-    test1,
-    test2,
-    test3,
-    test4,
-    test5,
-    test6,
-    test7,
-    test8,
-    test9,
-    test10,
-    test11,
-    test12,
-    test13,
-    test14,
-    test15,
-    test16,
-    test17,
-    test18,
-    test19,
-    test20,
-    test21,
-    test22,
-    test23,
-    test24,
-    testPolyPaver1,
-    testPolyPaver2,
-    testPolyPaver3,
-    testPolyPaver4,
-    testPolyPaver5,
-    testPolyPaver6,
-    testPolyPaver7,
-    testPolyPaver8,
-    testPolyPaver9,
-    testPolyPaver10,
-    testPolyPaver11,
-    testPolyPaver12,
-    testPolyPaverTwoFs1,
-    testPolyPaverTwoFs2,
-    testPolyPaverTwoFs3,
-    testPolyPaverTwoFs4,
-    testPolyPaverTwoFs5,
-    testPolyPaverTwoFs6,
-    testPolyPaverTwoFs7,
-    testPolyPaverTwoFs8,
-    testLeqGeqBugMin1,
-    testLeqGeqBugMax1,
-    testLeqGeqBugMin2,
-    testLeqGeqBugMax2,
-    testQuickCheck1,
-    testQuickCheck2,
-    testQuickCheck3
+      (test1,                    Just (7,[(7,29 % 1),(1,3 % 1),(2,4 % 1)]))
+    , (test2,                    Just (7,[(7,0 % 1)]))
+    , (test3,                    Nothing)
+    , (test4,                    Just (11,[(11,237 % 7),(1,24 % 7),(2,33 % 7)]))
+    , (test5,                    Just (9,[(9,3 % 5),(2,14 % 5),(3,17 % 5)]))
+    , (test6,                    Nothing)
+    , (test7,                    Just (8,[(8,1 % 1),(2,2 % 1),(1,3 % 1)]))
+    , (test8,                    Just (8,[(8,(-1) % 4),(2,9 % 2),(1,17 % 4)]))
+    , (test9,                    Just (7,[(7,5 % 1),(3,2 % 1),(4,1 % 1)]))
+    , (test10,                   Just (7,[(7,8 % 1),(1,2 % 1),(2,6 % 1)]))
+    , (test11,                   Just (8,[(8,20 % 1),(4,16 % 1),(3,6 % 1)]))
+    , (test12,                   Just (8,[(8,6 % 1),(4,2 % 1),(5,2 % 1)]))
+    , (test13,                   Just (6,[(6,150 % 1),(2,150 % 1)]))
+    , (test14,                   Just (6,[(6,40 % 3),(2,40 % 3)]))
+    , (test15,                   Nothing)
+    , (test16,                   Just (6,[(6,75 % 1),(1,75 % 2)]))
+    , (test17,                   Just (7,[(7,(-120) % 1),(1,20 % 1)]))
+    , (test18,                   Just (7,[(7,10 % 1),(3,5 % 1)]))
+    , (test19,                   Nothing)
+    , (test20,                   Nothing)
+    , (test21,                   Just (7,[(7,250 % 1),(2,50 % 1)]))
+    , (test22,                   Just (7,[(7,0 % 1)]))
+    , (test23,                   Nothing)
+    , (test24,                   Just (10,[(10,300 % 1),(3,150 % 1)]))
+    , (testPolyPaver1,           Just (12,[(12,7 % 4),(2,5 % 2),(1,7 % 4),(3,0 % 1)]))
+    , (testPolyPaver2,           Just (12,[(12,5 % 2),(2,5 % 3),(1,5 % 2),(3,0 % 1)]))
+    , (testPolyPaver3,           Just (12,[(12,5 % 3),(2,5 % 3),(1,5 % 2),(3,0 % 1)]))
+    , (testPolyPaver4,           Just (12,[(12,5 % 2),(2,5 % 2),(1,5 % 2),(3,0 % 1)]))
+    , (testPolyPaver5,           Nothing)
+    , (testPolyPaver6,           Nothing)
+    , (testPolyPaver7,           Nothing)
+    , (testPolyPaver8,           Nothing)
+    , (testPolyPaver9,           Just (12,[(12,7 % 2),(2,5 % 9),(1,7 % 2),(3,0 % 1)]))
+    , (testPolyPaver10,          Just (12,[(12,17 % 20),(2,7 % 2),(1,17 % 20),(3,0 % 1)]))
+    , (testPolyPaver11,          Just (12,[(12,7 % 2),(2,7 % 2),(1,22 % 9)]))
+    , (testPolyPaver12,          Just (12,[(12,5 % 9),(2,5 % 9),(1,7 % 2),(3,0 % 1)]))
+    , (testPolyPaverTwoFs1,      Nothing)
+    , (testPolyPaverTwoFs2,      Nothing)
+    , (testPolyPaverTwoFs3,      Nothing)
+    , (testPolyPaverTwoFs4,      Nothing)
+    , (testPolyPaverTwoFs5,      Just (17,[(17,5 % 2),(2,45 % 22),(1,5 % 2),(4,0 % 1)]))
+    , (testPolyPaverTwoFs6,      Just (17,[(17,45 % 22),(2,5 % 2),(1,45 % 22),(4,0 % 1)]))
+    , (testPolyPaverTwoFs7,      Just (17,[(17,5 % 2),(2,5 % 2),(1,5 % 2),(4,0 % 1)]))
+    , (testPolyPaverTwoFs8,      Just (17,[(17,45 % 22),(2,45 % 22),(1,5 % 2),(4,0 % 1)]))
+    , (testLeqGeqBugMin1,        Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)]))
+    , (testLeqGeqBugMax1,        Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)]))
+    , (testLeqGeqBugMin2,        Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)]))
+    , (testLeqGeqBugMax2,        Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)]))
+    , (testQuickCheck1,          Just (10,[(10,(-370) % 1),(2,26 % 1),(1,5 % 3)]))
+    , (testQuickCheck2,          Just (8,[(8,(-2) % 9),(1,14 % 9),(2,8 % 9)]))
+    , (testQuickCheck3,          Just (7,[(7,(-8) % 1),(2,2 % 1)]))
   ]
 
 testLeqGeqBugMin1 =
@@ -1063,6 +1019,7 @@ testQuickCheck2 =
       Simplex.LEQ [(2, 6), (1, -4), (2, 1)] 0]
   )
 
+-- This test will fail if the objective function is not simplified
 testQuickCheck3 = 
   (
     Min [(2, 0), (2, -4)],
