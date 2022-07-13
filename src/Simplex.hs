@@ -25,9 +25,14 @@ data ObjectiveFunction = Max VarConstMap | Min VarConstMap deriving Show
 
 prettyShowVarConstMap :: [(Integer, Rational)] -> String
 prettyShowVarConstMap [] = ""
-prettyShowVarConstMap [(v, c)]  = "(" ++ prettyShowRational c ++ ") * x" ++ show v ++ ""
+prettyShowVarConstMap [(v, c)]  = prettyShowRational c ++ " * x" ++ show v ++ ""
   where
-    prettyShowRational r = if denominator r == 1 then show (numerator r) else show (numerator r) ++ " / " ++ show (numerator r)
+    prettyShowRational r = 
+      if r < 0
+        then "(" ++ r' ++ ")"
+        else r'
+      where
+        r' = if denominator r == 1 then show (numerator r) else show (numerator r) ++ " / " ++ show (numerator r)
 
 prettyShowVarConstMap ((v, c) : vcs) = prettyShowVarConstMap [(v, c)] ++ " + " ++ prettyShowVarConstMap vcs
 
