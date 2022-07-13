@@ -5,7 +5,7 @@ import Prelude hiding (EQ);
 import Data.List
 import Data.Bifunctor
 import Data.Maybe (fromMaybe, mapMaybe)
-import Data.Ratio ((%))
+import Data.Ratio (numerator, denominator, (%))
 -- import Debug.Trace (trace)
 
 trace s a = a
@@ -25,7 +25,10 @@ data ObjectiveFunction = Max VarConstMap | Min VarConstMap deriving Show
 
 prettyShowVarConstMap :: [(Integer, Rational)] -> String
 prettyShowVarConstMap [] = ""
-prettyShowVarConstMap [(v, c)]  = show c ++ "v" ++ show v
+prettyShowVarConstMap [(v, c)]  = "(" ++ prettyShowRational c ++ ") * x" ++ show v ++ ""
+  where
+    prettyShowRational r = if denominator r == 1 then show (numerator r) else show (numerator r) ++ " / " ++ show (numerator r)
+
 prettyShowVarConstMap ((v, c) : vcs) = prettyShowVarConstMap [(v, c)] ++ " + " ++ prettyShowVarConstMap vcs
 
 prettyShowPolyConstraint :: PolyConstraint -> String
@@ -64,10 +67,11 @@ getObjective :: ObjectiveFunction -> VarConstMap
 getObjective (Max o) = o
 getObjective (Min o) = o
 
--- |Simplifies a system PolyConstraints by first removing duplicate elements
--- and then simplifying LEQ and GEQ with same lhs and rhs (and other similar situations) into EQ
+-- |Simplifies a system PolyConstraints by first folding coefficients within constraints, then
+-- simplifying LEQ and GEQ with same lhs and rhs (and other similar situations) into EQ, and finally
+-- removing duplicate elements using nub
 simplifySystem :: [PolyConstraint] -> [PolyConstraint]
-simplifySystem = reduceSystem . nub
+simplifySystem = nub . reduceSystem . (map simplifyPolyConstraint)
   where
     reduceSystem :: [PolyConstraint] -> [PolyConstraint]
     reduceSystem [] = []
@@ -116,13 +120,29 @@ simplifySystem = reduceSystem . nub
         if null matchingConstraints
           then EQ lhs rhs : reduceSystem pcs
           else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
+
+simplifyObjectiveFunction :: ObjectiveFunction -> ObjectiveFunction
+simplifyObjectiveFunction (Max varConstMap) = Max (foldSumVarConstMap (sort varConstMap))
+simplifyObjectiveFunction (Min varConstMap) = Min (foldSumVarConstMap (sort varConstMap))
+
+-- |Simplify a PolyConstraint by sorting the VarConstMap and folding/summing coefficients if a variable appears more than once 
+simplifyPolyConstraint :: PolyConstraint -> PolyConstraint
+simplifyPolyConstraint (LEQ varConstMap rhs) = LEQ (foldSumVarConstMap (sort varConstMap)) rhs
+simplifyPolyConstraint (GEQ varConstMap rhs) = GEQ (foldSumVarConstMap (sort varConstMap)) rhs
+simplifyPolyConstraint (EQ varConstMap rhs)  = EQ (foldSumVarConstMap (sort varConstMap)) rhs
+
 -- |Add a sorted list of VarConstMaps, folding where the variables are equal
 foldSumVarConstMap :: [(Integer, Rational)] -> [(Integer, Rational)]
 foldSumVarConstMap []                          = []
 foldSumVarConstMap [(v, c)]                    = [(v, c)]
 foldSumVarConstMap ((v1, c1) : (v2, c2) : vcm) =
   if v1 == v2
-    then foldSumVarConstMap $ (v1, c1 + c2) : vcm
+    then 
+      let newC = c1 + c2
+      in
+        if newC == 0
+          then foldSumVarConstMap vcm
+          else foldSumVarConstMap $ (v1, c1 + c2) : vcm
     else (v1, c1) : foldSumVarConstMap ((v2, c2) : vcm)
 
 displayTableauResults :: Tableau -> [(Integer, Rational)]
@@ -176,11 +196,13 @@ findFeasibleSolution unsimplifiedSystem =
     objectiveVar  = finalMaxVar + 1
 
 optimizeFeasibleSystem :: ObjectiveFunction -> [(Integer, [(Integer, Rational)])] -> [Integer] -> [Integer] -> Integer -> Maybe (Integer, [(Integer, Rational)])
-optimizeFeasibleSystem objFunction phase1Dict slackVars artificialVars objectiveVar =
+optimizeFeasibleSystem unsimplifiedObjFunction phase1Dict slackVars artificialVars objectiveVar =
   if null artificialVars
     then displayResults . dictionaryFormToTableau <$> simplexPivot (createObjectiveDict objFunction objectiveVar : phase1Dict)
     else displayResults . dictionaryFormToTableau <$> simplexPivot (createObjectiveDict phase2ObjFunction objectiveVar : tail phase1Dict)
   where
+    objFunction = simplifyObjectiveFunction unsimplifiedObjFunction
+
     displayResults :: Tableau -> (Integer, [(Integer, Rational)])
     displayResults tableau =
       (
