@@ -1,10 +1,8 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.33.0.
+-- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
---
--- hash: 002f268a831946e723d3e85cd23e440c1cedaf7e1d858fbc33aa2544bb6dbbb6
 
 name:           simplex-haskell
 version:        0.1.0.0

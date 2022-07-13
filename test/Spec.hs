@@ -1,7 +1,5 @@
 import Simplex
-import SoplexTranslator
 import Data.Ratio ((%))
-import System.IO
 
 main :: IO ()
 main = 
@@ -13,12 +11,6 @@ main =
     if and testResults 
       then putStrLn "All tests passed"
       else putStrLn "At least one test failed"
-
-writeLpFiles = 
-  mapM_
-  (\(i, lp) -> writeFile (show i ++ ".lp") lp)
-  $ zip [1..] testsAsLps
-testsAsLps = map translateToLp testsList
 
 testsResults :: [Maybe (Integer, [(Integer, Rational)])]
 testsResults =
@@ -71,6 +63,9 @@ testsResults =
     , Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)])
     , Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)])
     , Just (5,[(5,3 % 1),(1,3 % 1),(2,3 % 1)])
+    , Just (10,[(10,(-370) % 1),(2,26 % 1),(1,5 % 3)])
+    , Just (8,[(8,(-2) % 9),(1,14 % 9),(2,8 % 9)])
+    , Just (7,[(7,(-8) % 1),(2,2 % 1)])
   ]
 
 testsList =
@@ -122,7 +117,10 @@ testsList =
     testLeqGeqBugMin1,
     testLeqGeqBugMax1,
     testLeqGeqBugMin2,
-    testLeqGeqBugMax2
+    testLeqGeqBugMax2,
+    testQuickCheck1,
+    testQuickCheck2,
+    testQuickCheck3
   ]
 
 testLeqGeqBugMin1 =
@@ -168,78 +166,6 @@ testLeqGeqBugMax2 =
       LEQ [(2,1 % 1)] (3 % 1)
     ]
   )
-
--- testManual :: (ObjectiveFunction, [PolyConstraint])
--- testManual
-
-testB :: (ObjectiveFunction, [PolyConstraint])
-testB = 
-  (
-    Min [(1, 1)],
-    [
-      GEQ [(1,1 % 1)] (0 % 1),
-      LEQ [(1,1 % 1)] (2 % 1),
-      GEQ [(2,1 % 1),(1,(-3) % 1)] ((-7) % 1),
-      LEQ [(2,1 % 1),(1,3 % 1)] (5 % 1),
-      GEQ [(2,1 % 1)] (0 % 1)]
-  )
-
-
-testOriginal :: (ObjectiveFunction, [PolyConstraint])
-testOriginal =
-  (
-    Max [(1, 1)],
-    [
-      GEQ [(1, 1)] (-1),
-      LEQ [(1, 1)] 1,
-      LEQ [(1, 3), (2, -1)] ((-(-1)) + (3 * (-1))),
-      GEQ [(1, 3), (2, -1)] ((-(-1)) + (3 * (-1))),
-      LEQ [(2, 1)] 0
-    ]
-  )
-
-testP1 :: (ObjectiveFunction, [PolyConstraint])
-testP1 =
-  (
-    Max [(1, 1)],
-    [
-      GEQ [(1, 1)] (-1),
-      LEQ [(1, 1)] 1,
-      LEQ [(1, 3), (2, 1)] ((-(-1)) + (3 * (-1))),
-      GEQ [(1, 3), (2, 1)] ((-(-1)) + (3 * (-1))),
-      GEQ [(2, -1)] 0
-    ]
-  )
-
-testP2 :: (ObjectiveFunction, [PolyConstraint])
-testP2 =
-  (
-    Max [(1, 1)],
-    [
-      GEQ [(1, 1)] 0,
-      LEQ [(1, 1)] 2,
-      LEQ [(1, 3), (2, 1)] (1 - 3),
-      GEQ [(1, 3), (2, 1)] (1 - 3),
-      GEQ [(2, 1)] 0
-    ]
-  )
-
-
-testBug :: (ObjectiveFunction, [PolyConstraint])
-testBug =
-  ( 
-    -- Function, Y = X^3
-    Max [(1, 1)],  -- Should enclose [-1,0], for resulting enclosure, need to do -1
-    [
-      GEQ [(1,1 % 1)] (0 % 1), -- X >= 0 (transformed from -1)
-      LEQ [(1,1 % 1)] (2 % 1), -- X <= 2 (transformed from 2)
-      LEQ [(2,1 % 1),(1,3 % 1)] (1 % 1), -- Y + 3X <= 1
-      GEQ [(2,1 % 1),(1,3 % 1)] (1 % 1), -- Y + 3X >= 1
-      GEQ [(2,1 % 1)] (0 % 1)            -- Y >= 0
-    ]
-
-  )
-
 
 -- From page 50 of 'Linear and Integer Programming Made Easy'
 -- Solution: obj = 29, 1 = 3, 2 = 4, 
@@ -1109,3 +1035,42 @@ testPolyPaverTwoFs8 =
     f2dx2r = -0.66
     f2yl = 3
     f2yr = 4
+
+-- Test cases produced by old simplex-haskell/SoPlex QuickCheck prop
+
+-- SoPlex gives -400 for the following system but -370 is the optimized solution
+-- simplex-haskell gives -370
+-- SoPlex gives -370 if we simplify the system before sending it to SoPlex
+testQuickCheck1 =
+  (
+    Max [(1, -6), (1, -8), (1, 9), (1, 10), (1, 8), (2, -15), (1, 13), (1, -14), (2, 0)],
+    [
+      Simplex.EQ [(1, 5), (1, 6), (2, -2), (1, 7), (1, 6), (2, 0)] (-12),
+      Simplex.GEQ [(1, 11), (1, 0), (1, -5), (1, -12), (1, -14), (2, 11)] (-7),
+      Simplex.GEQ [(1, -12), (1, -7), (1, -2), (2, -9), (1, 3), (1, 5), (1, -15), (2, 14)] (-8), GEQ [(1, 13), (1, 1), (1, -11), (2, 0)] 5,
+      Simplex.LEQ [(1, -10), (1, -14), (1, 4), (1, -2), (1, -10), (1, -5), (1, -11)] (-1)
+    ]
+  )
+
+-- If we do not call simplifyPolyConstraints before we start the simplex algorithm, the following return a wrong solution
+-- Correct solution is -2/9
+testQuickCheck2 =
+  (
+    Max [(1, -3), (2, 5)],
+    [
+      Simplex.LEQ [(2, -1), (1, -6), (2, 7)] 4,
+      Simplex.LEQ [(1, 1), (2, -4), (3, 3)] (-2),
+      Simplex.LEQ [(2, 6), (1, -4), (2, 1)] 0]
+  )
+
+testQuickCheck3 = 
+  (
+    Min [(2, 0), (2, -4)],
+    [
+      Simplex.GEQ [(1, 5), (2, 4)] (-4),
+      Simplex.LEQ [(1, -1), (2, -1)] 2,
+      Simplex.LEQ [(2, 1)] 2,
+      Simplex.GEQ [(1, -5), (2, -1), (2, 1)] (-5)
+    ]
+  )
+  
