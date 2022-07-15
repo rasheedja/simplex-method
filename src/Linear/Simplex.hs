@@ -10,18 +10,30 @@ import Data.Ratio (numerator, denominator, (%))
 
 trace s a = a
 
+-- |List of 'Integer' variables with their 'Rational' coefficients.
+-- There is an implicit addition between elements in this list.
+-- Users must only provide positive integer variables.
+-- 
+-- Example: [(2, 3), (6, (-1), (2, 1))] is equivalent to 3x2 + (-x6) + x2.  
 type VarConstMap = [(Integer, Rational)]
 
-
+-- |For specifying constraints in a system.
+-- The 'LHS' is a 'VarConstMap', and the 'RHS', is a 'Rational' number.
+-- LEQ [(1, 2), (2, 1)] 3.5 is equivalent to 2x1 + x2 <= 3.5.
+-- Users must only provide positive integer variables.
+-- 
+-- Example: LEQ [(2, 3), (6, (-1), (2, 1))] 12.3 is equivalent to 3x2 + (-x6) + x2 <= 12.3.
 data PolyConstraint =
   LEQ VarConstMap Rational      | 
   GEQ VarConstMap Rational      | 
   EQ VarConstMap Rational       deriving (Show, Eq);
 
-
+-- |Create an objective function.
+-- We can either 'Max'imize or 'Min'imize a 'VarConstMap'.
 data ObjectiveFunction = Max VarConstMap | Min VarConstMap deriving (Show, Eq)
 
-prettyShowVarConstMap :: [(Integer, Rational)] -> String
+-- |Convert a 'VarConstMap' into a human-readable 'String'
+prettyShowVarConstMap :: VarConstMap -> String
 prettyShowVarConstMap [] = ""
 prettyShowVarConstMap [(v, c)]  = prettyShowRational c ++ " * x" ++ show v ++ ""
   where
@@ -34,47 +46,47 @@ prettyShowVarConstMap [(v, c)]  = prettyShowRational c ++ " * x" ++ show v ++ ""
 
 prettyShowVarConstMap ((v, c) : vcs) = prettyShowVarConstMap [(v, c)] ++ " + " ++ prettyShowVarConstMap vcs
 
+-- |Convert a 'PolyConstraint' into a human-readable 'String'
 prettyShowPolyConstraint :: PolyConstraint -> String
 prettyShowPolyConstraint (LEQ vcm r) = prettyShowVarConstMap vcm ++ " <= " ++ show r
 prettyShowPolyConstraint (GEQ vcm r) = prettyShowVarConstMap vcm ++ " >= " ++ show r
 prettyShowPolyConstraint (EQ vcm r)  = prettyShowVarConstMap vcm ++ " == " ++ show r
 
+-- |Convert an 'ObjectiveFunction' into a human-readable 'String'
 prettyShowObjectiveFunction :: ObjectiveFunction -> String
 prettyShowObjectiveFunction (Min vcm) = "min: " ++ prettyShowVarConstMap vcm
 prettyShowObjectiveFunction (Max vcm) = "max: " ++ prettyShowVarConstMap vcm
 
--- |Type representing a tableau of equations.
--- Each item in the list is a row. The first item
--- in the pair specifies which variable is basic
--- in the equation. The VarConstMap in the second
--- pair is a list of variables with their coefficients.
--- These variables are on the left side of the equation.
--- The right hand side of the equation is a Rational
--- constant.
+-- |A 'Tableau' of equations.
+-- Each pair in the list is a row. 
+-- The first item in the pair specifies which 'Integer' variable is basic in the equation.
+-- The second item in the pair is an equation.
+-- The 'VarConstMap' in the second equation is a list of variables with their coefficients.
+-- The RHS of the equation is a 'Rational' constant.
 type Tableau = [(Integer, (VarConstMap, Rational))]
 
--- |Type representing equations. Each item in the list
--- is one equation. The first item of the pair is the
--- basic variable, and is on the left hand side of the
--- equation with a coefficient of one. The right hand
--- side is represented using a list of variables. To
--- represent a rational coefficient on the right hand
--- side, we can use the variable -1.
+-- |Type representing equations. 
+-- Each pair in the list is one equation.
+-- The first item of the pair is the basic variable, and is on the LHS of the equation with a coefficient of one.
+-- The RHS is represented using a `VarConstMap`.
+-- The integer variable -1 is used to represent a 'Rational' on the RHS
 type DictionaryForm = [(Integer, VarConstMap)]
 
+-- |Is the given 'ObjectiveFunction' to be 'Max'imized?
 isMax :: ObjectiveFunction -> Bool
 isMax (Max _) = True
 isMax (Min _) = False
 
+-- |Extract the objective ('VarConstMap') from an 'ObjectiveFunction'
 getObjective :: ObjectiveFunction -> VarConstMap
 getObjective (Max o) = o
 getObjective (Min o) = o
 
--- |Simplifies a system PolyConstraints by first folding coefficients within constraints, then
--- simplifying LEQ and GEQ with same lhs and rhs (and other similar situations) into EQ, and finally
--- removing duplicate elements using nub
+-- |Simplifies a system of 'PolyConstraint's by first calling 'simplifyPolyConstraint', 
+-- then reducing 'LEQ' and 'GEQ' with same LHS and RHS (and other similar situations) into 'EQ',
+-- and finally removing duplicate elements using 'nub'.
 simplifySystem :: [PolyConstraint] -> [PolyConstraint]
-simplifySystem = nub . reduceSystem . (map simplifyPolyConstraint)
+simplifySystem = nub . reduceSystem . map simplifyPolyConstraint
   where
     reduceSystem :: [PolyConstraint] -> [PolyConstraint]
     reduceSystem [] = []
@@ -124,17 +136,18 @@ simplifySystem = nub . reduceSystem . (map simplifyPolyConstraint)
           then EQ lhs rhs : reduceSystem pcs
           else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
 
+-- Simplify an 'ObjectiveFunction' by first 'sort'ing and then calling 'foldSumVarConstMap' on the 'VarConstMap'.
 simplifyObjectiveFunction :: ObjectiveFunction -> ObjectiveFunction
 simplifyObjectiveFunction (Max varConstMap) = Max (foldSumVarConstMap (sort varConstMap))
 simplifyObjectiveFunction (Min varConstMap) = Min (foldSumVarConstMap (sort varConstMap))
 
--- |Simplify a PolyConstraint by sorting the VarConstMap and folding/summing coefficients if a variable appears more than once 
+-- |Simplify a 'PolyConstraint' by first 'sort'ing and then calling 'foldSumVarConstMap' on the 'VarConstMap'. 
 simplifyPolyConstraint :: PolyConstraint -> PolyConstraint
 simplifyPolyConstraint (LEQ varConstMap rhs) = LEQ (foldSumVarConstMap (sort varConstMap)) rhs
 simplifyPolyConstraint (GEQ varConstMap rhs) = GEQ (foldSumVarConstMap (sort varConstMap)) rhs
 simplifyPolyConstraint (EQ varConstMap rhs)  = EQ (foldSumVarConstMap (sort varConstMap)) rhs
 
--- |Add a sorted list of VarConstMaps, folding where the variables are equal
+-- |Add a sorted list of 'VarConstMap's, folding where the variables are equal
 foldSumVarConstMap :: [(Integer, Rational)] -> [(Integer, Rational)]
 foldSumVarConstMap []                          = []
 foldSumVarConstMap [(v, c)]                    = [(v, c)]
@@ -148,13 +161,16 @@ foldSumVarConstMap ((v1, c1) : (v2, c2) : vcm) =
           else foldSumVarConstMap $ (v1, c1 + c2) : vcm
     else (v1, c1) : foldSumVarConstMap ((v2, c2) : vcm)
 
+-- |Get a map of the value of every 'Integer' variable in a 'Tableau'
 displayTableauResults :: Tableau -> [(Integer, Rational)]
 displayTableauResults = map (\(basicVar, (_, rhs)) -> (basicVar, rhs))
 
+-- |Get a map of the value of every 'Integer' variable in a 'DictionaryForm'
 displayDictionaryResults :: DictionaryForm -> [(Integer, Rational)]
 displayDictionaryResults dict = displayTableauResults$ dictionaryFormToTableau dict
 
--- |Find a feasible solution for the given system by performing the first phase of the two-phase simplex method
+-- |Find a feasible solution for the given system of 'PolyConstraint's by performing the first phase of the two-phase simplex method
+-- All 'Integer' variables in the 'PolyConstraint' must be positive.
 findFeasibleSolution :: [PolyConstraint] -> Maybe (DictionaryForm, [Integer], [Integer], Integer)
 findFeasibleSolution unsimplifiedSystem = 
   if null artificialVars -- No artificial vars, we have a feasible system
@@ -198,6 +214,7 @@ findFeasibleSolution unsimplifiedSystem =
     
     objectiveVar  = finalMaxVar + 1
 
+-- |Optimize a feasible system by performing the second phase of the two-phase simplex method.
 optimizeFeasibleSystem :: ObjectiveFunction -> [(Integer, [(Integer, Rational)])] -> [Integer] -> [Integer] -> Integer -> Maybe (Integer, [(Integer, Rational)])
 optimizeFeasibleSystem unsimplifiedObjFunction phase1Dict slackVars artificialVars objectiveVar =
   if null artificialVars
@@ -232,23 +249,27 @@ optimizeFeasibleSystem unsimplifiedObjFunction phase1Dict slackVars artificialVa
         (getObjective objFunction)
 
     phase2ObjFunction = if isMax objFunction then Max phase2Objective else Min phase2Objective
--- |Perform the two phase simplex method with a given objective function to maximize and a system of constraints
--- assumes objFunction and system is not empty. Returns the a pair with the first item being the variable representing
--- the objective function and the second item being the values of all variables appearing in the system (including the
--- objective function).
+
+-- |Perform the two phase simplex method with a given 'ObjectiveFunction' a system of 'PolyConstraint's.
+-- Assumes the 'ObjectiveFunction' and 'PolyConstraint' is not empty. 
+-- Returns a pair with the first item being the 'Integer' variable equal to the 'ObjectiveFunction',
+-- and the second item being a map of the values of all 'Integer' variables appearing in the system, including the 'ObjectiveFunction'.
 twoPhaseSimplex :: ObjectiveFunction -> [PolyConstraint] -> Maybe (Integer, [(Integer, Rational)])
 twoPhaseSimplex objFunction unsimplifiedSystem = 
   case findFeasibleSolution unsimplifiedSystem of
     Just r@(phase1Dict, slackVars, artificialVars, objectiveVar) -> optimizeFeasibleSystem objFunction phase1Dict slackVars artificialVars objectiveVar
     Nothing -> Nothing
 
+-- |Map the given 'Integer' variable to the given 'ObjectiveFunction', for entering into 'DictionaryForm'.
 createObjectiveDict :: ObjectiveFunction -> Integer -> (Integer, VarConstMap)
 createObjectiveDict (Max obj) objectiveVar = (objectiveVar, obj)
 createObjectiveDict (Min obj) objectiveVar = (objectiveVar, map (second negate) obj)
 
--- |System in standard form, a system of only equations. Add slack vars where necessary. This may give you
--- an infeasible system if slack vars are negative when original variables are zero. If a constraint 
--- is already EQ, set the basic var to Nothing. Final system is a list of equalities for the given system. 
+-- |Convert a system of 'PolyConstraint's to standard form; a system of only equations ('EQ').
+-- Add slack vars where necessary.
+-- This may give you an infeasible system if slack vars are negative when original variables are zero.
+-- If a constraint is already EQ, set the basic var to Nothing.
+-- Final system is a list of equalities for the given system. 
 -- To be feasible, all vars must be >= 0.
 systemInStandardForm :: [PolyConstraint] -> Integer -> [Integer] -> ([(Maybe Integer, PolyConstraint)], [Integer])
 systemInStandardForm []  _       sVars = ([], sVars)
@@ -264,12 +285,12 @@ systemInStandardForm (GEQ v r : xs) maxVar  sVars = ((Just newSlackVar, EQ (v ++
     newSlackVar = maxVar + 1
     (newSystem, newSlackVars) = systemInStandardForm xs newSlackVar (newSlackVar : sVars)
 
--- |Add artificial vars to a system.
+-- |Add artificial vars to a system of 'PolyConstraint's.
 -- Artificial vars are added when:
---  Basic var is Nothing (When the original constraint was already an EQ)
---  Slack var is equal to a negative value (this is infeasible, all vars need to be >= 0)
+--  Basic var is Nothing (When the original constraint was already an EQ).
+--  Slack var is equal to a negative value (this is infeasible, all vars need to be >= 0).
 --  Final system will be a feasible artificial system.
--- We keep track of artificial vars so they can be eliminated once phase 1 is complete
+-- We keep track of artificial vars in the second item of the returned pair so they can be eliminated once phase 1 is complete.
 -- If an artificial var would normally be negative, we negate the row so we can keep artificial variables equal to 1
 systemWithArtificialVars :: [(Maybe Integer, PolyConstraint)] -> Integer -> (Tableau, [Integer])
 systemWithArtificialVars [] _                                = ([],[])
@@ -303,8 +324,8 @@ systemWithArtificialVars ((mVar, EQ v r) : pcs) maxVar  =
 
     (newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar) = systemWithArtificialVars pcs maxVar
 
--- |Create an artificial objective using the given list of artificialVars and the dictionary.
--- The artificial objective is the negated sum of all artificial vars.
+-- |Create an artificial objective using the given 'Integer' list of artificialVars and the given 'DictionaryForm'.
+-- The artificial 'ObjectiveFunction' is the negated sum of all artificial vars.
 createArtificialObjective :: DictionaryForm -> [Integer] -> ObjectiveFunction
 createArtificialObjective rows artificialVars = Max negatedSumWithoutArtificialVars
   where
@@ -313,7 +334,7 @@ createArtificialObjective rows artificialVars = Max negatedSumWithoutArtificialV
     negatedSum = foldSumVarConstMap ((sort . concat) negatedRows) 
     negatedSumWithoutArtificialVars = filter (\(v, _) -> v `notElem` artificialVars) negatedSum
 
--- |Perform the simplex pivot algorithm on a system with basic vars and the first row being the objective function
+-- |Perform the simplex pivot algorithm on a system with basic vars, assume that the first row is the 'ObjectiveFunction'.
 simplexPivot :: DictionaryForm -> Maybe DictionaryForm
 simplexPivot dictionary = 
   trace (show dictionary) $
@@ -378,10 +399,9 @@ simplexPivot dictionary =
                     then findLargestCoeff xs mCurrentMax
                     else findLargestCoeff xs (Just (var, coeff))
 
--- |Converts a Tableau to dictionary form.
--- We do this by isolating the basic variable on the left,
--- ending up with all non basic variables and a rational constant
--- on the right. (-1) is used to represent the rational constant.
+-- |Converts a 'Tableau' to 'DictionaryForm'.
+-- We do this by isolating the basic variable on the LHS, ending up with all non basic variables and a 'Rational' constant on the RHS.
+-- (-1) is used to represent the rational constant.
 tableauInDictionaryForm :: Tableau -> DictionaryForm
 tableauInDictionaryForm []                      = []
 tableauInDictionaryForm ((basicVar, (vcm, r)) : rows)  =
@@ -390,10 +410,10 @@ tableauInDictionaryForm ((basicVar, (vcm, r)) : rows)  =
     basicCoeff = if null basicVars then 1 else snd $ head basicVars
     (basicVars, nonBasicVars) = partition (\(v, _) -> v == basicVar) vcm
 
--- |Converts a list of rows in dictionary form to a tableau.
--- This is done by moving all non-basic variables from the right
--- to the left. The rational constant stays on the right.
--- The basic variable will have a coefficient of 1 in the tableau.
+-- |Converts a 'DictionaryForm' to a 'Tableau'.
+-- This is done by moving all non-basic variables from the right to the left.
+-- The rational constant (represented by the 'Integer' variable -1) stays on the right.
+-- The basic variables will have a coefficient of 1 in the 'Tableau'.
 dictionaryFormToTableau :: DictionaryForm -> Tableau
 dictionaryFormToTableau [] = []
 dictionaryFormToTableau ((basicVar, row) : rows) = 
@@ -405,11 +425,9 @@ dictionaryFormToTableau ((basicVar, row) : rows) =
 -- |Pivot a dictionary using the two given variables.
 -- The first variable is the leaving (non-basic) variable.
 -- The second variable is the entering (basic) variable.
--- Will expect the entering variable to be present in the
--- row containing the leaving variable.
--- Will expect each row to have a unique basic variable.
--- Will expect each basic variable to not appear on the RHS
--- of any equation
+-- Expects the entering variable to be present in the row containing the leaving variable.
+-- Expects each row to have a unique basic variable.
+-- Expects each basic variable to not appear on the RHS of any equation.
 pivot :: Integer -> Integer -> DictionaryForm -> DictionaryForm
 pivot leavingVariable enteringVariable rows =
   case lookup enteringVariable basicRow of
@@ -434,6 +452,9 @@ pivot leavingVariable enteringVariable rows =
   where
     (_, basicRow) = head $ filter ((leavingVariable ==) . fst) rows
 
+-- |If this function is given 'Nothing', return 'Nothing'.
+-- Otherwise, we 'lookup' the 'Integer' given in the first item of the pair in the map given in the second item of the pair.
+-- This is typically used to extract the value of the 'ObjectiveFunction' after calling 'twoPhaseSimplex'. 
 extractObjectiveValue :: Maybe (Integer, [(Integer, Rational)]) -> Maybe Rational
 extractObjectiveValue Nothing                  = Nothing
 extractObjectiveValue (Just (objVar, results)) =
