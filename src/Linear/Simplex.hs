@@ -399,7 +399,36 @@ simplexPivot dictionary =
                   if snd currentMax >= coeff 
                     then findLargestCoeff xs mCurrentMax
                     else findLargestCoeff xs (Just (var, coeff))
-
+                    
+    -- |Pivot a dictionary using the two given variables.
+    -- The first variable is the leaving (non-basic) variable.
+    -- The second variable is the entering (basic) variable.
+    -- Expects the entering variable to be present in the row containing the leaving variable.
+    -- Expects each row to have a unique basic variable.
+    -- Expects each basic variable to not appear on the RHS of any equation.
+    pivot :: Integer -> Integer -> DictionaryForm -> DictionaryForm
+    pivot leavingVariable enteringVariable rows =
+      case lookup enteringVariable basicRow of
+        Just nonBasicCoeff ->
+          updatedRows
+          where
+            -- Move entering variable to basis, update other variables in row appropriately
+            pivotEquation = (enteringVariable, map (second (/ negate nonBasicCoeff)) ((leavingVariable, -1) : filter ((enteringVariable /=) . fst) basicRow))
+            -- Substitute pivot equation into other rows
+            updatedRows =
+              map
+              (\(basicVar, vMap) ->
+                if leavingVariable == basicVar
+                  then pivotEquation
+                  else
+                    case lookup enteringVariable vMap of
+                      Just subsCoeff -> (basicVar, (foldSumVarConstMap . sort) (map (second (subsCoeff *)) (snd pivotEquation) ++ filter ((enteringVariable /=) . fst) vMap))
+                      Nothing -> (basicVar, vMap)
+              )
+              rows
+        Nothing -> trace "non basic variable not found in basic row" undefined
+      where
+        (_, basicRow) = head $ filter ((leavingVariable ==) . fst) rows
 -- |Converts a 'Tableau' to 'DictionaryForm'.
 -- We do this by isolating the basic variable on the LHS, ending up with all non basic variables and a 'Rational' constant on the RHS.
 -- (-1) is used to represent the rational constant.
@@ -422,36 +451,6 @@ dictionaryFormToTableau ((basicVar, row) : rows) =
   where
     (rationalConstant, nonBasicVars) = partition (\(v,_) -> v == (-1)) row
     r = if null rationalConstant then 0 else (snd . head) rationalConstant -- If there is no rational constant found in the right side, the rational constant is 0.
-
--- |Pivot a dictionary using the two given variables.
--- The first variable is the leaving (non-basic) variable.
--- The second variable is the entering (basic) variable.
--- Expects the entering variable to be present in the row containing the leaving variable.
--- Expects each row to have a unique basic variable.
--- Expects each basic variable to not appear on the RHS of any equation.
-pivot :: Integer -> Integer -> DictionaryForm -> DictionaryForm
-pivot leavingVariable enteringVariable rows =
-  case lookup enteringVariable basicRow of
-    Just nonBasicCoeff ->
-      updatedRows
-      where
-        -- Move entering variable to basis, update other variables in row appropriately
-        pivotEquation = (enteringVariable, map (second (/ negate nonBasicCoeff)) ((leavingVariable, -1) : filter ((enteringVariable /=) . fst) basicRow))
-        -- Substitute pivot equation into other rows
-        updatedRows =
-          map
-          (\(basicVar, vMap) ->
-            if leavingVariable == basicVar
-              then pivotEquation
-              else
-                case lookup enteringVariable vMap of
-                  Just subsCoeff -> (basicVar, (foldSumVarConstMap . sort) (map (second (subsCoeff *)) (snd pivotEquation) ++ filter ((enteringVariable /=) . fst) vMap))
-                  Nothing -> (basicVar, vMap)
-          )
-          rows
-    Nothing -> trace "non basic variable not found in basic row" undefined
-  where
-    (_, basicRow) = head $ filter ((leavingVariable ==) . fst) rows
 
 -- |If this function is given 'Nothing', return 'Nothing'.
 -- Otherwise, we 'lookup' the 'Integer' given in the first item of the pair in the map given in the second item of the pair.
