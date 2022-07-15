@@ -1,4 +1,6 @@
-import Simplex
+module Main where
+
+import Linear.Simplex as S
 import Data.Ratio ((%))
 
 main :: IO ()
@@ -136,10 +138,10 @@ test1 =
   (
     Max [(1, 3), (2, 5)],
     [
-      Simplex.LEQ [(1, 3), (2, 1)] 15,
-      Simplex.LEQ [(1, 1), (2, 1)] 7,
-      Simplex.LEQ [(2, 1)] 4,
-      Simplex.LEQ [(1, -1), (2, 2)] 6
+      LEQ [(1, 3), (2, 1)] 15,
+      LEQ [(1, 1), (2, 1)] 7,
+      LEQ [(2, 1)] 4,
+      LEQ [(1, -1), (2, 2)] 6
     ]
   )
 
@@ -148,10 +150,10 @@ test2 =
   (
     Min [(1, 3), (2, 5)],
     [
-      Simplex.LEQ [(1, 3), (2, 1)] 15,
-      Simplex.LEQ [(1, 1), (2, 1)] 7,
-      Simplex.LEQ [(2, 1)] 4,
-      Simplex.LEQ [(1, -1), (2, 2)] 6
+      LEQ [(1, 3), (2, 1)] 15,
+      LEQ [(1, 1), (2, 1)] 7,
+      LEQ [(2, 1)] 4,
+      LEQ [(1, -1), (2, 2)] 6
     ]
   )
 
@@ -160,10 +162,10 @@ test3 =
   (
     Max [(1, 3), (2, 5)],
     [
-      Simplex.GEQ [(1, 3), (2, 1)] 15,
-      Simplex.GEQ [(1, 1), (2, 1)] 7,
-      Simplex.GEQ [(2, 1)] 4,
-      Simplex.GEQ [(1, -1), (2, 2)] 6
+      GEQ [(1, 3), (2, 1)] 15,
+      GEQ [(1, 1), (2, 1)] 7,
+      GEQ [(2, 1)] 4,
+      GEQ [(1, -1), (2, 2)] 6
     ]
   )
 
@@ -172,10 +174,10 @@ test4 =
   (
     Min [(1, 3), (2, 5)],
     [
-      Simplex.GEQ [(1, 3), (2, 1)] 15,
-      Simplex.GEQ [(1, 1), (2, 1)] 7,
-      Simplex.GEQ [(2, 1)] 4,
-      Simplex.GEQ [(1, -1), (2, 2)] 6
+      GEQ [(1, 3), (2, 1)] 15,
+      GEQ [(1, 1), (2, 1)] 7,
+      GEQ [(2, 1)] 4,
+      GEQ [(1, -1), (2, 2)] 6
     ]
   )
 
@@ -187,9 +189,9 @@ test5 =
   (
     Max [(1, 1), (2, -1), (3, 1)],
     [
-      Simplex.LEQ [(1, 2), (2, -1), (3, 2)] 4,
-      Simplex.LEQ [(1, 2), (2, -3), (3, 1)] (-5),
-      Simplex.LEQ [(1, -1), (2, 1), (3, -2)] (-1)
+      LEQ [(1, 2), (2, -1), (3, 2)] 4,
+      LEQ [(1, 2), (2, -3), (3, 1)] (-5),
+      LEQ [(1, -1), (2, 1), (3, -2)] (-1)
     ]
   )
 
@@ -198,9 +200,9 @@ test6 =
   (
     Min [(1, 1), (2, -1), (3, 1)],
     [
-      Simplex.LEQ [(1, 2), (2, -1), (3, 2)] 4,
-      Simplex.LEQ [(1, 2), (2, -3), (3, 1)] (-5),
-      Simplex.LEQ [(1, -1), (2, 1), (3, -2)] (-1)
+      LEQ [(1, 2), (2, -1), (3, 2)] 4,
+      LEQ [(1, 2), (2, -3), (3, 1)] (-5),
+      LEQ [(1, -1), (2, 1), (3, -2)] (-1)
     ]
   )
 test7 :: (ObjectiveFunction, [PolyConstraint])
@@ -208,9 +210,9 @@ test7 =
   (
     Max [(1, 1), (2, -1), (3, 1)],
     [
-      Simplex.GEQ [(1, 2), (2, -1), (3, 2)] 4,
-      Simplex.GEQ [(1, 2), (2, -3), (3, 1)] (-5),
-      Simplex.GEQ [(1, -1), (2, 1), (3, -2)] (-1)
+      GEQ [(1, 2), (2, -1), (3, 2)] 4,
+      GEQ [(1, 2), (2, -3), (3, 1)] (-5),
+      GEQ [(1, -1), (2, 1), (3, -2)] (-1)
     ]
   )
 test8 :: (ObjectiveFunction, [PolyConstraint])
@@ -218,9 +220,9 @@ test8 =
   (
     Min [(1, 1), (2, -1), (3, 1)],
     [
-      Simplex.GEQ [(1, 2), (2, -1), (3, 2)] 4,
-      Simplex.GEQ [(1, 2), (2, -3), (3, 1)] (-5),
-      Simplex.GEQ [(1, -1), (2, 1), (3, -2)] (-1)
+      GEQ [(1, 2), (2, -1), (3, 2)] 4,
+      GEQ [(1, 2), (2, -3), (3, 1)] (-5),
+      GEQ [(1, -1), (2, 1), (3, -2)] (-1)
     ]
   )
 
@@ -232,8 +234,8 @@ test9 =
   (
     Min [(1, 1), (2, 1), (3, 2), (4, 1)],
     [
-      Simplex.EQ [(1, 1), (3, 2), (4, -2)] 2,
-      Simplex.EQ [(2, 1), (3, 1), (4, 4)] 6
+      S.EQ [(1, 1), (3, 2), (4, -2)] 2,
+      S.EQ [(2, 1), (3, 1), (4, 4)] 6
     ]
   )
 
@@ -242,8 +244,8 @@ test10 =
   (
     Max [(1, 1), (2, 1), (3, 2), (4, 1)],
     [
-      Simplex.EQ [(1, 1), (3, 2), (4, -2)] 2,
-      Simplex.EQ [(2, 1), (3, 1), (4, 4)] 6
+      S.EQ [(1, 1), (3, 2), (4, -2)] 2,
+      S.EQ [(2, 1), (3, 1), (4, 4)] 6
     ]
   )
 
@@ -255,8 +257,8 @@ test11 =
   (
     Max [(3, -2), (4, 2), (5, 1)],
     [
-      Simplex.EQ [(3, -2), (4, 1), (5, 1)] 4,
-      Simplex.EQ [(3, 3), (4, -1), (5, 2)] 2
+      S.EQ [(3, -2), (4, 1), (5, 1)] 4,
+      S.EQ [(3, 3), (4, -1), (5, 2)] 2
     ]
   )
 
@@ -265,8 +267,8 @@ test12 =
   (
     Min [(3, -2), (4, 2), (5, 1)],
     [
-      Simplex.EQ [(3, -2), (4, 1), (5, 1)] 4,
-      Simplex.EQ [(3, 3), (4, -1), (5, 2)] 2
+      S.EQ [(3, -2), (4, 1), (5, 1)] 4,
+      S.EQ [(3, 3), (4, -1), (5, 2)] 2
     ]
   )
 
@@ -278,8 +280,8 @@ test13 =
   (
     Max [(1, 2), (2, 1)],
     [
-      Simplex.LEQ [(1, 4), (2, 1)] 150,
-      Simplex.LEQ [(1, 2), (2, -3)] (-40)
+      LEQ [(1, 4), (2, 1)] 150,
+      LEQ [(1, 2), (2, -3)] (-40)
     ]
   )
 
@@ -288,8 +290,8 @@ test14 =
   (
     Min [(1, 2), (2, 1)],
     [
-      Simplex.LEQ [(1, 4), (2, 1)] 150,
-      Simplex.LEQ [(1, 2), (2, -3)] (-40)
+      LEQ [(1, 4), (2, 1)] 150,
+      LEQ [(1, 2), (2, -3)] (-40)
     ]
   )
 
@@ -298,8 +300,8 @@ test15 =
   (
     Max [(1, 2), (2, 1)],
     [
-      Simplex.GEQ [(1, 4), (2, 1)] 150,
-      Simplex.GEQ [(1, 2), (2, -3)] (-40)
+      GEQ [(1, 4), (2, 1)] 150,
+      GEQ [(1, 2), (2, -3)] (-40)
     ]
   )
 
@@ -308,8 +310,8 @@ test16 =
   (
     Min [(1, 2), (2, 1)],
     [
-      Simplex.GEQ [(1, 4), (2, 1)] 150,
-      Simplex.GEQ [(1, 2), (2, -3)] (-40)
+      GEQ [(1, 4), (2, 1)] 150,
+      GEQ [(1, 2), (2, -3)] (-40)
     ]
   )
 
@@ -320,9 +322,9 @@ test17 =
   (
     Min [(1, -6), (2, -4), (3, 2)],
     [
-      Simplex.LEQ [(1, 1), (2, 1), (3, 4)] 20,
-      Simplex.LEQ [(2, -5), (3, 5)] 100,
-      Simplex.LEQ [(1, 1), (3, 1), (1, 1)] 400
+      LEQ [(1, 1), (2, 1), (3, 4)] 20,
+      LEQ [(2, -5), (3, 5)] 100,
+      LEQ [(1, 1), (3, 1), (1, 1)] 400
     ]
   )
 
@@ -331,9 +333,9 @@ test18 =
   (
     Max [(1, -6), (2, -4), (3, 2)],
     [
-      Simplex.LEQ [(1, 1), (2, 1), (3, 4)] 20,
-      Simplex.LEQ [(2, -5), (3, 5)] 100,
-      Simplex.LEQ [(1, 1), (3, 1), (1, 1)] 400
+      LEQ [(1, 1), (2, 1), (3, 4)] 20,
+      LEQ [(2, -5), (3, 5)] 100,
+      LEQ [(1, 1), (3, 1), (1, 1)] 400
     ]
   )
 
@@ -342,9 +344,9 @@ test19 =
   (
     Min [(1, -6), (2, -4), (3, 2)],
     [
-      Simplex.GEQ [(1, 1), (2, 1), (3, 4)] 20,
-      Simplex.GEQ [(2, -5), (3, 5)] 100,
-      Simplex.GEQ [(1, 1), (3, 1), (1, 1)] 400
+      GEQ [(1, 1), (2, 1), (3, 4)] 20,
+      GEQ [(2, -5), (3, 5)] 100,
+      GEQ [(1, 1), (3, 1), (1, 1)] 400
     ]
   )
 
@@ -353,9 +355,9 @@ test20 =
   (
     Max [(1, -6), (2, -4), (3, 2)],
     [
-      Simplex.GEQ [(1, 1), (2, 1), (3, 4)] 20,
-      Simplex.GEQ [(2, -5), (3, 5)] 100,
-      Simplex.GEQ [(1, 1), (3, 1), (1, 1)] 400
+      GEQ [(1, 1), (2, 1), (3, 4)] 20,
+      GEQ [(2, -5), (3, 5)] 100,
+      GEQ [(1, 1), (3, 1), (1, 1)] 400
     ]
   )
 
@@ -366,9 +368,9 @@ test21 =
   (
     Max [(1, 3), (2, 5), (3, 2)],
     [
-      Simplex.LEQ [(1, 5), (2, 1), (3, 4)] 50,
-      Simplex.LEQ [(1, 1), (2, -1), (3, 1)] 150,
-      Simplex.LEQ [(1, 2), (2, 1), (3, 2)] 100
+      LEQ [(1, 5), (2, 1), (3, 4)] 50,
+      LEQ [(1, 1), (2, -1), (3, 1)] 150,
+      LEQ [(1, 2), (2, 1), (3, 2)] 100
     ]
   )
 
@@ -377,9 +379,9 @@ test22 =
   (
     Min [(1, 3), (2, 5), (3, 2)],
     [
-      Simplex.LEQ [(1, 5), (2, 1), (3, 4)] 50,
-      Simplex.LEQ [(1, 1), (2, -1), (3, 1)] 150,
-      Simplex.LEQ [(1, 2), (2, 1), (3, 2)] 100
+      LEQ [(1, 5), (2, 1), (3, 4)] 50,
+      LEQ [(1, 1), (2, -1), (3, 1)] 150,
+      LEQ [(1, 2), (2, 1), (3, 2)] 100
     ]
   )
 
@@ -388,9 +390,9 @@ test23 =
   (
     Max [(1, 3), (2, 5), (3, 2)],
     [
-      Simplex.GEQ [(1, 5), (2, 1), (3, 4)] 50,
-      Simplex.GEQ [(1, 1), (2, -1), (3, 1)] 150,
-      Simplex.GEQ [(1, 2), (2, 1), (3, 2)] 100
+      GEQ [(1, 5), (2, 1), (3, 4)] 50,
+      GEQ [(1, 1), (2, -1), (3, 1)] 150,
+      GEQ [(1, 2), (2, 1), (3, 2)] 100
     ]
   )
   
@@ -399,9 +401,9 @@ test24 =
   (
     Min [(1, 3), (2, 5), (3, 2)],
     [
-      Simplex.GEQ [(1, 5), (2, 1), (3, 4)] 50,
-      Simplex.GEQ [(1, 1), (2, -1), (3, 1)] 150,
-      Simplex.GEQ [(1, 2), (2, 1), (3, 2)] 100
+      GEQ [(1, 5), (2, 1), (3, 4)] 50,
+      GEQ [(1, 1), (2, -1), (3, 1)] 150,
+      GEQ [(1, 2), (2, 1), (3, 2)] 100
     ]
   )
 
@@ -410,7 +412,7 @@ test25 =
   (
     Max [(1, 1)],
     [
-      Simplex.LEQ [(1, 1)] 15
+      LEQ [(1, 1)] 15
     ]
   )
 
@@ -419,8 +421,8 @@ test26 =
   (
     Max [(1, 2)],
     [
-      Simplex.LEQ [(1, 2)] 20,
-      Simplex.GEQ [(2, 1)] 10
+      LEQ [(1, 2)] 20,
+      GEQ [(2, 1)] 10
     ]
   )
 
@@ -429,7 +431,7 @@ test27 =
   (
     Min [(1, 1)],
     [
-      Simplex.LEQ [(1, 1)] 15
+      LEQ [(1, 1)] 15
     ]
   )
 
@@ -438,8 +440,8 @@ test28 =
   (
     Min [(1, 2)],
     [
-      Simplex.LEQ [(1, 2)] 20,
-      Simplex.GEQ [(2, 1)] 10
+      LEQ [(1, 2)] 20,
+      GEQ [(2, 1)] 10
     ]
   )
   
@@ -448,8 +450,8 @@ test29 =
     (
     Max [(1, 1)],
     [
-      Simplex.LEQ [(1, 1)] 15,
-      Simplex.GEQ [(1, 1)] 15.01
+      LEQ [(1, 1)] 15,
+      GEQ [(1, 1)] 15.01
     ]
   )
 
@@ -458,9 +460,9 @@ test30 =
     (
     Max [(1, 1)],
     [
-      Simplex.LEQ [(1, 1)] 15,
-      Simplex.GEQ [(1, 1)] 15.01,
-      Simplex.GEQ [(2, 1)] 10
+      LEQ [(1, 1)] 15,
+      GEQ [(1, 1)] 15.01,
+      GEQ [(2, 1)] 10
     ]
   )
 
@@ -470,13 +472,13 @@ testPolyPaver1 =
   (
     Min [(1 , 1)],
     [
-        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        Simplex.GEQ [(1, 1)] x1l,
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0
+        LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        GEQ [(1, 1)] x1l,
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0
     ]
   )
   where
@@ -496,13 +498,13 @@ testPolyPaver2 =
   (
     Max [(1 , 1)],
     [
-        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        Simplex.GEQ [(1, 1)] x1l,
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0
+        LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        GEQ [(1, 1)] x1l,
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0
     ]
   )
   where
@@ -522,13 +524,13 @@ testPolyPaver3 =
   (
     Min [(2 , 1)],
     [
-        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        Simplex.GEQ [(1, 1)] x1l,
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0
+        LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        GEQ [(1, 1)] x1l,
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0
     ]
   )
   where
@@ -548,13 +550,13 @@ testPolyPaver4 =
   (
     Max [(2 , 1)],
     [
-        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        Simplex.GEQ [(1, 1)] x1l,
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0
+        LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        GEQ [(1, 1)] x1l,
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0
     ]
   )
   where
@@ -574,13 +576,13 @@ testPolyPaver5 =
   (
     Max [(1 , 1)],
     [
-        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        Simplex.GEQ [(1, 1)] x1l,
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0
+        LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        GEQ [(1, 1)] x1l,
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0
     ]
   )
   where
@@ -600,13 +602,13 @@ testPolyPaver6 =
   (
     Min [(1 , 1)],
     [
-        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        Simplex.GEQ [(1, 1)] x1l, 
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0
+        LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        GEQ [(1, 1)] x1l, 
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0
     ]
   )
   where
@@ -626,13 +628,13 @@ testPolyPaver7 =
   (
     Max [(2 , 1)],
     [
-        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        Simplex.GEQ [(1, 1)] x1l, 
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0
+        LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        GEQ [(1, 1)] x1l, 
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0
     ]
   )
   where
@@ -652,13 +654,13 @@ testPolyPaver8 =
   (
     Min [(2 , 1)],
     [
-        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        Simplex.GEQ [(1, 1)] x1l, 
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0
+        LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        GEQ [(1, 1)] x1l, 
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0
     ]
   )
   where
@@ -678,13 +680,13 @@ testPolyPaver9 =
   (
     Max [(1 , 1)],
     [
-        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        Simplex.GEQ [(1, 1)] x1l,
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0
+        LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        GEQ [(1, 1)] x1l,
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0
     ]
   )
   where
@@ -704,13 +706,13 @@ testPolyPaver10 =
   (
     Min [(1 , 1)],
     [
-        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        Simplex.GEQ [(1, 1)] x1l,
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0
+        LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        GEQ [(1, 1)] x1l,
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0
     ]
   )
   where
@@ -730,13 +732,13 @@ testPolyPaver11 =
   (
     Max [(2 , 1)],
     [
-        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        Simplex.GEQ [(1, 1)] x1l,
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0
+        LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        GEQ [(1, 1)] x1l,
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0
     ]
   )
   where
@@ -756,13 +758,13 @@ testPolyPaver12 =
   (
     Min [(2 , 1)],
     [
-        Simplex.LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
-        Simplex.GEQ [(1, 1)] x1l,
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0
+        LEQ [(1, dx1l), (2, dx2l), (3, (-1))] ((-yl) + (dx1l * x1l) + (dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, dx1r), (2, dx2r), (3, (-1))] ((-yr) + (dx1r * x1l) + (dx2r * x2l)), -- -5
+        GEQ [(1, 1)] x1l,
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0
     ]
   )
   where
@@ -782,16 +784,16 @@ testPolyPaverTwoFs1 =
   (
     Max [(1 , 1)],
     [
-        Simplex.LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
-        Simplex.LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
-        Simplex.GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
-        Simplex.GEQ [(1, 1)] x1l,
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0,
-        Simplex.LEQ [(4, 1)] 0
+        LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
+        LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
+        GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
+        GEQ [(1, 1)] x1l,
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0,
+        LEQ [(4, 1)] 0
     ]
   )
   where
@@ -817,16 +819,16 @@ testPolyPaverTwoFs2 =
   (
     Min [(1 , 1)],
     [
-        Simplex.LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
-        Simplex.LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
-        Simplex.GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
-        Simplex.GEQ [(1, 1)] x1l,
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0,
-        Simplex.LEQ [(4, 1)] 0
+        LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
+        LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
+        GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
+        GEQ [(1, 1)] x1l,
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0,
+        LEQ [(4, 1)] 0
     ]
   )
   where
@@ -852,16 +854,16 @@ testPolyPaverTwoFs3 =
   (
     Max [(2 , 1)],
     [
-        Simplex.LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
-        Simplex.LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
-        Simplex.GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
-        Simplex.GEQ [(1, 1)] x1l,
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0,
-        Simplex.LEQ [(4, 1)] 0
+        LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
+        LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
+        GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
+        GEQ [(1, 1)] x1l,
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0,
+        LEQ [(4, 1)] 0
     ]
   )
   where
@@ -887,16 +889,16 @@ testPolyPaverTwoFs4 =
   (
     Min [(2 , 1)],
     [
-        Simplex.LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
-        Simplex.LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
-        Simplex.GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
-        Simplex.GEQ [(1, 1)] x1l,
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0,
-        Simplex.LEQ [(4, 1)] 0
+        LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
+        LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
+        GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
+        GEQ [(1, 1)] x1l,
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0,
+        LEQ [(4, 1)] 0
     ]
   )
   where
@@ -922,16 +924,16 @@ testPolyPaverTwoFs5 =
   (
     Max [(1 , 1)],
     [
-        Simplex.LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
-        Simplex.LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
-        Simplex.GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
-        Simplex.GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0,
-        Simplex.LEQ [(4, 1)] 0 
+        LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
+        LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
+        GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
+        GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0,
+        LEQ [(4, 1)] 0 
     ]
   )
   where
@@ -957,16 +959,16 @@ testPolyPaverTwoFs6 =
   (
     Min [(1 , 1)],
     [
-        Simplex.LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
-        Simplex.LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
-        Simplex.GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
-        Simplex.GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0,
-        Simplex.LEQ [(4, 1)] 0 
+        LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
+        LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
+        GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
+        GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0,
+        LEQ [(4, 1)] 0 
     ]
   )
   where
@@ -992,16 +994,16 @@ testPolyPaverTwoFs7 =
   (
     Max [(2 , 1)],
     [
-        Simplex.LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
-        Simplex.LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
-        Simplex.GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
-        Simplex.GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0,
-        Simplex.LEQ [(4, 1)] 0 
+        LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
+        LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
+        GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
+        GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0,
+        LEQ [(4, 1)] 0 
     ]
   )
   where
@@ -1027,16 +1029,16 @@ testPolyPaverTwoFs8 =
   (
     Min [(2 , 1)],
     [
-        Simplex.LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
-        Simplex.GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
-        Simplex.LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
-        Simplex.GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
-        Simplex.GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
-        Simplex.LEQ [(1, 1)] x1r,
-        Simplex.GEQ [(2, 1)] x2l,
-        Simplex.LEQ [(2, 1)] x2r,
-        Simplex.LEQ [(3, 1)] 0,
-        Simplex.LEQ [(4, 1)] 0 
+        LEQ [(1, f1dx1l), (2, f1dx2l), (3, (-1))] ((-f1yl) + (f1dx1l * x1l) + (f1dx2l * x2l)), -- -4, This will need an artificial variable
+        GEQ [(1, f1dx1r), (2, f1dx2r), (3, (-1))] ((-f1yr) + (f1dx1r * x1l) + (f1dx2r * x2l)),        
+        LEQ [(1, f2dx1l), (2, f2dx2l), (4, (-1))] ((-f2yl) + (f2dx1l * x1l) + (f2dx2l * x2l)),
+        GEQ [(1, f2dx1r), (2, f2dx2r), (4, (-1))] ((-f2yr) + (f2dx1r * x1l) + (f2dx2r * x2l)), 
+        GEQ [(1, 1)] x1l, -- don't need variable >= 0, already assumed
+        LEQ [(1, 1)] x1r,
+        GEQ [(2, 1)] x2l,
+        LEQ [(2, 1)] x2r,
+        LEQ [(3, 1)] 0,
+        LEQ [(4, 1)] 0 
     ]
   )
   where
@@ -1066,10 +1068,10 @@ testQuickCheck1 =
   (
     Max [(1, -6), (1, -8), (1, 9), (1, 10), (1, 8), (2, -15), (1, 13), (1, -14), (2, 0)],
     [
-      Simplex.EQ [(1, 5), (1, 6), (2, -2), (1, 7), (1, 6), (2, 0)] (-12),
-      Simplex.GEQ [(1, 11), (1, 0), (1, -5), (1, -12), (1, -14), (2, 11)] (-7),
-      Simplex.GEQ [(1, -12), (1, -7), (1, -2), (2, -9), (1, 3), (1, 5), (1, -15), (2, 14)] (-8), GEQ [(1, 13), (1, 1), (1, -11), (2, 0)] 5,
-      Simplex.LEQ [(1, -10), (1, -14), (1, 4), (1, -2), (1, -10), (1, -5), (1, -11)] (-1)
+      S.EQ [(1, 5), (1, 6), (2, -2), (1, 7), (1, 6), (2, 0)] (-12),
+      GEQ [(1, 11), (1, 0), (1, -5), (1, -12), (1, -14), (2, 11)] (-7),
+      GEQ [(1, -12), (1, -7), (1, -2), (2, -9), (1, 3), (1, 5), (1, -15), (2, 14)] (-8), GEQ [(1, 13), (1, 1), (1, -11), (2, 0)] 5,
+      LEQ [(1, -10), (1, -14), (1, 4), (1, -2), (1, -10), (1, -5), (1, -11)] (-1)
     ]
   )
 
@@ -1079,9 +1081,9 @@ testQuickCheck2 =
   (
     Max [(1, -3), (2, 5)],
     [
-      Simplex.LEQ [(2, -1), (1, -6), (2, 7)] 4,
-      Simplex.LEQ [(1, 1), (2, -4), (3, 3)] (-2),
-      Simplex.LEQ [(2, 6), (1, -4), (2, 1)] 0]
+      LEQ [(2, -1), (1, -6), (2, 7)] 4,
+      LEQ [(1, 1), (2, -4), (3, 3)] (-2),
+      LEQ [(2, 6), (1, -4), (2, 1)] 0]
   )
 
 -- This test will fail if the objective function is not simplified
@@ -1089,9 +1091,9 @@ testQuickCheck3 =
   (
     Min [(2, 0), (2, -4)],
     [
-      Simplex.GEQ [(1, 5), (2, 4)] (-4),
-      Simplex.LEQ [(1, -1), (2, -1)] 2,
-      Simplex.LEQ [(2, 1)] 2,
-      Simplex.GEQ [(1, -5), (2, -1), (2, 1)] (-5)
+      GEQ [(1, 5), (2, 4)] (-4),
+      LEQ [(1, -1), (2, -1)] 2,
+      LEQ [(2, 1)] 2,
+      GEQ [(1, -5), (2, -1), (2, 1)] (-5)
     ]
   )
