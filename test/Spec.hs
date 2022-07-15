@@ -50,6 +50,12 @@ testsList =
     , (test22,                   Just (7,[(7,0 % 1)]))
     , (test23,                   Nothing)
     , (test24,                   Just (10,[(10,300 % 1),(3,150 % 1)]))
+    , (test25,                   Just (3,[(3,15 % 1),(1,15 % 1)]))
+    , (test26,                   Just (6,[(6,20 % 1),(1,10 % 1),(2,10 % 1)]))
+    , (test27,                   Just (3,[(3,0 % 1)]))
+    , (test28,                   Just (6,[(6,0 % 1),(2,10 % 1)]))
+    , (test29,                   Nothing)
+    , (test30,                   Nothing)
     , (testPolyPaver1,           Just (12,[(12,7 % 4),(2,5 % 2),(1,7 % 4),(3,0 % 1)]))
     , (testPolyPaver2,           Just (12,[(12,5 % 2),(2,5 % 3),(1,5 % 2),(3,0 % 1)]))
     , (testPolyPaver3,           Just (12,[(12,5 % 3),(2,5 % 3),(1,5 % 2),(3,0 % 1)]))
@@ -398,7 +404,66 @@ test24 =
       Simplex.GEQ [(1, 2), (2, 1), (3, 2)] 100
     ]
   )
+
+test25 :: (ObjectiveFunction, [PolyConstraint])
+test25 =
+  (
+    Max [(1, 1)],
+    [
+      Simplex.LEQ [(1, 1)] 15
+    ]
+  )
+
+test26 :: (ObjectiveFunction, [PolyConstraint])
+test26 =
+  (
+    Max [(1, 2)],
+    [
+      Simplex.LEQ [(1, 2)] 20,
+      Simplex.GEQ [(2, 1)] 10
+    ]
+  )
+
+test27 :: (ObjectiveFunction, [PolyConstraint])
+test27 =
+  (
+    Min [(1, 1)],
+    [
+      Simplex.LEQ [(1, 1)] 15
+    ]
+  )
+
+test28 :: (ObjectiveFunction, [PolyConstraint])
+test28 =
+  (
+    Min [(1, 2)],
+    [
+      Simplex.LEQ [(1, 2)] 20,
+      Simplex.GEQ [(2, 1)] 10
+    ]
+  )
   
+test29 :: (ObjectiveFunction, [PolyConstraint])
+test29 =
+    (
+    Max [(1, 1)],
+    [
+      Simplex.LEQ [(1, 1)] 15,
+      Simplex.GEQ [(1, 1)] 15.01
+    ]
+  )
+
+test30 :: (ObjectiveFunction, [PolyConstraint])
+test30 =
+    (
+    Max [(1, 1)],
+    [
+      Simplex.LEQ [(1, 1)] 15,
+      Simplex.GEQ [(1, 1)] 15.01,
+      Simplex.GEQ [(2, 1)] 10
+    ]
+  )
+
 -- Tests for systems similar to those from PolyPaver2
 testPolyPaver1 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaver1 =
@@ -1030,4 +1095,3 @@ testQuickCheck3 =
       Simplex.GEQ [(1, -5), (2, -1), (2, 1)] (-5)
     ]
   )
-  
