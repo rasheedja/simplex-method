@@ -28,6 +28,8 @@ trace s a = a
 
 -- |Find a feasible solution for the given system of 'PolyConstraint's by performing the first phase of the two-phase simplex method
 -- All 'Integer' variables in the 'PolyConstraint' must be positive.
+-- If the system is infeasible, return 'Nothing'
+-- Otherwise, return the feasible system in 'DictionaryForm' as well as a list of slack variables, a list artificial variables, and the objective variable.
 findFeasibleSolution :: [PolyConstraint] -> Maybe (DictionaryForm, [Integer], [Integer], Integer)
 findFeasibleSolution unsimplifiedSystem = 
   if null artificialVars -- No artificial vars, we have a feasible system
@@ -142,7 +144,11 @@ findFeasibleSolution unsimplifiedSystem =
 
 
 -- |Optimize a feasible system by performing the second phase of the two-phase simplex method.
-optimizeFeasibleSystem :: ObjectiveFunction -> [(Integer, [(Integer, Rational)])] -> [Integer] -> [Integer] -> Integer -> Maybe (Integer, [(Integer, Rational)])
+-- We first pass an 'ObjectiveFunction'.
+-- Then, the feasible system in 'DictionaryForm' as well as a list of slack variables, a list artificial variables, and the objective variable.
+-- Returns a pair with the first item being the 'Integer' variable equal to the 'ObjectiveFunction'
+-- and the second item being a map of the values of all 'Integer' variables appearing in the system, including the 'ObjectiveFunction'.
+optimizeFeasibleSystem :: ObjectiveFunction -> DictionaryForm -> [Integer] -> [Integer] -> Integer -> Maybe (Integer, [(Integer, Rational)])
 optimizeFeasibleSystem unsimplifiedObjFunction phase1Dict slackVars artificialVars objectiveVar =
   if null artificialVars
     then displayResults . dictionaryFormToTableau <$> simplexPivot (createObjectiveDict objFunction objectiveVar : phase1Dict)
@@ -179,7 +185,7 @@ optimizeFeasibleSystem unsimplifiedObjFunction phase1Dict slackVars artificialVa
 
 -- |Perform the two phase simplex method with a given 'ObjectiveFunction' a system of 'PolyConstraint's.
 -- Assumes the 'ObjectiveFunction' and 'PolyConstraint' is not empty. 
--- Returns a pair with the first item being the 'Integer' variable equal to the 'ObjectiveFunction',
+-- Returns a pair with the first item being the 'Integer' variable equal to the 'ObjectiveFunction'
 -- and the second item being a map of the values of all 'Integer' variables appearing in the system, including the 'ObjectiveFunction'.
 twoPhaseSimplex :: ObjectiveFunction -> [PolyConstraint] -> Maybe (Integer, [(Integer, Rational)])
 twoPhaseSimplex objFunction unsimplifiedSystem = 
