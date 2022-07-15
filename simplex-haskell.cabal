@@ -10,7 +10,7 @@ description:    Please see the README on GitHub at <https://github.com/rasheedja
 homepage:       https://github.com/rasheedja/simplex-haskell#readme
 bug-reports:    https://github.com/rasheedja/simplex-haskell/issues
 author:         Junaid Rasheed
-maintainer:     rasheeja@aston.ac.uk
+maintainer:     jrasheed178@gmail.com
 copyright:      BSD-3
 license:        BSD3
 license-file:   LICENSE
@@ -25,7 +25,10 @@ source-repository head
 
 library
   exposed-modules:
+      Linear.Prettify
       Linear.Simplex
+      Linear.Type
+      Linear.Util
   other-modules:
       Paths_simplex_haskell
   hs-source-dirs:
