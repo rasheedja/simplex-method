@@ -10,8 +10,6 @@ import Data.Ratio (numerator, denominator, (%))
 
 trace s a = a
 
--- data Opt = Max | Min
-
 type VarConstMap = [(Integer, Rational)]
 
 
@@ -21,7 +19,7 @@ data PolyConstraint =
   EQ VarConstMap Rational       deriving (Show, Eq);
 
 
-data ObjectiveFunction = Max VarConstMap | Min VarConstMap deriving Show
+data ObjectiveFunction = Max VarConstMap | Min VarConstMap deriving (Show, Eq)
 
 prettyShowVarConstMap :: [(Integer, Rational)] -> String
 prettyShowVarConstMap [] = ""
@@ -442,3 +440,4 @@ extractObjectiveValue (Just (objVar, results)) =
   case lookup objVar results of
     Nothing -> error "Objective not found in results when extracting objective value"
     r -> r
+    
