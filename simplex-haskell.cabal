@@ -41,6 +41,7 @@ test-suite simplex-haskell-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      TestFunctions
       Paths_simplex_haskell
   hs-source-dirs:
       test
