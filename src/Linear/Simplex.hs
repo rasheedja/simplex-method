@@ -14,7 +14,7 @@ Module implementing the two-phase simplex method.
 'optimizeFeasibleSystem' performs phase two of the two-phase simplex method.
 'twoPhaseSimplex' performs both phases of the two-phase simplex method. 
 -}
-module Linear.Simplex where
+module Linear.Simplex (findFeasibleSolution, optimizeFeasibleSystem, twoPhaseSimplex) where
 import Linear.Type
 import Linear.Util
 import Prelude hiding (EQ);
