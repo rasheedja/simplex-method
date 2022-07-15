@@ -1,5 +1,19 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
+
+{-|
+Module      : Linear.Simplex
+Description : A library implementing the twoPhaseSimplex method.
+Copyright   : (c) Junaid Rasheed, 2020-2022
+License     : BSD-3
+Maintainer  : jrasheed178@gmail.com
+Stability   : experimental
+
+A library implementing the two-phase simplex method.
+'findFeasibleSolution' performs phase one of the two-phase simplex method.
+'optimizeFeasibleSystem' performs phase two of the two-phase simplex method.
+'twoPhaseSimplex' performs both phases of the two-phase simplex method. 
+-}
 module Linear.Simplex where
 import Prelude hiding (EQ);
 import Data.List
@@ -399,7 +413,7 @@ simplexPivot dictionary =
                   if snd currentMax >= coeff 
                     then findLargestCoeff xs mCurrentMax
                     else findLargestCoeff xs (Just (var, coeff))
-                    
+
     -- |Pivot a dictionary using the two given variables.
     -- The first variable is the leaving (non-basic) variable.
     -- The second variable is the entering (basic) variable.
