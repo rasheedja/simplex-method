@@ -4,11 +4,11 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 
-name:           simplex-haskell
-version:        0.1.0
-description:    Please see the README on GitHub at <https://github.com/rasheedja/simplex-haskell#readme>
-homepage:       https://github.com/rasheedja/simplex-haskell#readme
-bug-reports:    https://github.com/rasheedja/simplex-haskell/issues
+name:           linear-simplex-haskell
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/rasheedja/linear-simplex-haskell#readme>
+homepage:       https://github.com/rasheedja/linaer-simplex-haskell#readme
+bug-reports:    https://github.com/rasheedja/linaer-simplex-haskell/issues
 author:         Junaid Rasheed
 maintainer:     jrasheed178@gmail.com
 copyright:      BSD-3
@@ -21,7 +21,7 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/rasheedja/simplex-haskell
+  location: https://github.com/rasheedja/linaer-simplex-haskell
 
 library
   exposed-modules:
@@ -30,7 +30,7 @@ library
       Linear.Type
       Linear.Util
   other-modules:
-      Paths_simplex_haskell
+      Paths_linear_simplex_haskell
   hs-source-dirs:
       src
   build-depends:
@@ -42,10 +42,10 @@ test-suite simplex-haskell-test
   main-is: Spec.hs
   other-modules:
       TestFunctions
-      Paths_simplex_haskell
+      Paths_linear_simplex_haskell
   hs-source-dirs:
       test
   build-depends:
       base >=4.7 && <5
-    , simplex-haskell
+    , linear-simplex-haskell
   default-language: Haskell2010
