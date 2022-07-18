@@ -6,7 +6,9 @@ cabal-version: 1.12
 
 name:           linear-simplex-haskell
 version:        0.1.0.0
+synopsis:       Haskell implementation of the two-phase simplex method
 description:    Please see the README on GitHub at <https://github.com/rasheedja/linear-simplex-haskell#readme>
+category:       Math, Maths, Mathematics, Optimisation, Optimization, Linear Programming
 homepage:       https://github.com/rasheedja/linaer-simplex-haskell#readme
 bug-reports:    https://github.com/rasheedja/linaer-simplex-haskell/issues
 author:         Junaid Rasheed
