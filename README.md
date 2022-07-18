@@ -61,8 +61,8 @@ We first pass an `ObjectiveFunction`.
 Then we give a feasible system in `DictionaryForm`, a list of slack variables, a list of artificial variables, and a variable to represent the objective.
 `optimizeFeasibleSystem` Maximizes/Minimizes the linear equation represented as a `VarConstMap` in the given `ObjectiveFunction`.
 The first item of the returned pair is the `Integer` variable representing the objective.
-Ths second item is a map of `Integer` variables with their optimized values.
-If a variable is not present in this map, the variable is equal to 0.
+The second item is a list of `Integer` variables mapped to their optimized values.
+If a variable is not in this list, the variable is equal to 0.
 
 ### Two-Phase Simplex
 `twoPhaseSimplex` performs both phases of the simplex method.
