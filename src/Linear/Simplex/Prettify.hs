@@ -1,16 +1,16 @@
 {-|
-Module      : Linear.Prettify
-Description : Prettifier for 'Linear.Type' types.
+Module      : Linear.Simplex.Prettify
+Description : Prettifier for "Linear.Simplex.Types" types
 Copyright   : (c) Junaid Rasheed, 2020-2022
 License     : BSD-3
 Maintainer  : jrasheed178@gmail.com
 Stability   : experimental
 
-Converts 'Linear.Type' types into human-readable 'String's 
+Converts "Linear.Simplex.Types" types into human-readable 'String's 
 -}
-module Linear.Prettify where
+module Linear.Simplex.Prettify where
 
-import Linear.Type as T
+import Linear.Simplex.Types as T
 import Data.Ratio
 
 -- |Convert a 'VarConstMap' into a human-readable 'String'

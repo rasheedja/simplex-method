@@ -1,8 +1,8 @@
 module Main where
 
-import Linear.Simplex
-import Linear.Prettify
-import Linear.Util
+import Linear.Simplex.Simplex
+import Linear.Simplex.Prettify
+import Linear.Simplex.Util
 import TestFunctions
 
 main :: IO ()

@@ -7,7 +7,7 @@ cabal-version: 1.12
 name:           simplex-method
 version:        0.1.0.0
 synopsis:       Haskell implementation of the two-phase simplex method in exact rational arithmetic
-description:    Please see the README on GitHub at <https://github.com/rasheedja/linear-simplex-haskell#readme>
+description:    Please see the README on GitHub at <https://github.com/rasheedja/simplex-method#readme>
 category:       Math, Maths, Mathematics, Optimisation, Optimization, Linear Programming
 homepage:       https://github.com/rasheedja/simplex-method#readme
 bug-reports:    https://github.com/rasheedja/simplex-method/issues
@@ -27,10 +27,10 @@ source-repository head
 
 library
   exposed-modules:
-      Linear.Prettify
-      Linear.Simplex
-      Linear.Type
-      Linear.Util
+      Linear.Simplex.Prettify
+      Linear.Simplex.Simplex
+      Linear.Simplex.Types
+      Linear.Simplex.Util
   other-modules:
       Paths_simplex_method
   hs-source-dirs:

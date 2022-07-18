@@ -2,8 +2,8 @@
 {-# LANGUAGE TupleSections #-}
 
 {-|
-Module      : Linear.Simplex
-Description : Implementing the twoPhaseSimplex method.
+Module      : Linear.Simplex.Simplex
+Description : Implements the twoPhaseSimplex method
 Copyright   : (c) Junaid Rasheed, 2020-2022
 License     : BSD-3
 Maintainer  : jrasheed178@gmail.com
@@ -14,9 +14,9 @@ Module implementing the two-phase simplex method.
 'optimizeFeasibleSystem' performs phase two of the two-phase simplex method.
 'twoPhaseSimplex' performs both phases of the two-phase simplex method. 
 -}
-module Linear.Simplex (findFeasibleSolution, optimizeFeasibleSystem, twoPhaseSimplex) where
-import Linear.Type
-import Linear.Util
+module Linear.Simplex.Simplex (findFeasibleSolution, optimizeFeasibleSystem, twoPhaseSimplex) where
+import Linear.Simplex.Types
+import Linear.Simplex.Util
 import Prelude hiding (EQ);
 import Data.List
 import Data.Bifunctor

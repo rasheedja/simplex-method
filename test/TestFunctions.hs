@@ -1,7 +1,7 @@
 module TestFunctions where
 
 import Prelude hiding (EQ)
-import Linear.Type
+import Linear.Simplex.Types
 import Data.Ratio
 
 testsList :: [((ObjectiveFunction, [PolyConstraint]), Maybe (Integer, [(Integer, Rational)]))]

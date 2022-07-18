@@ -1,8 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
 
 {-|
-Module      : Linear.Util
-Description : Helper functions.
+Module      : Linear.Simplex.Util
+Description : Helper functions
 Copyright   : (c) Junaid Rasheed, 2020-2022
 License     : BSD-3
 Maintainer  : jrasheed178@gmail.com
@@ -10,10 +10,10 @@ Stability   : experimental
 
 Helper functions for performing the two-phase simplex method.
 -}
-module Linear.Util where
+module Linear.Simplex.Util where
 
 import Prelude hiding (EQ);
-import Linear.Type
+import Linear.Simplex.Types
 import Data.List
 import Data.Bifunctor
 
@@ -144,7 +144,7 @@ dictionaryFormToTableau ((basicVar, row) : rows) =
 
 -- |If this function is given 'Nothing', return 'Nothing'.
 -- Otherwise, we 'lookup' the 'Integer' given in the first item of the pair in the map given in the second item of the pair.
--- This is typically used to extract the value of the 'ObjectiveFunction' after calling 'Linear.Simplex.twoPhaseSimplex'. 
+-- This is typically used to extract the value of the 'ObjectiveFunction' after calling 'Linear.Simplex.Simplex.twoPhaseSimplex'. 
 extractObjectiveValue :: Maybe (Integer, [(Integer, Rational)]) -> Maybe Rational
 extractObjectiveValue Nothing                  = Nothing
 extractObjectiveValue (Just (objVar, results)) =

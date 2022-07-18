@@ -1,10 +1,10 @@
-# linear-simplex-haskell
+# simplex-method
 
-`linear-simplex-haskell` is a library that implements the two-phase [simplex method](https://en.wikipedia.org/wiki/Simplex_algorithm).
+`simplex-method` is a Haskell library that implements the two-phase [simplex method](https://en.wikipedia.org/wiki/Simplex_algorithm) in exact rational arithmetic.
 
 ## Quick Overview
 
-The `Linear.Simplex` module contain both phases of the simplex method.
+The `Linear.Simplex.Simplex` module contain both phases of the simplex method.
 
 ### Phase One
 
@@ -15,7 +15,7 @@ findFeasibleSolution :: [PolyConstraint] -> Maybe (DictionaryForm, [Integer], [I
 ```
 
 `findFeasibleSolution` takes a list of `PolyConstraint`s.
-The `PolyConstraint` type, as well as other custom types required by this library, are defined in the `Linear.Type` module.
+The `PolyConstraint` type, as well as other custom types required by this library, are defined in the `Linear.Simplex.Types` module.
 `PolyConstraint` is defined as:
 
 ```haskell
@@ -79,7 +79,7 @@ The result of the objective function is present in the return type of both `twoP
 extractObjectiveValue :: Maybe (Integer, [(Integer, Rational)]) -> Maybe Rational
 ```
 
-There are similar functions for `DictionaryForm` as well as other custom types in the module `Linear.Util`.
+There are similar functions for `DictionaryForm` as well as other custom types in the module `Linear.Simplex.Util`.
 
 ## Usage notes
 

@@ -17,7 +17,7 @@ category:            Math, Maths, Mathematics, Optimisation, Optimization, Linea
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/rasheedja/linear-simplex-haskell#readme>
+description:         Please see the README on GitHub at <https://github.com/rasheedja/simplex-method#readme>
 
 dependencies:
 - base >= 4.7 && < 5

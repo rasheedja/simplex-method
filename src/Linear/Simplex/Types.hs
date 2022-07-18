@@ -1,12 +1,12 @@
 {-|
-Module      : Linear.Type
-Description : Types used by this library.
+Module      : Linear.Simplex.Types
+Description : Custom types
 Copyright   : (c) Junaid Rasheed, 2020-2022
 License     : BSD-3
 Maintainer  : jrasheed178@gmail.com
 Stability   : experimental
 -}
-module Linear.Type where
+module Linear.Simplex.Types where
 
 -- |List of 'Integer' variables with their 'Rational' coefficients.
 -- There is an implicit addition between elements in this list.
