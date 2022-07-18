@@ -81,7 +81,7 @@ simplifySystem = nub . reduceSystem . map simplifyPolyConstraint
           then EQ lhs rhs : reduceSystem pcs
           else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
 
--- Simplify an 'ObjectiveFunction' by first 'sort'ing and then calling 'foldSumVarConstMap' on the 'VarConstMap'.
+-- |Simplify an 'ObjectiveFunction' by first 'sort'ing and then calling 'foldSumVarConstMap' on the 'VarConstMap'.
 simplifyObjectiveFunction :: ObjectiveFunction -> ObjectiveFunction
 simplifyObjectiveFunction (Max varConstMap) = Max (foldSumVarConstMap (sort varConstMap))
 simplifyObjectiveFunction (Min varConstMap) = Min (foldSumVarConstMap (sort varConstMap))
@@ -144,7 +144,7 @@ dictionaryFormToTableau ((basicVar, row) : rows) =
 
 -- |If this function is given 'Nothing', return 'Nothing'.
 -- Otherwise, we 'lookup' the 'Integer' given in the first item of the pair in the map given in the second item of the pair.
--- This is typically used to extract the value of the 'ObjectiveFunction' after calling 'twoPhaseSimplex'. 
+-- This is typically used to extract the value of the 'ObjectiveFunction' after calling 'Linear.Simplex.twoPhaseSimplex'. 
 extractObjectiveValue :: Maybe (Integer, [(Integer, Rational)]) -> Maybe Rational
 extractObjectiveValue Nothing                  = Nothing
 extractObjectiveValue (Just (objVar, results)) =

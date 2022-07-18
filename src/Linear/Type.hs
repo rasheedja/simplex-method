@@ -16,7 +16,7 @@ module Linear.Type where
 type VarConstMap = [(Integer, Rational)]
 
 -- |For specifying constraints in a system.
--- The 'LHS' is a 'VarConstMap', and the 'RHS', is a 'Rational' number.
+-- The LHS is a 'VarConstMap', and the RHS, is a 'Rational' number.
 -- LEQ [(1, 2), (2, 1)] 3.5 is equivalent to 2x1 + x2 <= 3.5.
 -- Users must only provide positive integer variables.
 -- 
