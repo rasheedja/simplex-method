@@ -11,7 +11,7 @@ extra-source-files:
 - ChangeLog.md
 
 # Metadata used when publishing your package
-synopsis:            Haskell implementation of the two-phase simplex method in exact rational arithmetic
+synopsis:            Implementation of the two-phase simplex method in exact rational arithmetic
 category:            Math, Maths, Mathematics, Optimisation, Optimization, Linear Programming
 
 # To avoid duplicated efforts in documentation and dealing with the
