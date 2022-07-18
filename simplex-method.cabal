@@ -4,13 +4,13 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 
-name:           linear-simplex-haskell
+name:           simplex-method
 version:        0.1.0.0
-synopsis:       Haskell implementation of the two-phase simplex method
+synopsis:       Haskell implementation of the two-phase simplex method in exact rational arithmetic
 description:    Please see the README on GitHub at <https://github.com/rasheedja/linear-simplex-haskell#readme>
 category:       Math, Maths, Mathematics, Optimisation, Optimization, Linear Programming
-homepage:       https://github.com/rasheedja/linaer-simplex-haskell#readme
-bug-reports:    https://github.com/rasheedja/linaer-simplex-haskell/issues
+homepage:       https://github.com/rasheedja/simplex-method#readme
+bug-reports:    https://github.com/rasheedja/simplex-method/issues
 author:         Junaid Rasheed
 maintainer:     jrasheed178@gmail.com
 copyright:      BSD-3
@@ -23,7 +23,7 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/rasheedja/linaer-simplex-haskell
+  location: https://github.com/rasheedja/simplex-method
 
 library
   exposed-modules:
@@ -32,7 +32,7 @@ library
       Linear.Type
       Linear.Util
   other-modules:
-      Paths_linear_simplex_haskell
+      Paths_simplex_method
   hs-source-dirs:
       src
   build-depends:
@@ -44,10 +44,10 @@ test-suite simplex-haskell-test
   main-is: Spec.hs
   other-modules:
       TestFunctions
-      Paths_linear_simplex_haskell
+      Paths_simplex_method
   hs-source-dirs:
       test
   build-depends:
       base >=4.7 && <5
-    , linear-simplex-haskell
+    , simplex-method
   default-language: Haskell2010
