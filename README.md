@@ -1,6 +1,6 @@
-# simplex-haskell
+# linear-simplex-haskell
 
-`simplex-haskell` is a library that implements the two-phase [simplex method](https://en.wikipedia.org/wiki/Simplex_algorithm).
+`linear-simplex-haskell` is a library that implements the two-phase [simplex method](https://en.wikipedia.org/wiki/Simplex_algorithm).
 
 ## Quick Overview
 
