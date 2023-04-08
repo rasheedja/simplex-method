@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 -- |
 -- Module      : Linear.Simplex.Util
 -- Description : Helper functions

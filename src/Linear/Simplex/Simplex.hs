@@ -1,6 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TupleSections #-}
-
 -- |
 -- Module      : Linear.Simplex.Simplex
 -- Description : Implements the twoPhaseSimplex method
