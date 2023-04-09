@@ -65,14 +65,18 @@ The second item is a list of `Integer` variables mapped to their optimized value
 If a variable is not in this list, the variable is equal to 0.
 
 ### Two-Phase Simplex
+
 `twoPhaseSimplex` performs both phases of the simplex method.
 It has the type:
+
 ```haskell
 twoPhaseSimplex :: ObjectiveFunction -> [PolyConstraint] -> Maybe (Integer, [(Integer, Rational)])
 ```
+
 The return type is the same as that of `optimizeFeasibleSystem`
 
 ### Extracting Results
+
 The result of the objective function is present in the return type of both `twoPhaseSimplex` and `optimizeFeasibleSystem`, but this can be difficult to grok in systems with many variables, so the following function will extract the value of the objective function for you.
 
 ```haskell
@@ -105,6 +109,7 @@ twoPhaseSimplex (fst exampleFunction) (snd exampleFunction)
 ```
 
 The result of the call above is:
+
 ```haskell
 Just
   (7, -- Integer representing objective function
