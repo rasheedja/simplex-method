@@ -1,12 +1,13 @@
--- |
--- Module      : Linear.Simplex.Prettify
--- Description : Prettifier for "Linear.Simplex.Types" types
--- Copyright   : (c) Junaid Rasheed, 2020-2022
--- License     : BSD-3
--- Maintainer  : jrasheed178@gmail.com
--- Stability   : experimental
---
--- Converts "Linear.Simplex.Types" types into human-readable 'String's
+{- |
+Module      : Linear.Simplex.Prettify
+Description : Prettifier for "Linear.Simplex.Types" types
+Copyright   : (c) Junaid Rasheed, 2020-2022
+License     : BSD-3
+Maintainer  : jrasheed178@gmail.com
+Stability   : experimental
+
+Converts "Linear.Simplex.Types" types into human-readable 'String's
+-}
 module Linear.Simplex.Prettify where
 
 import Data.Ratio

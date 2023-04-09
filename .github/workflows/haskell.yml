@@ -11,13 +11,13 @@ permissions:
   contents: read
 
 jobs:
-  ormolu:
+  fourmolu:
 
     runs-on: ubuntu-latest
   
     steps:
       - uses: actions/checkout@v3
-      - uses: haskell-actions/run-ormolu@v11
+      - uses: haskell-actions/run-fourmolu@v7
   build:
     name: GHC ${{ matrix.ghc-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

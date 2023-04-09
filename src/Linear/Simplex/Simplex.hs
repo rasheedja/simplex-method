@@ -1,15 +1,16 @@
--- |
--- Module      : Linear.Simplex.Simplex
--- Description : Implements the twoPhaseSimplex method
--- Copyright   : (c) Junaid Rasheed, 2020-2022
--- License     : BSD-3
--- Maintainer  : jrasheed178@gmail.com
--- Stability   : experimental
---
--- Module implementing the two-phase simplex method.
--- 'findFeasibleSolution' performs phase one of the two-phase simplex method.
--- 'optimizeFeasibleSystem' performs phase two of the two-phase simplex method.
--- 'twoPhaseSimplex' performs both phases of the two-phase simplex method.
+{- |
+Module      : Linear.Simplex.Simplex
+Description : Implements the twoPhaseSimplex method
+Copyright   : (c) Junaid Rasheed, 2020-2022
+License     : BSD-3
+Maintainer  : jrasheed178@gmail.com
+Stability   : experimental
+
+Module implementing the two-phase simplex method.
+'findFeasibleSolution' performs phase one of the two-phase simplex method.
+'optimizeFeasibleSystem' performs phase two of the two-phase simplex method.
+'twoPhaseSimplex' performs both phases of the two-phase simplex method.
+-}
 module Linear.Simplex.Simplex (findFeasibleSolution, optimizeFeasibleSystem, twoPhaseSimplex) where
 
 import Data.Bifunctor
@@ -24,10 +25,11 @@ import Prelude hiding (EQ)
 
 trace s a = a
 
--- | Find a feasible solution for the given system of 'PolyConstraint's by performing the first phase of the two-phase simplex method
---  All 'Integer' variables in the 'PolyConstraint' must be positive.
---  If the system is infeasible, return 'Nothing'
---  Otherwise, return the feasible system in 'DictionaryForm' as well as a list of slack variables, a list artificial variables, and the objective variable.
+{- | Find a feasible solution for the given system of 'PolyConstraint's by performing the first phase of the two-phase simplex method
+ All 'Integer' variables in the 'PolyConstraint' must be positive.
+ If the system is infeasible, return 'Nothing'
+ Otherwise, return the feasible system in 'DictionaryForm' as well as a list of slack variables, a list artificial variables, and the objective variable.
+-}
 findFeasibleSolution :: [PolyConstraint] -> Maybe (DictionaryForm, [Integer], [Integer], Integer)
 findFeasibleSolution unsimplifiedSystem =
   if null artificialVars -- No artificial vars, we have a feasible system
@@ -137,11 +139,12 @@ findFeasibleSolution unsimplifiedSystem =
         negatedSum = foldSumVarConstMap ((sort . concat) negatedRows)
         negatedSumWithoutArtificialVars = filter (\(v, _) -> v `notElem` artificialVars) negatedSum
 
--- | Optimize a feasible system by performing the second phase of the two-phase simplex method.
---  We first pass an 'ObjectiveFunction'.
---  Then, the feasible system in 'DictionaryForm' as well as a list of slack variables, a list artificial variables, and the objective variable.
---  Returns a pair with the first item being the 'Integer' variable equal to the 'ObjectiveFunction'
---  and the second item being a map of the values of all 'Integer' variables appearing in the system, including the 'ObjectiveFunction'.
+{- | Optimize a feasible system by performing the second phase of the two-phase simplex method.
+ We first pass an 'ObjectiveFunction'.
+ Then, the feasible system in 'DictionaryForm' as well as a list of slack variables, a list artificial variables, and the objective variable.
+ Returns a pair with the first item being the 'Integer' variable equal to the 'ObjectiveFunction'
+ and the second item being a map of the values of all 'Integer' variables appearing in the system, including the 'ObjectiveFunction'.
+-}
 optimizeFeasibleSystem :: ObjectiveFunction -> DictionaryForm -> [Integer] -> [Integer] -> Integer -> Maybe (Integer, [(Integer, Rational)])
 optimizeFeasibleSystem unsimplifiedObjFunction phase1Dict slackVars artificialVars objectiveVar =
   if null artificialVars
@@ -152,8 +155,8 @@ optimizeFeasibleSystem unsimplifiedObjFunction phase1Dict slackVars artificialVa
 
     displayResults :: Tableau -> (Integer, [(Integer, Rational)])
     displayResults tableau =
-      ( objectiveVar,
-        case objFunction of
+      ( objectiveVar
+      , case objFunction of
           Max _ ->
             map
               (second snd)
@@ -176,10 +179,11 @@ optimizeFeasibleSystem unsimplifiedObjFunction phase1Dict slackVars artificialVa
 
     phase2ObjFunction = if isMax objFunction then Max phase2Objective else Min phase2Objective
 
--- | Perform the two phase simplex method with a given 'ObjectiveFunction' a system of 'PolyConstraint's.
---  Assumes the 'ObjectiveFunction' and 'PolyConstraint' is not empty.
---  Returns a pair with the first item being the 'Integer' variable equal to the 'ObjectiveFunction'
---  and the second item being a map of the values of all 'Integer' variables appearing in the system, including the 'ObjectiveFunction'.
+{- | Perform the two phase simplex method with a given 'ObjectiveFunction' a system of 'PolyConstraint's.
+ Assumes the 'ObjectiveFunction' and 'PolyConstraint' is not empty.
+ Returns a pair with the first item being the 'Integer' variable equal to the 'ObjectiveFunction'
+ and the second item being a map of the values of all 'Integer' variables appearing in the system, including the 'ObjectiveFunction'.
+-}
 twoPhaseSimplex :: ObjectiveFunction -> [PolyConstraint] -> Maybe (Integer, [(Integer, Rational)])
 twoPhaseSimplex objFunction unsimplifiedSystem =
   case findFeasibleSolution unsimplifiedSystem of

@@ -1,12 +1,13 @@
--- |
--- Module      : Linear.Simplex.Util
--- Description : Helper functions
--- Copyright   : (c) Junaid Rasheed, 2020-2022
--- License     : BSD-3
--- Maintainer  : jrasheed178@gmail.com
--- Stability   : experimental
---
--- Helper functions for performing the two-phase simplex method.
+{- |
+Module      : Linear.Simplex.Util
+Description : Helper functions
+Copyright   : (c) Junaid Rasheed, 2020-2022
+License     : BSD-3
+Maintainer  : jrasheed178@gmail.com
+Stability   : experimental
+
+Helper functions for performing the two-phase simplex method.
+-}
 module Linear.Simplex.Util where
 
 import Data.Bifunctor
@@ -24,9 +25,10 @@ getObjective :: ObjectiveFunction -> VarConstMap
 getObjective (Max o) = o
 getObjective (Min o) = o
 
--- | Simplifies a system of 'PolyConstraint's by first calling 'simplifyPolyConstraint',
---  then reducing 'LEQ' and 'GEQ' with same LHS and RHS (and other similar situations) into 'EQ',
---  and finally removing duplicate elements using 'nub'.
+{- | Simplifies a system of 'PolyConstraint's by first calling 'simplifyPolyConstraint',
+ then reducing 'LEQ' and 'GEQ' with same LHS and RHS (and other similar situations) into 'EQ',
+ and finally removing duplicate elements using 'nub'.
+-}
 simplifySystem :: [PolyConstraint] -> [PolyConstraint]
 simplifySystem = nub . reduceSystem . map simplifyPolyConstraint
   where
@@ -109,9 +111,10 @@ createObjectiveDict :: ObjectiveFunction -> Integer -> (Integer, VarConstMap)
 createObjectiveDict (Max obj) objectiveVar = (objectiveVar, obj)
 createObjectiveDict (Min obj) objectiveVar = (objectiveVar, map (second negate) obj)
 
--- | Converts a 'Tableau' to 'DictionaryForm'.
---  We do this by isolating the basic variable on the LHS, ending up with all non basic variables and a 'Rational' constant on the RHS.
---  (-1) is used to represent the rational constant.
+{- | Converts a 'Tableau' to 'DictionaryForm'.
+ We do this by isolating the basic variable on the LHS, ending up with all non basic variables and a 'Rational' constant on the RHS.
+ (-1) is used to represent the rational constant.
+-}
 tableauInDictionaryForm :: Tableau -> DictionaryForm
 tableauInDictionaryForm [] = []
 tableauInDictionaryForm ((basicVar, (vcm, r)) : rows) =
@@ -120,10 +123,11 @@ tableauInDictionaryForm ((basicVar, (vcm, r)) : rows) =
     basicCoeff = if null basicVars then 1 else snd $ head basicVars
     (basicVars, nonBasicVars) = partition (\(v, _) -> v == basicVar) vcm
 
--- | Converts a 'DictionaryForm' to a 'Tableau'.
---  This is done by moving all non-basic variables from the right to the left.
---  The rational constant (represented by the 'Integer' variable -1) stays on the right.
---  The basic variables will have a coefficient of 1 in the 'Tableau'.
+{- | Converts a 'DictionaryForm' to a 'Tableau'.
+ This is done by moving all non-basic variables from the right to the left.
+ The rational constant (represented by the 'Integer' variable -1) stays on the right.
+ The basic variables will have a coefficient of 1 in the 'Tableau'.
+-}
 dictionaryFormToTableau :: DictionaryForm -> Tableau
 dictionaryFormToTableau [] = []
 dictionaryFormToTableau ((basicVar, row) : rows) =
@@ -132,9 +136,10 @@ dictionaryFormToTableau ((basicVar, row) : rows) =
     (rationalConstant, nonBasicVars) = partition (\(v, _) -> v == (-1)) row
     r = if null rationalConstant then 0 else (snd . head) rationalConstant -- If there is no rational constant found in the right side, the rational constant is 0.
 
--- | If this function is given 'Nothing', return 'Nothing'.
---  Otherwise, we 'lookup' the 'Integer' given in the first item of the pair in the map given in the second item of the pair.
---  This is typically used to extract the value of the 'ObjectiveFunction' after calling 'Linear.Simplex.Simplex.twoPhaseSimplex'.
+{- | If this function is given 'Nothing', return 'Nothing'.
+ Otherwise, we 'lookup' the 'Integer' given in the first item of the pair in the map given in the second item of the pair.
+ This is typically used to extract the value of the 'ObjectiveFunction' after calling 'Linear.Simplex.Simplex.twoPhaseSimplex'.
+-}
 extractObjectiveValue :: Maybe (Integer, [(Integer, Rational)]) -> Maybe Rational
 extractObjectiveValue Nothing = Nothing
 extractObjectiveValue (Just (objVar, results)) =
