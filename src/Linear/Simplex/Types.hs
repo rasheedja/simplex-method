@@ -110,7 +110,8 @@ data ObjectiveFunction = Max {objective :: VarLitMapSum} | Min {objective :: Var
 -- TODO: A better/alternative name
 data Equation = Equation
   { lhs :: VarLitMapSum
-  , rhs :: SimplexNum }
+  , rhs :: SimplexNum
+  }
 
 -- | value for entry. lhs = rhs. TODO: finish
 data TableauRow = TableauRow

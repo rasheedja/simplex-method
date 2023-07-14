@@ -1,9 +1,9 @@
 module TestFunctions where
 
+import Data.Map qualified as M
 import Data.Ratio
 import Linear.Simplex.Types
 import Prelude hiding (EQ)
-import qualified Data.Map as M
 
 testsList :: [((ObjectiveFunction, [PolyConstraint]), Maybe Result)]
 testsList =
@@ -327,41 +327,41 @@ test20 =
 -- Solution: obj = 250, 1 = 0, 2 = 50, 3 = 0
 test21 :: (ObjectiveFunction, [PolyConstraint])
 test21 =
-  ( Max (M.fromList [(1, 3),(2, 5),(3, 2)])
+  ( Max (M.fromList [(1, 3), (2, 5), (3, 2)])
   ,
-    [ LEQ (M.fromList [(1, 5),(2, 1),(3, 4)]) 50
-    , LEQ (M.fromList [(1, 1),(2, -1),(3, 1)]) 150 
-    , LEQ (M.fromList [(1, 2),(2, 1),(3, 2)]) 100
+    [ LEQ (M.fromList [(1, 5), (2, 1), (3, 4)]) 50
+    , LEQ (M.fromList [(1, 1), (2, -1), (3, 1)]) 150
+    , LEQ (M.fromList [(1, 2), (2, 1), (3, 2)]) 100
     ]
   )
 
-test22 :: (ObjectiveFunction, [PolyConstraint])  
+test22 :: (ObjectiveFunction, [PolyConstraint])
 test22 =
-  ( Min (M.fromList [(1, 3),(2, 5),(3, 2)])
+  ( Min (M.fromList [(1, 3), (2, 5), (3, 2)])
   ,
-    [ LEQ (M.fromList [(1, 5),(2, 1),(3, 4)]) 50
-    , LEQ (M.fromList [(1, 1),(2, -1),(3, 1)]) 150
-    , LEQ (M.fromList [(1, 2),(2, 1),(3, 2)]) 100
+    [ LEQ (M.fromList [(1, 5), (2, 1), (3, 4)]) 50
+    , LEQ (M.fromList [(1, 1), (2, -1), (3, 1)]) 150
+    , LEQ (M.fromList [(1, 2), (2, 1), (3, 2)]) 100
     ]
   )
 
 test23 :: (ObjectiveFunction, [PolyConstraint])
 test23 =
-  ( Max (M.fromList [(1, 3),(2, 5),(3, 2)])
+  ( Max (M.fromList [(1, 3), (2, 5), (3, 2)])
   ,
-    [ GEQ (M.fromList [(1, 5),(2, 1),(3, 4)]) 50
-    , GEQ (M.fromList [(1, 1),(2, -1),(3, 1)]) 150
-    , GEQ (M.fromList [(1, 2),(2, 1),(3, 2)]) 100
+    [ GEQ (M.fromList [(1, 5), (2, 1), (3, 4)]) 50
+    , GEQ (M.fromList [(1, 1), (2, -1), (3, 1)]) 150
+    , GEQ (M.fromList [(1, 2), (2, 1), (3, 2)]) 100
     ]
   )
 
 test24 :: (ObjectiveFunction, [PolyConstraint])
 test24 =
-  ( Min (M.fromList [(1, 3),(2, 5),(3, 2)])
+  ( Min (M.fromList [(1, 3), (2, 5), (3, 2)])
   ,
-    [ GEQ (M.fromList [(1, 5),(2, 1),(3, 4)]) 50
-    , GEQ (M.fromList [(1, 1),(2, -1),(3, 1)]) 150
-    , GEQ (M.fromList [(1, 2),(2, 1),(3, 2)]) 100
+    [ GEQ (M.fromList [(1, 5), (2, 1), (3, 4)]) 50
+    , GEQ (M.fromList [(1, 1), (2, -1), (3, 1)]) 150
+    , GEQ (M.fromList [(1, 2), (2, 1), (3, 2)]) 100
     ]
   )
 
@@ -382,7 +382,7 @@ test26 =
     ]
   )
 
-test27 :: (ObjectiveFunction, [PolyConstraint]) 
+test27 :: (ObjectiveFunction, [PolyConstraint])
 test27 =
   ( Min (M.fromList [(1, 1)])
   ,
@@ -423,17 +423,17 @@ testPolyPaver1 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaver1 =
   ( Min (M.fromList [(1, 1)])
   ,
-    [ LEQ (M.fromList [(1, dx1l),(2, dx2l),(3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)  
-    , GEQ (M.fromList [(1, dx1r),(2, dx2r),(3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l) 
+    [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+    , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
-    , LEQ (M.fromList [(1, 1)]) x1r  
+    , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
     , LEQ (M.fromList [(2, 1)]) x2r
     , LEQ (M.fromList [(3, 1)]) 0
     ]
   )
   where
-    x1l = 0.0  
+    x1l = 0.0
     x1r = 2.5
     x2l = 0.0
     x2r = 2.5
@@ -448,18 +448,18 @@ testPolyPaver2 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaver2 =
   ( Max (M.fromList [(1, 1)])
   ,
-    [ LEQ (M.fromList [(1, dx1l),(2, dx2l),(3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
-    , GEQ (M.fromList [(1, dx1r),(2, dx2r),(3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
+    [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+    , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
     , LEQ (M.fromList [(1, 1)]) x1r
-    , GEQ (M.fromList [(2, 1)]) x2l 
+    , GEQ (M.fromList [(2, 1)]) x2l
     , LEQ (M.fromList [(2, 1)]) x2r
     , LEQ (M.fromList [(3, 1)]) 0
     ]
   )
   where
     x1l = 0.0
-    x1r = 2.5  
+    x1r = 2.5
     x2l = 0.0
     x2r = 2.5
     dx1l = -1
@@ -473,8 +473,8 @@ testPolyPaver3 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaver3 =
   ( Min (M.fromList [(2, 1)])
   ,
-    [ LEQ (M.fromList [(1, dx1l),(2, dx2l),(3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
-    , GEQ (M.fromList [(1, dx1r),(2, dx2r),(3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
+    [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+    , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
     , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
@@ -486,7 +486,7 @@ testPolyPaver3 =
     x1l = 0.0
     x1r = 2.5
     x2l = 0.0
-    x2r = 2.5  
+    x2r = 2.5
     dx1l = -1
     dx1r = -0.9
     dx2l = -0.9
@@ -494,25 +494,25 @@ testPolyPaver3 =
     yl = 4
     yr = 5
 
-testPolyPaver4 :: (ObjectiveFunction, [PolyConstraint])  
+testPolyPaver4 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaver4 =
   ( Max (M.fromList [(2, 1)])
   ,
-    [ LEQ (M.fromList [(1, dx1l),(2, dx2l),(3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
-    , GEQ (M.fromList [(1, dx1r),(2, dx2r),(3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
+    [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+    , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
     , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
-    , LEQ (M.fromList [(2, 1)]) x2r 
+    , LEQ (M.fromList [(2, 1)]) x2r
     , LEQ (M.fromList [(3, 1)]) 0
     ]
   )
   where
     x1l = 0.0
     x1r = 2.5
-    x2l = 0.0 
+    x2l = 0.0
     x2r = 2.5
-    dx1l = -1  
+    dx1l = -1
     dx1r = -0.9
     dx2l = -0.9
     dx2r = -0.8
@@ -523,8 +523,8 @@ testPolyPaver5 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaver5 =
   ( Max (M.fromList [(1, 1)])
   ,
-    [ LEQ (M.fromList [(1, dx1l),(2, dx2l),(3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
-    , GEQ (M.fromList [(1, dx1r),(2, dx2r),(3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
+    [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+    , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
     , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
@@ -534,7 +534,7 @@ testPolyPaver5 =
   )
   where
     x1l = 0.0
-    x1r = 1.5  
+    x1r = 1.5
     x2l = 0.0
     x2r = 1.5
     dx1l = -1
@@ -548,34 +548,9 @@ testPolyPaver6 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaver6 =
   ( Min (M.fromList [(1, 1)])
   ,
-    [ LEQ (M.fromList [(1, dx1l),(2, dx2l),(3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
-    , GEQ (M.fromList [(1, dx1r),(2, dx2r),(3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
+    [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+    , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
-    , LEQ (M.fromList [(1, 1)]) x1r
-    , GEQ (M.fromList [(2, 1)]) x2l
-    , LEQ (M.fromList [(2, 1)]) x2r  
-    , LEQ (M.fromList [(3, 1)]) 0
-    ]
-  )
-  where
-    x1l = 0.0
-    x1r = 1.5
-    x2l = 0.0
-    x2r = 1.5
-    dx1l = -1
-    dx1r = -0.9  
-    dx2l = -0.9
-    dx2r = -0.8
-    yl = 4
-    yr = 5
-
-testPolyPaver7 :: (ObjectiveFunction, [PolyConstraint])
-testPolyPaver7 =
-  ( Max (M.fromList [(2, 1)])
-  ,
-    [ LEQ (M.fromList [(1, dx1l),(2, dx2l),(3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
-    , GEQ (M.fromList [(1, dx1r),(2, dx2r),(3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
-    , GEQ (M.fromList [(1, 1)]) x1l  
     , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
     , LEQ (M.fromList [(2, 1)]) x2r
@@ -590,7 +565,32 @@ testPolyPaver7 =
     dx1l = -1
     dx1r = -0.9
     dx2l = -0.9
-    dx2r = -0.8  
+    dx2r = -0.8
+    yl = 4
+    yr = 5
+
+testPolyPaver7 :: (ObjectiveFunction, [PolyConstraint])
+testPolyPaver7 =
+  ( Max (M.fromList [(2, 1)])
+  ,
+    [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+    , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
+    , GEQ (M.fromList [(1, 1)]) x1l
+    , LEQ (M.fromList [(1, 1)]) x1r
+    , GEQ (M.fromList [(2, 1)]) x2l
+    , LEQ (M.fromList [(2, 1)]) x2r
+    , LEQ (M.fromList [(3, 1)]) 0
+    ]
+  )
+  where
+    x1l = 0.0
+    x1r = 1.5
+    x2l = 0.0
+    x2r = 1.5
+    dx1l = -1
+    dx1r = -0.9
+    dx2l = -0.9
+    dx2r = -0.8
     yl = 4
     yr = 5
 
@@ -598,8 +598,8 @@ testPolyPaver8 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaver8 =
   ( Min (M.fromList [(2, 1)])
   ,
-    [ LEQ (M.fromList [(1, dx1l),(2, dx2l),(3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
-    , GEQ (M.fromList [(1, dx1r),(2, dx2r),(3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
+    [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+    , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
     , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
@@ -614,7 +614,7 @@ testPolyPaver8 =
     x2r = 1.5
     dx1l = -1
     dx1r = -0.9
-    dx2l = -0.9 
+    dx2l = -0.9
     dx2r = -0.8
     yl = 4
     yr = 5
@@ -623,8 +623,8 @@ testPolyPaver9 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaver9 =
   ( Max (M.fromList [(1, 1)])
   ,
-    [ LEQ (M.fromList [(1, dx1l),(2, dx2l),(3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
-    , GEQ (M.fromList [(1, dx1r),(2, dx2r),(3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
+    [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+    , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
     , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
@@ -635,31 +635,6 @@ testPolyPaver9 =
   where
     x1l = 0.0
     x1r = 3.5
-    x2l = 0.0 
-    x2r = 3.5
-    dx1l = -1
-    dx1r = -0.9
-    dx2l = -0.9
-    dx2r = -0.8
-    yl = 4  
-    yr = 5
-
-testPolyPaver10 :: (ObjectiveFunction, [PolyConstraint])
-testPolyPaver10 =
-  ( Min (M.fromList [(1, 1)])
-  , 
-    [ LEQ (M.fromList [(1, dx1l),(2, dx2l),(3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
-    , GEQ (M.fromList [(1, dx1r),(2, dx2r),(3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
-    , GEQ (M.fromList [(1, 1)]) x1l
-    , LEQ (M.fromList [(1, 1)]) x1r
-    , GEQ (M.fromList [(2, 1)]) x2l
-    , LEQ (M.fromList [(2, 1)]) x2r
-    , LEQ (M.fromList [(3, 1)]) 0
-    ]
-  )
-  where
-    x1l = 0.0
-    x1r = 3.5  
     x2l = 0.0
     x2r = 3.5
     dx1l = -1
@@ -669,12 +644,37 @@ testPolyPaver10 =
     yl = 4
     yr = 5
 
-testPolyPaver11 :: (ObjectiveFunction, [PolyConstraint])  
+testPolyPaver10 :: (ObjectiveFunction, [PolyConstraint])
+testPolyPaver10 =
+  ( Min (M.fromList [(1, 1)])
+  ,
+    [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+    , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
+    , GEQ (M.fromList [(1, 1)]) x1l
+    , LEQ (M.fromList [(1, 1)]) x1r
+    , GEQ (M.fromList [(2, 1)]) x2l
+    , LEQ (M.fromList [(2, 1)]) x2r
+    , LEQ (M.fromList [(3, 1)]) 0
+    ]
+  )
+  where
+    x1l = 0.0
+    x1r = 3.5
+    x2l = 0.0
+    x2r = 3.5
+    dx1l = -1
+    dx1r = -0.9
+    dx2l = -0.9
+    dx2r = -0.8
+    yl = 4
+    yr = 5
+
+testPolyPaver11 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaver11 =
   ( Max (M.fromList [(2, 1)])
   ,
-    [ LEQ (M.fromList [(1, dx1l),(2, dx2l),(3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
-    , GEQ (M.fromList [(1, dx1r),(2, dx2r),(3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)   
+    [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+    , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
     , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
@@ -698,8 +698,8 @@ testPolyPaver12 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaver12 =
   ( Min (M.fromList [(2, 1)])
   ,
-    [ LEQ (M.fromList [(1, dx1l),(2, dx2l),(3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)  
-    , GEQ (M.fromList [(1, dx1r),(2, dx2r),(3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
+    [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+    , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
     , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
@@ -723,10 +723,10 @@ testPolyPaverTwoFs1 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaverTwoFs1 =
   ( Max (M.fromList [(1, 1)])
   ,
-    [ LEQ (M.fromList [(1, f1dx1l),(2, f1dx2l),(3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
-    , GEQ (M.fromList [(1, f1dx1r),(2, f1dx2r),(3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
-    , LEQ (M.fromList [(1, f2dx1l),(2, f2dx2l),(4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
-    , GEQ (M.fromList [(1, f2dx1r),(2, f2dx2r),(4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
+    [ LEQ (M.fromList [(1, f1dx1l), (2, f1dx2l), (3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
+    , GEQ (M.fromList [(1, f1dx1r), (2, f1dx2r), (3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
+    , LEQ (M.fromList [(1, f2dx1l), (2, f2dx2l), (4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
+    , GEQ (M.fromList [(1, f2dx1r), (2, f2dx2r), (4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
     , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
@@ -757,44 +757,10 @@ testPolyPaverTwoFs2 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaverTwoFs2 =
   ( Min (M.fromList [(1, 1)])
   ,
-    [ LEQ (M.fromList [(1, f1dx1l),(2, f1dx2l),(3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
-    , GEQ (M.fromList [(1, f1dx1r),(2, f1dx2r),(3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
-    , LEQ (M.fromList [(1, f2dx1l),(2, f2dx2l),(4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
-    , GEQ (M.fromList [(1, f2dx1r),(2, f2dx2r),(4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
-    , GEQ (M.fromList [(1, 1)]) x1l
-    , LEQ (M.fromList [(1, 1)]) x1r
-    , GEQ (M.fromList [(2, 1)]) x2l
-    , LEQ (M.fromList [(2, 1)]) x2r
-    , LEQ (M.fromList [(3, 1)]) 0
-    , LEQ (M.fromList [(4, 1)]) 0
-    ]
-  )
-  where
-    x1l = 0.0
-    x1r = 2.5
-    x2l = 0.0
-    x2r = 2.5
-    f1dx1l = -1
-    f1dx1r = -0.9  
-    f1dx2l = -0.9
-    f1dx2r = -0.8
-    f1yl = 4
-    f1yr = 5
-    f2dx1l = -1
-    f2dx1r = -0.9
-    f2dx2l = -0.9
-    f2dx2r = -0.8
-    f2yl = 1
-    f2yr = 2
-
-testPolyPaverTwoFs3 :: (ObjectiveFunction, [PolyConstraint])
-testPolyPaverTwoFs3 =
-  ( Max (M.fromList [(2, 1)])
-  ,
-    [ LEQ (M.fromList [(1, f1dx1l),(2, f1dx2l),(3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
-    , GEQ (M.fromList [(1, f1dx1r),(2, f1dx2r),(3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
-    , LEQ (M.fromList [(1, f2dx1l),(2, f2dx2l),(4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
-    , GEQ (M.fromList [(1, f2dx1r),(2, f2dx2r),(4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
+    [ LEQ (M.fromList [(1, f1dx1l), (2, f1dx2l), (3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
+    , GEQ (M.fromList [(1, f1dx1r), (2, f1dx2r), (3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
+    , LEQ (M.fromList [(1, f2dx1l), (2, f2dx2l), (4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
+    , GEQ (M.fromList [(1, f2dx1r), (2, f2dx2r), (4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
     , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
@@ -812,7 +778,41 @@ testPolyPaverTwoFs3 =
     f1dx1r = -0.9
     f1dx2l = -0.9
     f1dx2r = -0.8
-    f1yl = 4  
+    f1yl = 4
+    f1yr = 5
+    f2dx1l = -1
+    f2dx1r = -0.9
+    f2dx2l = -0.9
+    f2dx2r = -0.8
+    f2yl = 1
+    f2yr = 2
+
+testPolyPaverTwoFs3 :: (ObjectiveFunction, [PolyConstraint])
+testPolyPaverTwoFs3 =
+  ( Max (M.fromList [(2, 1)])
+  ,
+    [ LEQ (M.fromList [(1, f1dx1l), (2, f1dx2l), (3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
+    , GEQ (M.fromList [(1, f1dx1r), (2, f1dx2r), (3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
+    , LEQ (M.fromList [(1, f2dx1l), (2, f2dx2l), (4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
+    , GEQ (M.fromList [(1, f2dx1r), (2, f2dx2r), (4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
+    , GEQ (M.fromList [(1, 1)]) x1l
+    , LEQ (M.fromList [(1, 1)]) x1r
+    , GEQ (M.fromList [(2, 1)]) x2l
+    , LEQ (M.fromList [(2, 1)]) x2r
+    , LEQ (M.fromList [(3, 1)]) 0
+    , LEQ (M.fromList [(4, 1)]) 0
+    ]
+  )
+  where
+    x1l = 0.0
+    x1r = 2.5
+    x2l = 0.0
+    x2r = 2.5
+    f1dx1l = -1
+    f1dx1r = -0.9
+    f1dx2l = -0.9
+    f1dx2r = -0.8
+    f1yl = 4
     f1yr = 5
     f2dx1l = -1
     f2dx1r = -0.9
@@ -825,14 +825,14 @@ testPolyPaverTwoFs4 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaverTwoFs4 =
   ( Min (M.fromList [(2, 1)])
   ,
-    [ LEQ (M.fromList [(1, f1dx1l),(2, f1dx2l),(3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
-    , GEQ (M.fromList [(1, f1dx1r),(2, f1dx2r),(3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
-    , LEQ (M.fromList [(1, f2dx1l),(2, f2dx2l),(4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
-    , GEQ (M.fromList [(1, f2dx1r),(2, f2dx2r),(4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
+    [ LEQ (M.fromList [(1, f1dx1l), (2, f1dx2l), (3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
+    , GEQ (M.fromList [(1, f1dx1r), (2, f1dx2r), (3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
+    , LEQ (M.fromList [(1, f2dx1l), (2, f2dx2l), (4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
+    , GEQ (M.fromList [(1, f2dx1r), (2, f2dx2r), (4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
     , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
-    , LEQ (M.fromList [(2, 1)]) x2r  
+    , LEQ (M.fromList [(2, 1)]) x2r
     , LEQ (M.fromList [(3, 1)]) 0
     , LEQ (M.fromList [(4, 1)]) 0
     ]
@@ -859,11 +859,11 @@ testPolyPaverTwoFs5 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaverTwoFs5 =
   ( Max (M.fromList [(1, 1)])
   ,
-    [ LEQ (M.fromList [(1, f1dx1l),(2, f1dx2l),(3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
-    , GEQ (M.fromList [(1, f1dx1r),(2, f1dx2r),(3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
-    , LEQ (M.fromList [(1, f2dx1l),(2, f2dx2l),(4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
-    , GEQ (M.fromList [(1, f2dx1r),(2, f2dx2r),(4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
-    , GEQ (M.fromList [(1, 1)]) x1l 
+    [ LEQ (M.fromList [(1, f1dx1l), (2, f1dx2l), (3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
+    , GEQ (M.fromList [(1, f1dx1r), (2, f1dx2r), (3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
+    , LEQ (M.fromList [(1, f2dx1l), (2, f2dx2l), (4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
+    , GEQ (M.fromList [(1, f2dx1r), (2, f2dx2r), (4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
+    , GEQ (M.fromList [(1, 1)]) x1l
     , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
     , LEQ (M.fromList [(2, 1)]) x2r
@@ -888,21 +888,21 @@ testPolyPaverTwoFs5 =
     f2dx2r = -0.66
     f2yl = 3
     f2yr = 4
-  
+
 testPolyPaverTwoFs6 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaverTwoFs6 =
   ( Min (M.fromList [(1, 1)])
   ,
-    [ LEQ (M.fromList [(1, f1dx1l),(2, f1dx2l),(3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
-    , GEQ (M.fromList [(1, f1dx1r),(2, f1dx2r),(3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
-    , LEQ (M.fromList [(1, f2dx1l),(2, f2dx2l),(4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
-    , GEQ (M.fromList [(1, f2dx1r),(2, f2dx2r),(4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
+    [ LEQ (M.fromList [(1, f1dx1l), (2, f1dx2l), (3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
+    , GEQ (M.fromList [(1, f1dx1r), (2, f1dx2r), (3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
+    , LEQ (M.fromList [(1, f2dx1l), (2, f2dx2l), (4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
+    , GEQ (M.fromList [(1, f2dx1r), (2, f2dx2r), (4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
     , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
     , LEQ (M.fromList [(2, 1)]) x2r
     , LEQ (M.fromList [(3, 1)]) 0
-    , LEQ (M.fromList [(4, 1)]) 0 
+    , LEQ (M.fromList [(4, 1)]) 0
     ]
   )
   where
@@ -912,7 +912,7 @@ testPolyPaverTwoFs6 =
     x2r = 2.5
     f1dx1l = -1
     f1dx1r = -0.9
-    f1dx2l = -0.9 
+    f1dx2l = -0.9
     f1dx2r = -0.8
     f1yl = 4
     f1yr = 5
@@ -927,44 +927,10 @@ testPolyPaverTwoFs7 :: (ObjectiveFunction, [PolyConstraint])
 testPolyPaverTwoFs7 =
   ( Max (M.fromList [(2, 1)])
   ,
-    [ LEQ (M.fromList [(1, f1dx1l),(2, f1dx2l),(3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
-    , GEQ (M.fromList [(1, f1dx1r),(2, f1dx2r),(3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
-    , LEQ (M.fromList [(1, f2dx1l),(2, f2dx2l),(4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)  
-    , GEQ (M.fromList [(1, f2dx1r),(2, f2dx2r),(4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
-    , GEQ (M.fromList [(1, 1)]) x1l
-    , LEQ (M.fromList [(1, 1)]) x1r
-    , GEQ (M.fromList [(2, 1)]) x2l
-    , LEQ (M.fromList [(2, 1)]) x2r
-    , LEQ (M.fromList [(3, 1)]) 0
-    , LEQ (M.fromList [(4, 1)]) 0
-    ]
-  )
-  where
-    x1l = 0.0
-    x1r = 2.5
-    x2l = 0.0
-    x2r = 2.5
-    f1dx1l = -1
-    f1dx1r = -0.9
-    f1dx2l = -0.9
-    f1dx2r = -0.8  
-    f1yl = 4
-    f1yr = 5
-    f2dx1l = -0.66
-    f2dx1r = -0.66
-    f2dx2l = -0.66
-    f2dx2r = -0.66
-    f2yl = 3
-    f2yr = 4
-
-testPolyPaverTwoFs8 :: (ObjectiveFunction, [PolyConstraint])
-testPolyPaverTwoFs8 =
-  ( Min (M.fromList [(2, 1)])
-  ,
-    [ LEQ (M.fromList [(1, f1dx1l),(2, f1dx2l),(3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
-    , GEQ (M.fromList [(1, f1dx1r),(2, f1dx2r),(3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
-    , LEQ (M.fromList [(1, f2dx1l),(2, f2dx2l),(4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
-    , GEQ (M.fromList [(1, f2dx1r),(2, f2dx2r),(4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
+    [ LEQ (M.fromList [(1, f1dx1l), (2, f1dx2l), (3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
+    , GEQ (M.fromList [(1, f1dx1r), (2, f1dx2r), (3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
+    , LEQ (M.fromList [(1, f2dx1l), (2, f2dx2l), (4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
+    , GEQ (M.fromList [(1, f2dx1r), (2, f2dx2r), (4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
     , GEQ (M.fromList [(1, 1)]) x1l
     , LEQ (M.fromList [(1, 1)]) x1r
     , GEQ (M.fromList [(2, 1)]) x2l
@@ -984,7 +950,41 @@ testPolyPaverTwoFs8 =
     f1dx2r = -0.8
     f1yl = 4
     f1yr = 5
-    f2dx1l = -0.66  
+    f2dx1l = -0.66
+    f2dx1r = -0.66
+    f2dx2l = -0.66
+    f2dx2r = -0.66
+    f2yl = 3
+    f2yr = 4
+
+testPolyPaverTwoFs8 :: (ObjectiveFunction, [PolyConstraint])
+testPolyPaverTwoFs8 =
+  ( Min (M.fromList [(2, 1)])
+  ,
+    [ LEQ (M.fromList [(1, f1dx1l), (2, f1dx2l), (3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
+    , GEQ (M.fromList [(1, f1dx1r), (2, f1dx2r), (3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
+    , LEQ (M.fromList [(1, f2dx1l), (2, f2dx2l), (4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
+    , GEQ (M.fromList [(1, f2dx1r), (2, f2dx2r), (4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
+    , GEQ (M.fromList [(1, 1)]) x1l
+    , LEQ (M.fromList [(1, 1)]) x1r
+    , GEQ (M.fromList [(2, 1)]) x2l
+    , LEQ (M.fromList [(2, 1)]) x2r
+    , LEQ (M.fromList [(3, 1)]) 0
+    , LEQ (M.fromList [(4, 1)]) 0
+    ]
+  )
+  where
+    x1l = 0.0
+    x1r = 2.5
+    x2l = 0.0
+    x2r = 2.5
+    f1dx1l = -1
+    f1dx1r = -0.9
+    f1dx2l = -0.9
+    f1dx2r = -0.8
+    f1yl = 4
+    f1yr = 5
+    f2dx1l = -0.66
     f2dx1r = -0.66
     f2dx2l = -0.66
     f2dx2r = -0.66
@@ -1021,7 +1021,7 @@ testQuickCheck2 =
   )
 
 -- This test will fail if the objective function is not simplified
-testQuickCheck3 :: (ObjectiveFunction, [PolyConstraint])  
+testQuickCheck3 :: (ObjectiveFunction, [PolyConstraint])
 testQuickCheck3 =
   ( Min (M.fromList [(2, 0), (2, -4)])
   ,

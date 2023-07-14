@@ -251,9 +251,9 @@ combineVarLitMapSums =
 foldDictValue :: [DictValue] -> DictValue
 foldDictValue [] = error "Empty list of DictValues given to foldDictValue"
 foldDictValue [x] = x
-foldDictValue (DictValue { varMapSum = vm1, constant = c1 } : DictValue { varMapSum = vm2, constant = c2 } : dvs) =
+foldDictValue (DictValue {varMapSum = vm1, constant = c1} : DictValue {varMapSum = vm2, constant = c2} : dvs) =
   let combinedDictValue =
-        DictValue 
+        DictValue
           { varMapSum = foldVarLitMap [vm1, vm2]
           , constant = c1 + c2
           }
@@ -268,18 +268,18 @@ foldVarLitMap (vm1 : vm2 : vms) =
   let combinedVars = nub $ Map.keys vm1 <> Map.keys vm2
 
       combinedVarMap =
-        Map.fromList $ map
-        (\var ->
-          let mVm1VarVal = Map.lookup var vm1  
-              mVm2VarVal = Map.lookup var vm2
-          in 
-            (var, 
-            case (mVm1VarVal, mVm2VarVal) of
-              (Just vm1VarVal, Just vm2VarVal) -> vm1VarVal + vm2VarVal
-              (Just vm1VarVal, Nothing) -> vm1VarVal
-              (Nothing, Just vm2VarVal) -> vm2VarVal
-              (Nothing, Nothing) -> error "Reached unreachable branch in foldDictValue"
-            ) 
-        )
-        combinedVars
+        Map.fromList $
+          map
+            ( \var ->
+                let mVm1VarVal = Map.lookup var vm1
+                    mVm2VarVal = Map.lookup var vm2
+                in  ( var
+                    , case (mVm1VarVal, mVm2VarVal) of
+                        (Just vm1VarVal, Just vm2VarVal) -> vm1VarVal + vm2VarVal
+                        (Just vm1VarVal, Nothing) -> vm1VarVal
+                        (Nothing, Just vm2VarVal) -> vm2VarVal
+                        (Nothing, Nothing) -> error "Reached unreachable branch in foldDictValue"
+                    )
+            )
+            combinedVars
   in  foldVarLitMap $ combinedVarMap : vms
