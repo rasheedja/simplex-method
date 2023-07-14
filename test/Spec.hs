@@ -11,7 +11,7 @@ main = runTests testsList
 runTests [] = putStrLn "All tests passed"
 runTests (((testObjective, testConstraints), expectedResult) : tests) =
   let testResult = twoPhaseSimplex testObjective testConstraints
-   in if testResult == expectedResult
+  in  if testResult == expectedResult
         then runTests tests
         else do
           putStrLn "The following test failed: \n"

@@ -27,9 +27,17 @@ source-repository head
 
 common common-extensions
   default-extensions:
+    DataKinds
+    DeriveFunctor
+    DeriveGeneric
+    DuplicateRecordFields
+    FlexibleContexts
     LambdaCase
+    OverloadedLabels
+    RecordWildCards
     TupleSections
-
+    TypeApplications
+    ImportQualifiedPost
 library
   import: common-extensions
   exposed-modules:
@@ -40,7 +48,10 @@ library
   hs-source-dirs:
       src
   build-depends:
-      base >=4.7 && <5
+      base
+    , containers
+    , generic-lens  
+    , lens
   default-language: Haskell2010
 
 test-suite simplex-haskell-test
@@ -54,4 +65,5 @@ test-suite simplex-haskell-test
   build-depends:
       base >=4.7 && <5
     , simplex-method
+    , containers
   default-language: Haskell2010
