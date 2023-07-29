@@ -1,6 +1,6 @@
-cabal-version: 3.6
+cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.35.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -14,7 +14,7 @@ bug-reports:    https://github.com/rasheedja/simplex-method/issues
 author:         Junaid Rasheed
 maintainer:     jrasheed178@gmail.com
 copyright:      BSD-3
-license:        BSD-3-Clause
+license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
 extra-source-files:
@@ -25,45 +25,39 @@ source-repository head
   type: git
   location: https://github.com/rasheedja/simplex-method
 
-common common-extensions
-  default-extensions:
-    DataKinds
-    DeriveFunctor
-    DeriveGeneric
-    DuplicateRecordFields
-    FlexibleContexts
-    LambdaCase
-    OverloadedLabels
-    RecordWildCards
-    TupleSections
-    TypeApplications
-    ImportQualifiedPost
 library
-  import: common-extensions
   exposed-modules:
       Linear.Simplex.Prettify
       Linear.Simplex.Simplex
       Linear.Simplex.Types
       Linear.Simplex.Util
+  other-modules:
+      Paths_simplex_method
   hs-source-dirs:
       src
+  default-extensions:
+      DataKinds DeriveFunctor DeriveGeneric DuplicateRecordFields FlexibleContexts LambdaCase OverloadedLabels RecordWildCards TupleSections TypeApplications ImportQualifiedPost
   build-depends:
-      base
-    , containers
-    , generic-lens  
-    , lens
+      base >=4.14 && <5
+    , containers >=0.6.5.1 && <0.7
+    , generic-lens >=2.2.0 && <2.3
+    , lens >=5.1.0 && <5.2
   default-language: Haskell2010
 
 test-suite simplex-haskell-test
-  import: common-extensions
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
       TestFunctions
+      Paths_simplex_method
   hs-source-dirs:
       test
+  default-extensions:
+      DataKinds DeriveFunctor DeriveGeneric DuplicateRecordFields FlexibleContexts LambdaCase OverloadedLabels RecordWildCards TupleSections TypeApplications ImportQualifiedPost
   build-depends:
-      base >=4.7 && <5
+      base >=4.14 && <5
+    , containers >=0.6.5.1 && <0.7
+    , generic-lens >=2.2.0 && <2.3
+    , lens >=5.1.0 && <5.2
     , simplex-method
-    , containers
   default-language: Haskell2010

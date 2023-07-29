@@ -1,0 +1,49 @@
+name:                simplex-method
+version:             0.1.0.0
+github:              "rasheedja/simplex-method"
+license:             BSD3
+author:              "Junaid Rasheed"
+maintainer:          "jrasheed178@gmail.com"
+copyright:           "BSD-3"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+synopsis:            Implementation of the two-phase simplex method in exact rational arithmetic
+category:            Math, Maths, Mathematics, Optimisation, Optimization, Linear Programming
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/rasheedja/simplex-method#readme>
+
+dependencies:
+- base >= 4.14 && < 5
+- containers >= 0.6.5.1 && < 0.7
+- generic-lens >= 2.2.0 && < 2.3 
+- lens >= 5.1.0 && < 5.2
+
+default-extensions:
+  DataKinds
+  DeriveFunctor
+  DeriveGeneric
+  DuplicateRecordFields
+  FlexibleContexts
+  LambdaCase
+  OverloadedLabels
+  RecordWildCards
+  TupleSections
+  TypeApplications
+  ImportQualifiedPost
+
+library:
+  source-dirs: src
+
+tests:
+  simplex-haskell-test:
+    main:                Spec.hs
+    source-dirs:         test
+    dependencies:
+    - simplex-method
