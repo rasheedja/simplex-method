@@ -50,7 +50,7 @@ data FeasibleSystem = FeasibleSystem
   , slackVars :: [Var]
   , artificialVars :: [Var]
   , objectiveVar :: Var
-  }
+  } deriving (Show, Read, Eq, Generic)
 
 data Result = Result
   { objectiveVar :: Var
