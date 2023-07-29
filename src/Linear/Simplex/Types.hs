@@ -55,6 +55,10 @@ data FeasibleSystem = FeasibleSystem
 data Result = Result
   { objectiveVar :: Var
   , varValMap :: VarLitMap
+  -- TODO:
+  -- Maybe VarLitMap
+  -- , feasible :: Bool
+  -- , optimisable :: Bool
   }
   deriving (Show, Read, Eq, Generic)
 
@@ -180,4 +184,6 @@ type Dict = M.Map Var DictValue
 data PivotObjective = PivotObjective
   { variable :: Var
   , function :: VarLitMapSum
+  , constant :: SimplexNum
   }
+  deriving (Show, Read, Eq, Generic)

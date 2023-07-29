@@ -37,6 +37,10 @@ default-extensions:
   TupleSections
   TypeApplications
   ImportQualifiedPost
+  OverloadedRecordDot
+  DuplicateRecordFields
+  NamedFieldPuns
+  DisambiguateRecordFields
 
 library:
   source-dirs: src

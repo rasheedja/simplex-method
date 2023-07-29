@@ -283,3 +283,6 @@ foldVarLitMap (vm1 : vm2 : vms) =
             )
             combinedVars
   in  foldVarLitMap $ combinedVarMap : vms
+
+insertPivotObjectiveToDict :: PivotObjective -> Dict -> Dict
+insertPivotObjectiveToDict objective dict = Map.insert (objective.variable) (DictValue {varMapSum = objective.function, constant = objective.constant}) dict
