@@ -92,4 +92,4 @@ jobs:
         run: cabal check
 
       - name: Build documentation
-        run: cabal haddock all
+        run: stack haddock
