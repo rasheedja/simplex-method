@@ -41,35 +41,36 @@ jobs:
         id: setup
         with:
           ghc-version: ${{ matrix.ghc-version }}
-          # Defaults, added for clarity:
-          cabal-version: 'latest'
-          cabal-update: true
+          enable-stack: true
 
-      - name: Installed minor versions of GHC and Cabal
+      - name: Installed minor versions of GHC, Cabal, and Stack
         shell: bash
         run: |
           GHC_VERSION=$(ghc --numeric-version)
           CABAL_VERSION=$(cabal --numeric-version)
+          STACK_VERSION=$(stack --numeric-version)
           echo "GHC_VERSION=${GHC_VERSION}"     >> "${GITHUB_ENV}"
           echo "CABAL_VERSION=${CABAL_VERSION}" >> "${GITHUB_ENV}"
+          echo "STACK_VERSION=${STACK_VERSION}" >> "${GITHUB_ENV}"
 
       - name: Configure the build
         run: |
-          cabal configure --enable-tests --enable-benchmarks --disable-documentation
-          cabal build --dry-run
+          # cabal configure --enable-tests --enable-benchmarks --disable-documentation
+          # cabal build --dry-run
+          stack build --test --bench --no-haddock --dry-run
         # The last step generates dist-newstyle/cache/plan.json for the cache key.
 
       - name: Restore cached dependencies
         uses: actions/cache/restore@v3
         id: cache
         with:
-          path: ${{ steps.setup.outputs.cabal-store }}
-          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-cabal-${{ env.CABAL_VERSION }}-plan-${{ hashFiles('**/plan.json') }}
+          path: .stack-work
+          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-plan-${{ hashFiles('**/plan.json') }}
           restore-keys: |
-            ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-cabal-${{ env.CABAL_VERSION }}-
+            ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-
 
       - name: Install dependencies
-        run: cabal build all --only-dependencies
+        run: stack build --only-dependencies
 
       # Cache dependencies already here, so that we do not have to rebuild them should the subsequent steps fail.
       - name: Save cached dependencies
@@ -78,14 +79,14 @@ jobs:
         if: ${{ !steps.cache.outputs.cache-hit
           || steps.cache.outputs.cache-primary-key != steps.cache.outputs.cache-matched-key }}
         with:
-          path: ${{ steps.setup.outputs.cabal-store }}
+          path: .stack-work
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
       - name: Build
-        run: cabal build all
+        run: stack build
 
       - name: Run tests
-        run: cabal test all
+        run: stack test
 
       - name: Check cabal file
         run: cabal check
