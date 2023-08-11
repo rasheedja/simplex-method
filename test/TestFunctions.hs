@@ -1,6 +1,6 @@
 module TestFunctions where
 
-import Data.Map qualified as M
+import qualified Data.Map as M
 import Data.Ratio
 import Linear.Simplex.Types
 import Prelude hiding (EQ)

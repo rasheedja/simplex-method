@@ -10,7 +10,7 @@ module Linear.Simplex.Types where
 import Control.Lens
 import Data.Generics.Labels ()
 import Data.List (sort)
-import Data.Map qualified as M
+import qualified Data.Map as M
 import GHC.Generics (Generic)
 
 type Var = Int
@@ -50,7 +50,8 @@ data FeasibleSystem = FeasibleSystem
   , slackVars :: [Var]
   , artificialVars :: [Var]
   , objectiveVar :: Var
-  } deriving (Show, Read, Eq, Generic)
+  }
+  deriving (Show, Read, Eq, Generic)
 
 data Result = Result
   { objectiveVar :: Var

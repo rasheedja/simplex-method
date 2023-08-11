@@ -14,8 +14,8 @@ import Data.Bifunctor
 import Data.Generics.Labels ()
 import Data.Generics.Product (field)
 import Data.List
-import Data.Map qualified as Map
-import Data.Map.Merge.Lazy qualified as MapMerge
+import qualified Data.Map as Map
+import qualified Data.Map.Merge.Lazy as MapMerge
 import Data.Maybe (fromMaybe)
 import Linear.Simplex.Types
 import Prelude hiding (EQ)

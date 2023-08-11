@@ -36,7 +36,6 @@ default-extensions:
   RecordWildCards
   TupleSections
   TypeApplications
-  ImportQualifiedPost
   OverloadedRecordDot
   DuplicateRecordFields
   NamedFieldPuns
