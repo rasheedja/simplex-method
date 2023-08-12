@@ -14,13 +14,15 @@ runTests (((testObjective, testConstraints), expectedResult) : tests) =
   in  if testResult == expectedResult
         then runTests tests
         else do
-          let msg = "\nThe following test failed: "
+          let msg =
+                "\nThe following test failed: "
                   <> ("\nObjective Function (Non-prettified): " ++ show testObjective)
                   <> ("\nConstraints        (Non-prettified): " ++ show testConstraints)
                   <> "\n===================================="
                   <> ("\nObjective Function (Prettified): " ++ prettyShowObjectiveFunction testObjective)
                   <> "\nConstraints        (Prettified): "
-                  <> "\n" <> concatMap (\c -> "\t" ++ prettyShowPolyConstraint c ++ "\n") testConstraints
+                  <> "\n"
+                  <> concatMap (\c -> "\t" ++ prettyShowPolyConstraint c ++ "\n") testConstraints
                   <> "\n===================================="
                   <> ("\nExpected Solution      (Full): " ++ show expectedResult)
                   <> ("\nActual Solution        (Full): " ++ show testResult)
