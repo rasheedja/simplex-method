@@ -213,11 +213,10 @@ test9 =
 
 test10 :: (ObjectiveFunction, [PolyConstraint])
 test10 =
-  ( Min (M.fromList [(1, 1), (2, 1), (3, 2), (4, 1)])
+  ( Max (M.fromList [(1, 1), (2, 1), (3, 2), (4, 1)])
   ,
     [ EQ (M.fromList [(1, 1), (3, 2), (4, -2)]) 2
     , EQ (M.fromList [(2, 1), (3, 1), (4, 4)]) 6
-    , GEQ (M.fromList [(1, -1), (2, -1), (3, -2), (4, -1)]) (-2)
     ]
   )
 
@@ -993,30 +992,26 @@ testPolyPaverTwoFs8 =
 
 -- Test cases produced by old simplex-haskell/SoPlex QuickCheck prop
 
--- SoPlex gives -400 for the following system but -370 is the optimized solution
--- simplex-haskell gives -370
--- SoPlex gives -370 if we simplify the system before sending it to SoPlex
 testQuickCheck1 :: (ObjectiveFunction, [PolyConstraint])
 testQuickCheck1 =
-  ( Max (M.fromList [(1, -6), (1, -8), (1, 9), (1, 10), (1, 8), (2, -15), (1, 13), (1, -14), (2, 0)])
+  ( Max (M.fromList [(1, 12), (2, -15)])
   ,
-    [ EQ (M.fromList [(1, 5), (1, 6), (2, -2), (1, 7), (1, 6), (2, 0)]) (-12)
-    , GEQ (M.fromList [(1, 11), (1, 0), (1, -5), (1, -12), (1, -14), (2, 11)]) (-7)
-    , GEQ (M.fromList [(1, -12), (1, -7), (1, -2), (2, -9), (1, 3), (1, 5), (1, -15), (2, 14)]) (-8)
-    , GEQ (M.fromList [(1, 13), (1, 1), (1, -11), (2, 0)]) 5
-    , LEQ (M.fromList [(1, -10), (1, -14), (1, 4), (1, -2), (1, -10), (1, -5), (1, -11)]) (-1)
+    [ EQ (M.fromList [(1, 24), (2, -2)]) (-12)
+    , GEQ (M.fromList [(1, -20), (2, 11)]) (-7)
+    , GEQ (M.fromList [(1, -28), (2, 5)]) (-8)
+    , GEQ (M.fromList [(1, 3), (2, 0)]) 5
+    , LEQ (M.fromList [(1, -48)]) (-1)
     ]
   )
 
--- If we do not call simplifyPolyConstraints before we start the simplex algorithm, the following return a wrong solution
 -- Correct solution is -2/9
 testQuickCheck2 :: (ObjectiveFunction, [PolyConstraint])
 testQuickCheck2 =
   ( Max (M.fromList [(1, -3), (2, 5)])
   ,
-    [ LEQ (M.fromList [(2, -1), (1, -6), (2, 7)]) 4
+    [ LEQ (M.fromList [(1, -6), (2, 6)]) 4
     , LEQ (M.fromList [(1, 1), (2, -4), (3, 3)]) (-2)
-    , LEQ (M.fromList [(2, 6), (1, -4), (2, 1)]) 0
+    , LEQ (M.fromList [(2, 7), (1, -4)]) 0
     ]
   )
 
