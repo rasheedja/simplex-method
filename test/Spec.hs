@@ -14,15 +14,17 @@ runTests (((testObjective, testConstraints), expectedResult) : tests) =
   in  if testResult == expectedResult
         then runTests tests
         else do
-          putStrLn "The following test failed: \n"
-          putStrLn ("Objective Function (Non-prettified): " ++ show testObjective)
-          putStrLn ("Constraints        (Non-prettified): " ++ show testConstraints)
-          putStrLn "====================================\n"
-          putStrLn ("Objective Function (Prettified): " ++ prettyShowObjectiveFunction testObjective)
-          putStrLn "Constraints        (Prettified): "
-          putStrLn (concatMap ((\c -> "\t" ++ prettyShowPolyConstraint c ++ "\n")) testConstraints)
-          putStrLn "====================================\n"
-          putStrLn ("Expected Solution      (Full): " ++ show expectedResult)
-          putStrLn ("Actual Solution        (Full): " ++ show testResult)
-          putStrLn ("Expected Solution (Objective): " ++ show (extractObjectiveValue expectedResult))
-          putStrLn ("Actual Solution   (Objective): " ++ show (extractObjectiveValue testResult))
+          let msg = "\nThe following test failed: "
+                  <> ("\nObjective Function (Non-prettified): " ++ show testObjective)
+                  <> ("\nConstraints        (Non-prettified): " ++ show testConstraints)
+                  <> "\n===================================="
+                  <> ("\nObjective Function (Prettified): " ++ prettyShowObjectiveFunction testObjective)
+                  <> "\nConstraints        (Prettified): "
+                  <> "\n" <> concatMap (\c -> "\t" ++ prettyShowPolyConstraint c ++ "\n") testConstraints
+                  <> "\n===================================="
+                  <> ("\nExpected Solution      (Full): " ++ show expectedResult)
+                  <> ("\nActual Solution        (Full): " ++ show testResult)
+                  <> ("\nExpected Solution (Objective): " ++ show (extractObjectiveValue expectedResult))
+                  <> ("\nActual Solution   (Objective): " ++ show (extractObjectiveValue testResult))
+                  <> "\n"
+          fail msg
