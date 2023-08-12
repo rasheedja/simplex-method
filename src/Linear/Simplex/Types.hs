@@ -15,16 +15,13 @@ import GHC.Generics (Generic)
 
 type Var = Int
 
--- TODO: Experiment with speed vs string vars type Var = Int
--- TODO: Could also just use (Eq var => var) directly
-
 type SimplexNum = Rational
 
 type SystemRow = PolyConstraint
 
 type System = [SystemRow]
 
--- Basically, a tableau where the basic variable may be empty.
+-- A 'Tableau' where the basic variable may be empty.
 -- All non-empty basic vars are slack vars
 data SystemWithSlackVarRow = SystemInStandardFormRow
   { mSlackVar :: Maybe Var
@@ -33,17 +30,6 @@ data SystemWithSlackVarRow = SystemInStandardFormRow
   }
 
 type SystemWithSlackVars = [SystemWithSlackVarRow]
-
--- data SystemInStandardForm = SystemInStandardForm
--- { mBasicVar :: Maybe Var}
-
--- type SystemInStandardForm
-
--- data VarTerm = VarTerm
---   { name :: Var
---   , coeff :: SimplexNum
---   }
---   deriving (Show, Read, Eq, Generic)
 
 data FeasibleSystem = FeasibleSystem
   { dict :: Dict
@@ -71,26 +57,11 @@ data SimplexMeta = SimplexMeta
 
 type VarLitMap = M.Map Var SimplexNum
 
--- TURN THIS INTO A FUNCTION
--- instance Ord VarTerm where
---   x <= y = (x ^. #name) <= (y ^. #name)
-
 -- | List of variables with their 'SimplexNum' coefficients.
 --   There is an implicit addition between elements in this list.
 --
 --   Example: [Var "x" 3, Var "y" -1, Var "z" 1] is equivalent to 3x + (-y) + z.
 type VarLitMapSum = VarLitMap
-
--- type VarLitMapSum = [VarLitMapSumEntry]
-
--- data VarLitMapSumEntry =
---   VarLitMapSumEntry
---     { name :: Var
---     , coeff :: SimplexNum
---     }
-
--- TODO: newtype VarTermSum = VarTermSum [VarTerm]
--- TODO: similar for other aliases
 
 -- | For specifying constraints in a system.
 --   The LHS is a 'Vars', and the RHS, is a 'SimplexNum' number.
@@ -106,9 +77,6 @@ data PolyConstraint
 
 -- | Create an objective function.
 --   We can either 'Max'imize or 'Min'imize a 'VarTermSum'.
--- TODO: Can the objective function contain a constant?
--- It can, but it's not useful. We just care about minimising/maximising vars,
--- not the actual value of the objective function
 data ObjectiveFunction = Max {objective :: VarLitMapSum} | Min {objective :: VarLitMapSum} deriving (Show, Read, Eq, Generic)
 
 -- | TODO: Maybe we want this type
@@ -118,59 +86,23 @@ data Equation = Equation
   , rhs :: SimplexNum
   }
 
--- | value for entry. lhs = rhs. TODO: finish
+-- | Value for 'Tableau'. lhs = rhs.
 data TableauRow = TableauRow
   { lhs :: VarLitMapSum
   , rhs :: SimplexNum
   }
   deriving (Show, Read, Eq, Generic)
 
--- | Entry for a simplex 'Tableau' of equations.
---   The LHS' is a 'VarTermSum'.
---   The RHS of the equation is a 'SimplexNum' constant.
---   The LHS is equal to the RHS.
--- type TableauRows = M.Map Var TableauRow
-
--- data TableauObjective = TableauObjective { basicVar :: Var, row :: TableauRow } deriving (Show, Read, Eq, Generic)
-
--- data TableauEntry = TableauEntry
---   { basicVarName :: Var
---   , lhs :: VarLitMapSum
---   , rhs :: SimplexNum
---   }
---   deriving (Show, Read, Eq, Generic)
-
 -- | A simplex 'Tableu' of equations.
---   Each element in the list is a row.
+--   Each entry in the map is a row.
 type Tableau = M.Map Var TableauRow
 
--- data Tableau = Tableau
---   { objective :: TableauObjective
---   , rows :: TableauRows
---   }
---   deriving (Show, Read, Eq, Generic)
-
--- | Values for a 'DictEntry'. TODO: varMapSum + constant
--- TODO: DictValue -> DictRow
+-- | Values for a 'DictEntry'.
 data DictValue = DictValue
   { varMapSum :: VarLitMapSum
   , constant :: SimplexNum
   }
   deriving (Show, Read, Eq, Generic)
-
--- | A single entry for a simplex `Dict`.
---   The LHS is a `Var` and specifies a basic variable.
---   The RHS is a 'DictEquation'.
---   The LHS is equal to the RHS.
--- type DictEntries = M.Map Var DictEntryValue
-
--- data DictObjective = DictObjective { lhs :: Var, rhs :: DictEntryValue } deriving (Show, Read, Eq, Generic)
-
--- data DictEntry = DictEntry
---   { lhs :: Var
---   , rhs :: DictEquation
---   }
---   deriving (Show, Read, Eq, Generic)
 
 -- | A simplex 'Dict'
 --   One quation represents the objective function.

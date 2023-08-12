@@ -26,7 +26,6 @@ import Linear.Simplex.Util
 import Prelude hiding (EQ)
 
 import qualified Data.Bifunctor as Bifunctor
-import qualified Debug.Trace as T
 
 trace s a = a
 
@@ -38,8 +37,7 @@ findFeasibleSolution :: [PolyConstraint] -> Maybe FeasibleSystem
 findFeasibleSolution unsimplifiedSystem =
   if null artificialVars -- No artificial vars, we have a feasible system
     then Just $ FeasibleSystem systemWithBasicVarsAsDictionary slackVars artificialVars objectiveVar
-    else -- else case simplexPivot (objectiveVar, artificialObjective ^. #objective) systemWithBasicVarsAsDictionary of
-    case simplexPivot artificialPivotObjective systemWithBasicVarsAsDictionary of
+    else case simplexPivot artificialPivotObjective systemWithBasicVarsAsDictionary of
       Just phase1Dict ->
         let eliminateArtificialVarsFromPhase1Tableau =
               M.map
@@ -97,12 +95,6 @@ findFeasibleSolution unsimplifiedSystem =
     -- If a constraint is already EQ, set the basic var to Nothing.
     -- Final system is a list of equalities for the given system.
     -- To be feasible, all vars must be >= 0.
-    -- TODO: Maybe add equation type, and make this an equation
-    -- TODO: If we add an equation type, some other types should become aliases (e.g., TableauRow)
-    -- TODO: Proposed return type: ([(Maybe Var, PolyConstraint)], [Var])
-    -- (I.e., Partial tableau with slack vars)
-    -- TODO: Look into an intermediary system type
-    -- Have a type level guarantee for slack vars with 1/-1 coeff
     systemInStandardForm :: [PolyConstraint] -> Var -> [Var] -> ([(Maybe Var, PolyConstraint)], [Var])
     systemInStandardForm [] _ sVars = ([], sVars)
     systemInStandardForm (EQ v r : xs) maxVar sVars = ((Nothing, EQ v r) : newSystem, newSlackVars)
@@ -155,25 +147,7 @@ findFeasibleSolution unsimplifiedSystem =
         (newSystemWithNewMaxVar, artificialVarsWithNewMaxVar) = systemWithArtificialVars pcs newArtificialVar
 
         (newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar) = systemWithArtificialVars pcs maxVar
-    systemWithArtificialVars _ _ = error "2" -- undefined
-
-    -- phase1PivotObjective :: PivotObjective
-    -- phase1PivotObjective =
-    --   PivotObjective
-    --     { variable  = objectiveVar
-    --     , function  = if isMax objFunction then objFunction ^. #objective else M.map negate (objFunction ^. #objective)
-    --     , constants = M.empty
-    --     }
-
-    -- Create an artificial objective using the given 'Integer' list of artificialVars and the given 'DictionaryForm'.
-    -- The artificial 'ObjectiveFunction' is the negated sum of all artificial vars.
-    -- createArtificialObjective :: DictionaryForm -> [Integer] -> ObjectiveFunction
-    -- createArtificialObjective rows artificialVars = Max negatedSumWithoutArtificialVars
-    --   where
-    --     rowsToAdd = filter (\(i, _) -> i `elem` artificialVars) rows
-    --     negatedRows = map (\(_, vcm) -> map (second negate) vcm) rowsToAdd
-    --     negatedSum = foldSumVarConstMap ((sort . concat) negatedRows)
-    --     negatedSumWithoutArtificialVars = filter (\(v, _) -> v `notElem` artificialVars) negatedSum
+    systemWithArtificialVars _ _ = error "systemWithArtificialVars: given system includes non-EQ constraints"
 
     createArtificialPivotObjective :: Dict -> [Var] -> PivotObjective
     createArtificialPivotObjective rows artificialVars =
@@ -183,19 +157,10 @@ findFeasibleSolution unsimplifiedSystem =
         , constant = sum $ map (^. #constant) negatedRowsWithoutArtificialVars
         }
       where
-        -- test2 = foldr (+) 0 test
-
-        -- test3 :: [Ratio Integer]
-        -- test3 = undefined
-
-        -- test = map (^. #constant) negatedRowsWithoutArtificialVars
         -- Filter out non-artificial entries
         rowsToAdd = M.filterWithKey (\k _ -> k `elem` artificialVars) rows
         negatedRows = M.map (\(DictValue rowVarMapSum rowConstant) -> DictValue (M.map negate rowVarMapSum) (negate rowConstant)) rowsToAdd
-        -- negatedRowsSum = foldVarLitMap $ map $ M.toList (^. #varMapSum) negatedRows
         -- Negate rows, discard keys and artificial vars since the pivot objective does not care about them
-        -- negatedRowsMapSum = foldSumVarConstMap
-        -- negatedRowsConstSum = _
         negatedRowsWithoutArtificialVars =
           map
             ( \(_, DictValue {..}) ->
@@ -212,16 +177,12 @@ findFeasibleSolution unsimplifiedSystem =
 --  Returns a pair with the first item being the 'Integer' variable equal to the 'ObjectiveFunction'
 --  and the second item being a map of the values of all 'Integer' variables appearing in the system, including the 'ObjectiveFunction'.
 optimizeFeasibleSystem :: ObjectiveFunction -> FeasibleSystem -> Maybe Result
-optimizeFeasibleSystem unsimplifiedObjFunction fsys@(FeasibleSystem {dict = phase1Dict, ..}) =
-  T.trace ("feasible system: " <> show fsys) $
+optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..}) =
+  trace ("feasible system: " <> show fsys) $
     if null artificialVars
-      then -- then displayResults . dictionaryFormToTableau <$> simplexPivot (createObjectiveDict objFunction objectiveVar : phase1Dict)
-      -- else displayResults . dictionaryFormToTableau <$> simplexPivot (createObjectiveDict phase2ObjFunction objectiveVar : tail phase1Dict)
-        T.trace "null" $ displayResults . dictionaryFormToTableau <$> simplexPivot phase1PivotObjective phase1Dict
-      else T.trace "notnull" $ displayResults . dictionaryFormToTableau <$> simplexPivot phase2PivotObjective phase1Dict
+      then trace "null" $ displayResults . dictionaryFormToTableau <$> simplexPivot phase1PivotObjective phase1Dict
+      else trace "notnull" $ displayResults . dictionaryFormToTableau <$> simplexPivot phase2PivotObjective phase1Dict
   where
-    objFunction = simplifyObjectiveFunction unsimplifiedObjFunction
-
     displayResults :: Tableau -> Result
     displayResults tableau =
       Result
@@ -260,7 +221,6 @@ optimizeFeasibleSystem unsimplifiedObjFunction fsys@(FeasibleSystem {dict = phas
         , constant = 0
         }
 
-    -- TODO: New type for Phase2Objective
     phase2PivotObjective :: PivotObjective
     phase2PivotObjective =
       PivotObjective
@@ -269,22 +229,6 @@ optimizeFeasibleSystem unsimplifiedObjFunction fsys@(FeasibleSystem {dict = phas
         , constant = calcConstants
         }
       where
-        -- type VarLitMapSum = M.Map Var SimplexNum
-        -- (foldSumVarConstMap . sort) $
-
-        -- combineMaps =
-        --   M.mapWithKey
-        --   (\var varValMap ->
-        --     case M.lookup var calcConstants of
-        --       Just constant ->
-        --         DictValue
-        --           { varMapSum = M.singleton var varValMap
-        --           , constant = constant
-        --           }
-        --       Nothing -> error "Bad branch"
-        --   )
-        --   $ calcVarMap
-
         calcConstants :: SimplexNum
         calcConstants =
           sum
@@ -299,7 +243,6 @@ optimizeFeasibleSystem unsimplifiedObjFunction fsys@(FeasibleSystem {dict = phas
 
         calcVarMap :: VarLitMapSum
         calcVarMap =
-          -- M.fromList
           foldVarLitMap $
             map
               ( M.fromList
@@ -307,23 +250,11 @@ optimizeFeasibleSystem unsimplifiedObjFunction fsys@(FeasibleSystem {dict = phas
                         let multiplyWith = if isMax objFunction then coeff else -coeff
                         in  case M.lookup var phase1Dict of
                               Nothing ->
-                                -- DictValue
-                                --   { varMapSum = M.singleton var coeff
-                                --   , constant = 0
-                                --   }
                                 [(var, multiplyWith)]
                               Just row -> map (second (* multiplyWith)) (M.toList $ row ^. #varMapSum)
-                              -- row
-                              -- & #varMapSum %~ M.map (* coeff)
-                              -- & #constant %~ (* coeff) -- TODO: Apply 0
-                              -- map (second (* coeff)) row
                     )
               )
               (M.toList (objFunction ^. #objective))
-
--- phase2ObjFunction =
--- undefined
--- if isMax objFunction then Max phase2ObjectiveRow else Min phase2ObjectiveRow
 
 -- | Perform the two phase simplex method with a given 'ObjectiveFunction' a system of 'PolyConstraint's.
 --  Assumes the 'ObjectiveFunction' and 'PolyConstraint' is not empty.
@@ -333,38 +264,36 @@ twoPhaseSimplex :: ObjectiveFunction -> [PolyConstraint] -> Maybe Result
 twoPhaseSimplex objFunction unsimplifiedSystem =
   -- TODO: Distinguish between infeasible and unpotimisable
   case findFeasibleSolution unsimplifiedSystem of
-    Just feasibleSystem -> T.trace "feasible" optimizeFeasibleSystem objFunction feasibleSystem
-    Nothing -> T.trace "infeasible" Nothing
+    Just feasibleSystem -> trace "feasible" optimizeFeasibleSystem objFunction feasibleSystem
+    Nothing -> trace "infeasible" Nothing
 
 -- | Perform the simplex pivot algorithm on a system with basic vars, assume that the first row is the 'ObjectiveFunction'.
 simplexPivot :: PivotObjective -> Dict -> Maybe Dict
 simplexPivot objective@(PivotObjective {variable = objectiveVar, function = objectiveFunc, constant = objectiveConstant}) dictionary =
-  T.trace
+  trace
     ("obj: " <> show objective <> "\n" <> show dictionary)
-    T.trace
-    (show dictionary)
     $ case mostPositive objectiveFunc of
       Nothing ->
-        T.trace
+        trace
           "all neg \n"
-          T.trace
+          trace
           ("obj: " <> show objective <> "\n" <> show dictionary)
-          T.trace
+          trace
           (show dictionary)
           Just
           (insertPivotObjectiveToDict objective dictionary)
       Just pivotNonBasicVar ->
         let mPivotBasicVar = ratioTest dictionary pivotNonBasicVar Nothing Nothing
-        in  T.trace ("most pos: " <> show pivotNonBasicVar) $ case mPivotBasicVar of
-              Nothing -> T.trace ("Ratio test failed on non-basic var: " ++ show pivotNonBasicVar ++ "\n" ++ show dictionary) Nothing
+        in  trace ("most pos: " <> show pivotNonBasicVar) $ case mPivotBasicVar of
+              Nothing -> trace ("Ratio test failed on non-basic var: " ++ show pivotNonBasicVar ++ "\n" ++ show dictionary) Nothing
               Just pivotBasicVar ->
                 let pivotResult = pivot pivotBasicVar pivotNonBasicVar (insertPivotObjectiveToDict objective dictionary)
                     pivotedObj =
                       let pivotedObjEntry = fromMaybe (error "Can't find obj after pivoting") $ M.lookup objectiveVar pivotResult
                       in  objective & #function .~ (pivotedObjEntry ^. #varMapSum) & #constant .~ (pivotedObjEntry ^. #constant)
                     pivotedDict = M.delete objectiveVar pivotResult
-                in  T.trace "one pos \n" $
-                      T.trace ("obj: " <> show objective <> "\n" <> show dictionary) $
+                in  trace "one pos \n" $
+                      trace ("obj: " <> show objective <> "\n" <> show dictionary) $
                         simplexPivot
                           pivotedObj
                           pivotedDict
@@ -380,9 +309,7 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
             Just currentCoeff ->
               let dictEquationConstant = dictEquation ^. #constant
               in  if currentCoeff >= 0 || dictEquationConstant < 0
-                    then -- trace (show currentCoeff)
-                      aux xs mostNegativeVar mCurrentMinBasicVar mCurrentMin -- constant was already in right side in original tableau, so should be above zero
-                      -- Coeff needs to be negative since it has been moved to the RHS
+                    then aux xs mostNegativeVar mCurrentMinBasicVar mCurrentMin
                     else case mCurrentMin of
                       Nothing -> aux xs mostNegativeVar (Just basicVar) (Just (dictEquationConstant / currentCoeff))
                       Just currentMin ->
@@ -395,9 +322,9 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
       case findLargestCoeff (M.toList varLitMap) Nothing of
         Just (largestVarName, largestVarCoeff) ->
           if largestVarCoeff <= 0
-            then T.trace "negative" Nothing
+            then trace "negative" Nothing
             else Just largestVarName
-        Nothing -> T.trace "No variables in first row when looking for most positive" Nothing
+        Nothing -> trace "No variables in first row when looking for most positive" Nothing
       where
         findLargestCoeff :: [(Var, SimplexNum)] -> Maybe (Var, SimplexNum) -> Maybe (Var, SimplexNum)
         findLargestCoeff [] mCurrentMax = mCurrentMax
@@ -417,7 +344,6 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
     -- Expects each basic variable to not appear on the RHS of any equation.
     pivot :: Var -> Var -> Dict -> Dict
     pivot leavingVariable enteringVariable dict =
-      -- case basicRow ^. #equation ^? folded . filtered (\vt -> enteringVariable == vt ^. #name) of
       case M.lookup enteringVariable (dictEntertingRow ^. #varMapSum) of
         Just enteringVariableCoeff ->
           updatedRows
@@ -445,19 +371,11 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
             -- Substitute pivot equation into other rows
             updatedRows :: Dict
             updatedRows =
-              -- M.mapWithKey f dict
               M.fromList $ map (uncurry f2) $ M.toList dict
               where
-                -- Bifunctor.bimap f2 dict
-
-                -- Dict
-                -- { objective = f $ dict ^. #objectiveFunction
-                -- , entries = fmap f $ dict ^. #entries
-                -- }
-
                 f entryVar entryVal =
                   if leavingVariable == entryVar
-                    then pivotEnteringRow -- TODO: UPDATE KEY
+                    then pivotEnteringRow
                     else case M.lookup enteringVariable (entryVal ^. #varMapSum) of
                       Just subsCoeff ->
                         entryVal
@@ -472,7 +390,7 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
                 f2 :: Var -> DictValue -> (Var, DictValue)
                 f2 entryVar entryVal =
                   if leavingVariable == entryVar
-                    then (enteringVariable, pivotEnteringRow) -- TODO: UPDATE KEY
+                    then (enteringVariable, pivotEnteringRow)
                     else case M.lookup enteringVariable (entryVal ^. #varMapSum) of
                       Just subsCoeff ->
                         ( entryVar
@@ -493,7 +411,5 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
           fromMaybe
             (error "pivot: Basic variable not found in Dict")
             $ M.lookup leavingVariable dict
-
-        -- basicDictEquation = basicDictEntry ^. #rhs
 
         filterOutEnteringVarTerm = M.filterWithKey (\vName _ -> vName /= enteringVariable)

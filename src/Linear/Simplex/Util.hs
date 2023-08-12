@@ -29,7 +29,7 @@ isMax (Min _) = False
 --  then reducing 'LEQ' and 'GEQ' with same LHS and RHS (and other similar situations) into 'EQ',
 --  and finally removing duplicate elements using 'nub'.
 simplifySystem :: [PolyConstraint] -> [PolyConstraint]
-simplifySystem = nub . reduceSystem . map simplifyPolyConstraint
+simplifySystem = nub . reduceSystem
   where
     reduceSystem :: [PolyConstraint] -> [PolyConstraint]
     reduceSystem [] = []
@@ -73,78 +73,6 @@ simplifySystem = nub . reduceSystem . map simplifyPolyConstraint
             then EQ lhs rhs : reduceSystem pcs
             else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
 
--- | Simplify an 'ObjectiveFunction' by first 'sort'ing and then calling 'foldSumVarConstMap' on the 'Vars'.
-simplifyObjectiveFunction :: ObjectiveFunction -> ObjectiveFunction
--- simplifyObjectiveFunction (Max vars) = Max (foldSumVarConstMap (sort vars))
--- simplifyObjectiveFunction (Min vars) = Min (foldSumVarConstMap (sort vars))
-simplifyObjectiveFunction (Max vars) = Max vars
-simplifyObjectiveFunction (Min vars) = Min vars
-
--- | Simplify a 'PolyConstraint' by first 'sort'ing and then calling 'foldSumVarConstMap' on the 'Vars'.
-simplifyPolyConstraint :: PolyConstraint -> PolyConstraint
--- simplifyPolyConstraint (LEQ vars rhs) = LEQ (foldSumVarConstMap (sort vars)) rhs
--- simplifyPolyConstraint (GEQ vars rhs) = GEQ (foldSumVarConstMap (sort vars)) rhs
--- simplifyPolyConstraint (EQ vars rhs) = EQ (foldSumVarConstMap (sort vars)) rhs
-simplifyPolyConstraint (LEQ vars rhs) = LEQ vars rhs
-simplifyPolyConstraint (GEQ vars rhs) = GEQ vars rhs
-simplifyPolyConstraint (EQ vars rhs) = EQ vars rhs
-
--- | Add a sorted list of 'Vars's, folding where the variables are equal
--- foldSumVarConstMap :: VarLitMapSum -> VarLitMapSum
--- foldSumVarConstMap [] = []
--- foldSumVarConstMap v@[_] = v
--- foldSumVarConstMap (v1 : v2 : vcm) =
---   if v1 == v2
---     then
---       let c1 = v1 ^. #coeff
---           c2 = v2 ^. #coeff
---           newC = c1 + c2
---       in  if newC == 0
---             then foldSumVarConstMap vcm
---             else foldSumVarConstMap $ (v1 & #coeff .~ newC) : vcm
---     else v1 : foldSumVarConstMap (v2 : vcm)
-
--- | Get a map of the value of every variable in a 'Tableau'
--- displayTableauResults :: Tableau -> Map.Map Var SimplexNum
--- displayTableauResults = Map.fromList . map (\entry -> (entry ^. #basicVarName, entry ^. #rhs))
-
--- | Get a map of the value of every variable in a 'Dict'
--- displayDictionaryResults :: Dict -> Map.Map Var SimplexNum
--- displayDictionaryResults dict = displayTableauResults $ dictionaryFormToTableau dict
-
--- | Map the given 'Integer' variable to the given 'ObjectiveFunction', for entering into 'DictionaryForm'.
--- createObjectiveDict :: ObjectiveFunction -> Var -> DictObjective
--- createObjectiveDict (Max obj) objectiveVar =
---   DictObjective
---     { lhs = objectiveVar
---     , rhs =
---         DictEntryValue
---           { varMapSum = obj
---           , constant = 0 -- FIXME: was 1? prob should be 0
---           }
---     }
--- createObjectiveDict (Min obj) objectiveVar =
---   DictObjective
---     { lhs = objectiveVar
---     , rhs =
---         DictEntryValue
---           { varMapSum = Map.map negate obj
---           , constant = 0 -- FIXME: was 1?
---           }
---     }
-
--- data DictEntryValue = DictEntryValue
---   { varMapSum :: VarLitMapSum
---   , constant :: SimplexNum
---   }
---   deriving (Show, Read, Eq, Generic)
-
---   data TableauRowValue = TableauRowValue
---   { lhs :: VarLitMapSum
---   , rhs :: SimplexNum
---   }
---   deriving (Show, Read, Eq, Generic)
-
 -- | Converts a 'Dict' to a 'Tableau' using 'dictEntryToTableauEntry'.
 --  FIXME: maybe remove this line. The basic variables will have a coefficient of 1 in the 'Tableau'.
 dictionaryFormToTableau :: Dict -> Tableau
@@ -157,22 +85,7 @@ dictionaryFormToTableau =
           }
     )
 
--- { objective =
---     let objecitveBasicVar = objective ^. #lhs
---         objectiveRow = objective ^. #rhs
---     in  TableauObjective
---           { basicVar = objecitveBasicVar
---           , row = dictEntryValueToTableauRowValue objecitveBasicVar objectiveRow
---           }
--- , rows = Map.mapWithKey dictEntryValueToTableauRowValue entries
--- }
--- where
--- \| Converts a 'DictEntry' to a 'TableauEntry'.
---  This is done by moving all non-basic variables from the right to the left.
---  The rational constant stays on the right.
---  FIXME: check The basic variables will have a coefficient of 1 in the 'TableauEntry'.
-
--- | Converts a 'Tableau' to a 'Dict' using 'tableauEntryToDictEntry'.
+-- | Converts a 'Tableau' to a 'Dict'.
 --  We do this by isolating the basic variable on the LHS, ending up with all non basic variables and a 'SimplexNum' constant on the RHS.
 tableauInDictionaryForm :: Tableau -> Dict
 tableauInDictionaryForm =
@@ -187,33 +100,6 @@ tableauInDictionaryForm =
               , constant = rhs / basicVarCoeff
               }
     )
-
--- Dict
---   { objective =
---       let objecitveBasicVar = objective ^. #basicVar
---           objectiveRow = objective ^. #row
---       in  DictObjective
---             { lhs = objecitveBasicVar
---             , rhs = tableauRowValueToDictEntryValue objecitveBasicVar objectiveRow
---             }
---   , entries = Map.mapWithKey tableauRowValueToDictEntryValue rows
---   }
--- where
--- -- \| Converts a 'Tableau' to a 'Dict'.
--- --  We do this by isolating the basic variable on the LHS, ending up with all non basic variables and a 'SimplexNum' constant on the RHS.
--- --  FIXME: check The basic variables will have a coefficient of 1 in the 'DictEntry'.
--- tableauRowValueToDictEntryValue :: Var -> TableauRow -> DictEntryValue
--- tableauRowValueToDictEntryValue basicVarName (TableauRow {..}) =
---   DictEntryValue
---     { varMapSum =
---         Map.map
---           (\c -> negate c / basicVarCoeff)
---           $ Map.delete basicVarName lhs
---     , constant = rhs / basicVarCoeff
---     }
---   where
--- mBasicVarCoeff = Map.lookup basicVarName lhs
--- basicVarCoeff = fromMaybe 1 mBasicVarCoeff
 
 -- | If this function is given 'Nothing', return 'Nothing'.
 --  Otherwise, we 'lookup' the 'Integer' given in the first item of the pair in the map given in the second item of the pair.
@@ -235,19 +121,6 @@ combineVarLitMapSums =
     keepVal = const pure
     sumVals k v1 v2 = Just $ v1 + v2
 
--- -- | Apply a function to the objective function and another to each entry in a
--- --  'Dict'
--- applyDict :: (DictEntries -> DictEntries) -> (DictEntries -> DictEntries) -> Dict -> Dict
--- applyDict fObj fDict (Dict {..}) =
---   Dict
---     { objective = fObj objectiveFunction
---     , entries = fmap fDict entries
---     }
-
--- -- Apply a single function to all entries in a 'Dict', including the objective function
--- applyDictSimple :: (DictEntries -> DictEntries) -> Dict -> Dict
--- applyDictSimple f = applyDict f f
-
 foldDictValue :: [DictValue] -> DictValue
 foldDictValue [] = error "Empty list of DictValues given to foldDictValue"
 foldDictValue [x] = x
@@ -258,8 +131,6 @@ foldDictValue (DictValue {varMapSum = vm1, constant = c1} : DictValue {varMapSum
           , constant = c1 + c2
           }
   in  foldDictValue $ combinedDictValue : dvs
-
--- type VarLitMap = M.Map Var SimplexNum
 
 foldVarLitMap :: [VarLitMap] -> VarLitMap
 foldVarLitMap [] = error "Empty list of VarLitMaps given to foldVarLitMap"
@@ -285,4 +156,4 @@ foldVarLitMap (vm1 : vm2 : vms) =
   in  foldVarLitMap $ combinedVarMap : vms
 
 insertPivotObjectiveToDict :: PivotObjective -> Dict -> Dict
-insertPivotObjectiveToDict objective dict = Map.insert (objective.variable) (DictValue {varMapSum = objective.function, constant = objective.constant}) dict
+insertPivotObjectiveToDict objective = Map.insert (objective.variable) (DictValue {varMapSum = objective.function, constant = objective.constant})
