@@ -106,7 +106,7 @@ tableauInDictionaryForm =
 --  This is typically used to extract the value of the 'ObjectiveFunction' after calling 'Linear.Simplex.Simplex.twoPhaseSimplex'.
 extractObjectiveValue :: Maybe Result -> Maybe SimplexNum
 extractObjectiveValue = fmap $ \result ->
-  case Map.lookup (result ^. #objectiveVar) (result ^. #varValMap) of
+  case Map.lookup result.objectiveVar result.varValMap of
     Nothing -> error "Objective not found in results when extracting objective value"
     Just r -> r
 
