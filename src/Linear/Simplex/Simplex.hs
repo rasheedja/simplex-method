@@ -400,7 +400,7 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
       case findLargestCoeff (M.toList varLitMap) Nothing of
         Just (largestVarName, largestVarCoeff) ->
           if largestVarCoeff <= 0
-            then  Nothing
+            then Nothing
             else Just largestVarName
         Nothing -> Nothing
       where
