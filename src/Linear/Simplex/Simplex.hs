@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 -- |
 -- Module      : Linear.Simplex.Simplex
 -- Description : Implements the twoPhaseSimplex method
@@ -14,54 +12,90 @@
 -- 'twoPhaseSimplex' performs both phases of the two-phase simplex method.
 module Linear.Simplex.Simplex (findFeasibleSolution, optimizeFeasibleSystem, twoPhaseSimplex) where
 
+import Prelude hiding (EQ)
+
 import Control.Lens
+import Control.Monad (unless)
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Logger
 import Data.Bifunctor
 import Data.List
 import qualified Data.Map as M
 import Data.Maybe (fromJust, fromMaybe, mapMaybe)
 import Data.Ratio (denominator, numerator, (%))
+import qualified Data.Text as Text
 import GHC.Real (Ratio)
 import Linear.Simplex.Types
 import Linear.Simplex.Util
-import Prelude hiding (EQ)
-
-import qualified Data.Bifunctor as Bifunctor
-
-trace s a = a
 
 -- | Find a feasible solution for the given system of 'PolyConstraint's by performing the first phase of the two-phase simplex method
---  All 'Integer' variables in the 'PolyConstraint' must be positive.
+--  All variables in the 'PolyConstraint' must be positive.
 --  If the system is infeasible, return 'Nothing'
 --  Otherwise, return the feasible system in 'Dict' as well as a list of slack variables, a list artificial variables, and the objective variable.
-findFeasibleSolution :: [PolyConstraint] -> Maybe FeasibleSystem
-findFeasibleSolution unsimplifiedSystem =
+findFeasibleSolution :: (MonadIO m, MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
+findFeasibleSolution unsimplifiedSystem = do
+  logMsg LevelInfo $ "findFeasibleSolution: Looking for solution for " <> showT unsimplifiedSystem
   if null artificialVars -- No artificial vars, we have a feasible system
-    then Just $ FeasibleSystem systemWithBasicVarsAsDictionary slackVars artificialVars objectiveVar
-    else case simplexPivot artificialPivotObjective systemWithBasicVarsAsDictionary of
-      Just phase1Dict ->
-        let eliminateArtificialVarsFromPhase1Tableau =
-              M.map
-                ( \DictValue {..} ->
-                    DictValue
-                      { varMapSum = M.filterWithKey (\k _ -> k `notElem` artificialVars) varMapSum
-                      , ..
-                      }
-                )
-                phase1Dict
-        in  case M.lookup objectiveVar eliminateArtificialVarsFromPhase1Tableau of
-              Nothing -> trace "objective row not found in phase 1 tableau" Nothing -- Should this be an error?
-              Just row ->
-                if row.constant == 0
-                  then
-                    Just $
-                      FeasibleSystem
-                        { dict = eliminateArtificialVarsFromPhase1Tableau
-                        , slackVars = slackVars
-                        , artificialVars = artificialVars
-                        , objectiveVar = objectiveVar
+    then do
+      logMsg LevelInfo "findFeasibleSolution: Feasible solution found with no artificial vars"
+      pure . Just $ FeasibleSystem systemWithBasicVarsAsDictionary slackVars artificialVars objectiveVar
+    else do
+      logMsg LevelInfo $ "findFeasibleSolution: Needed to create artificial vars. System with artificial vars (in Tableau form) = " <> showT systemWithBasicVars
+      mPhase1Dict <- simplexPivot artificialPivotObjective systemWithBasicVarsAsDictionary
+      case mPhase1Dict of
+        Just phase1Dict -> do
+          logMsg LevelInfo $ "findFeasibleSolution: System after pivoting with objective" <> showT artificialPivotObjective <> ": " <> showT phase1Dict
+          let eliminateArtificialVarsFromPhase1Tableau =
+                M.map
+                  ( \DictValue {..} ->
+                      DictValue
+                        { varMapSum = M.filterWithKey (\k _ -> k `notElem` artificialVars) varMapSum
+                        , ..
                         }
-                  else trace "rhs not zero after phase 1, thus original tableau is infeasible" Nothing
-      Nothing -> Nothing
+                  )
+                  phase1Dict
+          case M.lookup objectiveVar eliminateArtificialVarsFromPhase1Tableau of
+            Nothing -> do
+              logMsg LevelWarn $ "findFeasibleSolution: Objective row not found after eliminatiing artificial vars. This is unexpected. System without artificial vars (in Dict form) = " <> showT eliminateArtificialVarsFromPhase1Tableau
+              -- If the objecitve row is not found, the system is feasible iff
+              -- the artificial vars sum to zero. The value of an artificial
+              -- variable is 0 if non-basic, and the RHS of the row if basic
+              let artificialVarsVals = map (\v -> maybe 0 (.constant) (M.lookup v eliminateArtificialVarsFromPhase1Tableau)) artificialVars
+              let artificialVarsValsSum = sum artificialVarsVals
+              if artificialVarsValsSum == 0
+                then do
+                  logMsg LevelInfo $ "findFeasibleSolution: Artifical variables sum up to 0, thus original tableau is feasible. System without artificial vars (in Dict form) = " <> showT eliminateArtificialVarsFromPhase1Tableau
+                  pure . Just $
+                    FeasibleSystem
+                      { dict = eliminateArtificialVarsFromPhase1Tableau
+                      , slackVars = slackVars
+                      , artificialVars = artificialVars
+                      , objectiveVar = objectiveVar
+                      }
+                else do
+                  logMsg LevelInfo $ "findFeasibleSolution: Artifical variables sum up to " <> showT artificialVarsValsSum <> ", thus original tableau is infeasible. System without artificial vars (in Dict form) = " <> showT eliminateArtificialVarsFromPhase1Tableau
+                  pure Nothing
+            Just row ->
+              if row.constant == 0
+                then do
+                  logMsg LevelInfo $ "findFeasibleSolution: Objective RHS is zero after pivoting, thus original tableau is feasible. feasible system (in Dict form) = " <> showT eliminateArtificialVarsFromPhase1Tableau
+                  pure . Just $
+                    FeasibleSystem
+                      { dict = eliminateArtificialVarsFromPhase1Tableau
+                      , slackVars = slackVars
+                      , artificialVars = artificialVars
+                      , objectiveVar = objectiveVar
+                      }
+                else do
+                  unless (row.constant < 0) $ do
+                    let errMsg = "findFeasibleSolution: Objective RHS is negative after pivoting. This should be impossible. System without artificial vars (in Dict form) = " <> show eliminateArtificialVarsFromPhase1Tableau
+                    logMsg LevelError $ Text.pack errMsg
+                    error errMsg
+                  logMsg LevelInfo $ "findFeasibleSolution: Objective RHS not zero after phase 1, thus original tableau is infeasible. System without artificial vars (in Dict form) = " <> showT eliminateArtificialVarsFromPhase1Tableau
+                  pure Nothing
+        Nothing -> do
+          logMsg LevelInfo $ "findFeasibleSolution: Infeasible solution found, could not pivot with objective " <> showT artificialPivotObjective <> " over system (in Dict form) = " <> showT systemWithBasicVarsAsDictionary
+          pure Nothing
   where
     system = simplifySystem unsimplifiedSystem
 
@@ -149,6 +183,13 @@ findFeasibleSolution unsimplifiedSystem =
         (newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar) = systemWithArtificialVars pcs maxVar
     systemWithArtificialVars _ _ = error "systemWithArtificialVars: given system includes non-EQ constraints"
 
+    -- \| Takes a 'Dict' and a '[Var]' as input and returns a 'PivotObjective'.
+    -- The 'Dict' represents the tableau of a linear program with artificial
+    -- variables, and '[Var]' represents the artificial variables.
+
+    -- The function first filters out the rows of the tableau that correspond
+    -- to the artificial variables, and negates them. It then computes the sum
+    -- of the negated rows, which represents the 'PivotObjective'.
     createArtificialPivotObjective :: Dict -> [Var] -> PivotObjective
     createArtificialPivotObjective rows artificialVars =
       PivotObjective
@@ -176,13 +217,31 @@ findFeasibleSolution unsimplifiedSystem =
 --  Then, the feasible system in 'DictionaryForm' as well as a list of slack variables, a list artificial variables, and the objective variable.
 --  Returns a pair with the first item being the 'Integer' variable equal to the 'ObjectiveFunction'
 --  and the second item being a map of the values of all 'Integer' variables appearing in the system, including the 'ObjectiveFunction'.
-optimizeFeasibleSystem :: ObjectiveFunction -> FeasibleSystem -> Maybe Result
-optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..}) =
-  trace ("feasible system: " <> show fsys) $
-    if null artificialVars
-      then trace "null" $ displayResults . dictionaryFormToTableau <$> simplexPivot phase1PivotObjective phase1Dict
-      else trace "notnull" $ displayResults . dictionaryFormToTableau <$> simplexPivot phase2PivotObjective phase1Dict
+optimizeFeasibleSystem :: (MonadIO m, MonadLogger m) => ObjectiveFunction -> FeasibleSystem -> m (Maybe Result)
+optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..}) = do
+  logMsg LevelInfo $ "optimizeFeasibleSystem: Optimizing feasible system " <> showT fsys <> " with objective " <> showT objFunction
+  if null artificialVars
+    then do
+      logMsg LevelInfo $ "optimizeFeasibleSystem: No artificial vars, system is feasible. Pivoting system (in dict form) " <> showT phase1Dict <> " with objective " <> showT normalObjective
+      fmap (displayResults . dictionaryFormToTableau) <$> simplexPivot normalObjective phase1Dict
+    else do
+      logMsg LevelInfo $ "optimizeFeasibleSystem: Artificial vars present. Pivoting system (in dict form) " <> showT phase1Dict <> " with objective " <> showT adjustedObjective
+      fmap (displayResults . dictionaryFormToTableau) <$> simplexPivot adjustedObjective phase1Dict
   where
+    -- \| displayResults takes a 'Tableau' and returns a 'Result'. The 'Tableau'
+    -- represents the final tableau of a linear program after the simplex
+    -- algorithm has been applied. The 'Result' contains the value of the
+    -- objective variable and a map of the values of all variables appearing
+    -- in the system, including the objective variable.
+    --
+    -- The function first filters out the rows of the tableau that correspond
+    -- to the slack and artificial variables. It then extracts the values of
+    -- the remaining variables and stores them in a map. If the objective
+    -- function is a maximization problem, the map contains the values of the
+    -- variables as they appear in the final tableau. If the objective function
+    -- is a minimization problem, the map contains the values of the variables
+    -- as they appear in the final tableau, except for the objective variable,
+    -- which is negated.
     displayResults :: Tableau -> Result
     displayResults tableau =
       Result
@@ -213,22 +272,34 @@ optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..})
                     )
                     tableauWithOriginalVars
 
-    phase1PivotObjective :: PivotObjective
-    phase1PivotObjective =
+    -- \| Objective to use when optimising the linear program if no artificial
+    -- variables were necessary in the first phase. It is essentially the original
+    -- objective function, with a potential change of sign based on the type of
+    -- problem (Maximization or Minimization).
+    normalObjective :: PivotObjective
+    normalObjective =
       PivotObjective
         { variable = objectiveVar
-        , function = if isMax objFunction then objFunction.objective else M.map negate (objFunction.objective)
+        , function = if isMax objFunction then objFunction.objective else M.map negate objFunction.objective
         , constant = 0
         }
 
-    phase2PivotObjective :: PivotObjective
-    phase2PivotObjective =
+    -- \| Objective to use when optimising the linear program if artificial
+    -- variables were necessary in the first phase. It is an adjustment to the
+    -- original objective function, where the linear coefficients are modified
+    -- by back-substitution of the values of the artificial variables.
+    adjustedObjective :: PivotObjective
+    adjustedObjective =
       PivotObjective
         { variable = objectiveVar
         , function = calcVarMap
         , constant = calcConstants
         }
       where
+        -- \| Compute the adjustment to the constant term of the objective
+        -- function. It adds up the products of the original coefficients and
+        -- the corresponding constant term (rhs) of each artificial variable
+        -- in the phase 1 'Dict'.
         calcConstants :: SimplexNum
         calcConstants =
           sum
@@ -237,10 +308,14 @@ optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..})
                   let multiplyWith = if isMax objFunction then coeff else -coeff
                   in  case M.lookup var phase1Dict of
                         Nothing -> 0
-                        Just row -> (row.constant) * multiplyWith
+                        Just row -> row.constant * multiplyWith
               )
-            $ M.toList (objFunction.objective)
+            $ M.toList objFunction.objective
 
+        -- \| Compute the adjustment to the coefficients of the original
+        -- variables in the objective function. It performs back-substitution
+        -- of the variables in the original objective function using the
+        -- current value of each artificial variable in the phase 1 'Dict'.
         calcVarMap :: VarLitMapSum
         calcVarMap =
           foldVarLitMap $
@@ -254,49 +329,52 @@ optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..})
                               Just row -> map (second (* multiplyWith)) (M.toList $ row.varMapSum)
                     )
               )
-              (M.toList (objFunction.objective))
+              (M.toList objFunction.objective)
 
 -- | Perform the two phase simplex method with a given 'ObjectiveFunction' a system of 'PolyConstraint's.
 --  Assumes the 'ObjectiveFunction' and 'PolyConstraint' is not empty.
 --  Returns a pair with the first item being the 'Integer' variable equal to the 'ObjectiveFunction'
 --  and the second item being a map of the values of all 'Integer' variables appearing in the system, including the 'ObjectiveFunction'.
-twoPhaseSimplex :: ObjectiveFunction -> [PolyConstraint] -> Maybe Result
-twoPhaseSimplex objFunction unsimplifiedSystem =
-  -- TODO: Distinguish between infeasible and unpotimisable
-  case findFeasibleSolution unsimplifiedSystem of
-    Just feasibleSystem -> trace "feasible" optimizeFeasibleSystem objFunction feasibleSystem
-    Nothing -> trace "infeasible" Nothing
+twoPhaseSimplex :: (MonadIO m, MonadLogger m) => ObjectiveFunction -> [PolyConstraint] -> m (Maybe Result)
+twoPhaseSimplex objFunction unsimplifiedSystem = do
+  logMsg LevelInfo $ "twoPhaseSimplex: Solving system " <> showT unsimplifiedSystem <> " with objective " <> showT objFunction
+  phase1Result <- findFeasibleSolution unsimplifiedSystem
+  case phase1Result of
+    Just feasibleSystem -> do
+      logMsg LevelInfo $ "twoPhaseSimplex: Feasible system found for " <> showT unsimplifiedSystem <> "; Feasible system: " <> showT feasibleSystem
+      optimizedSystem <- optimizeFeasibleSystem objFunction feasibleSystem
+      logMsg LevelInfo $ "twoPhaseSimplex: Optimized system found for " <> showT unsimplifiedSystem <> "; Optimized system: " <> showT optimizedSystem
+      pure optimizedSystem
+    Nothing -> do
+      logMsg LevelInfo $ "twoPhaseSimplex: Phase 1 gives infeasible result for " <> showT unsimplifiedSystem
+      pure Nothing
 
 -- | Perform the simplex pivot algorithm on a system with basic vars, assume that the first row is the 'ObjectiveFunction'.
-simplexPivot :: PivotObjective -> Dict -> Maybe Dict
-simplexPivot objective@(PivotObjective {variable = objectiveVar, function = objectiveFunc, constant = objectiveConstant}) dictionary =
-  trace
-    ("obj: " <> show objective <> "\n" <> show dictionary)
-    $ case mostPositive objectiveFunc of
-      Nothing ->
-        trace
-          "all neg \n"
-          trace
-          ("obj: " <> show objective <> "\n" <> show dictionary)
-          trace
-          (show dictionary)
-          Just
-          (insertPivotObjectiveToDict objective dictionary)
-      Just pivotNonBasicVar ->
-        let mPivotBasicVar = ratioTest dictionary pivotNonBasicVar Nothing Nothing
-        in  trace ("most pos: " <> show pivotNonBasicVar) $ case mPivotBasicVar of
-              Nothing -> trace ("Ratio test failed on non-basic var: " ++ show pivotNonBasicVar ++ "\n" ++ show dictionary) Nothing
-              Just pivotBasicVar ->
-                let pivotResult = pivot pivotBasicVar pivotNonBasicVar (insertPivotObjectiveToDict objective dictionary)
-                    pivotedObj =
-                      let pivotedObjEntry = fromMaybe (error "Can't find obj after pivoting") $ M.lookup objectiveVar pivotResult
-                      in  objective & #function .~ (pivotedObjEntry.varMapSum) & #constant .~ (pivotedObjEntry.constant)
-                    pivotedDict = M.delete objectiveVar pivotResult
-                in  trace "one pos \n" $
-                      trace ("obj: " <> show objective <> "\n" <> show dictionary) $
-                        simplexPivot
-                          pivotedObj
-                          pivotedDict
+simplexPivot :: (MonadIO m, MonadLogger m) => PivotObjective -> Dict -> m (Maybe Dict)
+simplexPivot objective@(PivotObjective {variable = objectiveVar, function = objectiveFunc, constant = objectiveConstant}) dictionary = do
+  logMsg LevelInfo $ "simplexPivot: Pivoting with objective " <> showT objective <> " over system (in Dict form) = " <> showT dictionary
+  case mostPositive objectiveFunc of
+    Nothing -> do
+      logMsg LevelInfo $ "simplexPivot: Pivoting complete as no positive variables found in objective " <> showT objective <> " over system (in Dict form) = " <> showT dictionary
+      pure $ Just (insertPivotObjectiveToDict objective dictionary)
+    Just pivotNonBasicVar -> do
+      logMsg LevelInfo $ "simplexPivot: Non-basic pivoting variable in objective, determined by largest coefficient = " <> showT pivotNonBasicVar
+      let mPivotBasicVar = ratioTest dictionary pivotNonBasicVar Nothing Nothing
+      case mPivotBasicVar of
+        Nothing -> do
+          logMsg LevelInfo $ "simplexPivot: Ratio test failed with non-basic variable = " <> showT pivotNonBasicVar <> " over system (in Dict form) = " <> showT dictionary
+          pure Nothing
+        Just pivotBasicVar -> do
+          logMsg LevelInfo $ "simplexPivot: Basic pivoting variable determined by ratio test = " <> showT pivotBasicVar
+          let pivotResult = pivot pivotBasicVar pivotNonBasicVar (insertPivotObjectiveToDict objective dictionary)
+              pivotedObj =
+                let pivotedObjEntry = fromMaybe (error "simplexPivot: Can't find objective after pivoting") $ M.lookup objectiveVar pivotResult
+                in  objective & #function .~ pivotedObjEntry.varMapSum & #constant .~ pivotedObjEntry.constant
+              pivotedDict = M.delete objectiveVar pivotResult
+          logMsg LevelInfo $ "simplexPivot: Pivoting complete, pivoted objective = " <> showT pivotedObj <> " over system (in Dict form) = " <> showT pivotedDict
+          simplexPivot
+            pivotedObj
+            pivotedDict
   where
     ratioTest :: Dict -> Var -> Maybe Var -> Maybe Rational -> Maybe Var
     ratioTest dict = aux (M.toList dict)
@@ -304,7 +382,7 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
         aux :: [(Var, DictValue)] -> Var -> Maybe Var -> Maybe Rational -> Maybe Var
         aux [] _ mCurrentMinBasicVar _ = mCurrentMinBasicVar
         aux (x@(basicVar, dictEquation) : xs) mostNegativeVar mCurrentMinBasicVar mCurrentMin =
-          case M.lookup mostNegativeVar (dictEquation.varMapSum) of
+          case M.lookup mostNegativeVar dictEquation.varMapSum of
             Nothing -> aux xs mostNegativeVar mCurrentMinBasicVar mCurrentMin
             Just currentCoeff ->
               let dictEquationConstant = dictEquation.constant
@@ -322,9 +400,9 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
       case findLargestCoeff (M.toList varLitMap) Nothing of
         Just (largestVarName, largestVarCoeff) ->
           if largestVarCoeff <= 0
-            then trace "negative" Nothing
+            then  Nothing
             else Just largestVarName
-        Nothing -> trace "No variables in first row when looking for most positive" Nothing
+        Nothing -> Nothing
       where
         findLargestCoeff :: [(Var, SimplexNum)] -> Maybe (Var, SimplexNum) -> Maybe (Var, SimplexNum)
         findLargestCoeff [] mCurrentMax = mCurrentMax

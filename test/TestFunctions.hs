@@ -37,6 +37,8 @@ testsList =
   , (test28, Just (Result 6 (M.fromList [(6, 0), (2, 10)])))
   , (test29, Nothing)
   , (test30, Nothing)
+  , (test31, Just (Result 5 (M.fromList [(2, 1 % 1), (5, 0 % 1)])))
+  , (test32, Nothing)
   , (testPolyPaver1, Just (Result 12 (M.fromList [(12, 7 % 4), (2, 5 % 2), (1, 7 % 4), (3, 0)])))
   , (testPolyPaver2, Just (Result 12 (M.fromList [(12, 5 % 2), (2, 5 % 3), (1, 5 % 2), (3, 0)])))
   , (testPolyPaver3, Just (Result 12 (M.fromList [(12, 5 % 3), (2, 5 % 3), (1, 5 % 2), (3, 0)])))
@@ -414,6 +416,24 @@ test30 =
     [ LEQ (M.fromList [(1, 1)]) 15
     , GEQ (M.fromList [(1, 1)]) 15.01
     , GEQ (M.fromList [(2, 1)]) 10
+    ]
+  )
+
+test31 :: (ObjectiveFunction, [PolyConstraint])
+test31 =
+  ( Min (M.fromList [(1, 1)])
+  ,
+    [ GEQ (M.fromList [(1, 1), (2, 1)]) 1
+    , GEQ (M.fromList [(1, 1), (2, 1)]) 1
+    ]
+  )
+
+test32 :: (ObjectiveFunction, [PolyConstraint])
+test32 =
+  ( Min (M.fromList [(1, 1)])
+  ,
+    [ GEQ (M.fromList [(1, 1), (2, 1)]) 2
+    , LEQ (M.fromList [(1, 1), (2, 1)]) 1
     ]
   )
 

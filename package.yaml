@@ -23,23 +23,27 @@ dependencies:
 - base >= 4.14 && < 5
 - containers >= 0.6.5.1 && < 0.7
 - generic-lens >= 2.2.0 && < 2.3 
-- lens >= 5.1.0 && < 5.2
+- lens >= 5.2.2 && < 5.3
+- monad-logger >= 0.3.40 && < 0.4
+- text >= 2.0.2 && < 2.1
+- time
 
 default-extensions:
   DataKinds
   DeriveFunctor
   DeriveGeneric
+  DisambiguateRecordFields
   DuplicateRecordFields
   FlexibleContexts
   LambdaCase
   OverloadedLabels
+  OverloadedRecordDot
+  OverloadedStrings
   RecordWildCards
+  TemplateHaskell
   TupleSections
   TypeApplications
-  OverloadedRecordDot
-  DuplicateRecordFields
   NamedFieldPuns
-  DisambiguateRecordFields
 
 library:
   source-dirs: src

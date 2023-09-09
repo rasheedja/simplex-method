@@ -10,6 +10,8 @@
 module Linear.Simplex.Util where
 
 import Control.Lens
+import Control.Monad.IO.Class (MonadIO (..))
+import Control.Monad.Logger (LogLevel (..), LogLine, MonadLogger, logDebug, logError, logInfo, logWarn)
 import Data.Bifunctor
 import Data.Generics.Labels ()
 import Data.Generics.Product (field)
@@ -17,6 +19,9 @@ import Data.List
 import qualified Data.Map as Map
 import qualified Data.Map.Merge.Lazy as MapMerge
 import Data.Maybe (fromMaybe)
+import qualified Data.Text as T
+import Data.Time (getCurrentTime)
+import Data.Time.Format.ISO8601 (iso8601Show)
 import Linear.Simplex.Types
 import Prelude hiding (EQ)
 
@@ -156,4 +161,18 @@ foldVarLitMap (vm1 : vm2 : vms) =
   in  foldVarLitMap $ combinedVarMap : vms
 
 insertPivotObjectiveToDict :: PivotObjective -> Dict -> Dict
-insertPivotObjectiveToDict objective = Map.insert (objective.variable) (DictValue {varMapSum = objective.function, constant = objective.constant})
+insertPivotObjectiveToDict objective = Map.insert objective.variable (DictValue {varMapSum = objective.function, constant = objective.constant})
+
+showT :: (Show a) => a -> T.Text
+showT = T.pack . show
+
+logMsg :: (MonadIO m, MonadLogger m) => LogLevel -> T.Text -> m ()
+logMsg lvl msg = do
+  currTime <- T.pack . iso8601Show <$> liftIO getCurrentTime
+  let msgToLog = currTime <> ": " <> msg
+  case lvl of
+    LevelDebug -> $logDebug msgToLog
+    LevelInfo -> $logInfo msgToLog
+    LevelWarn -> $logWarn msgToLog
+    LevelError -> $logError msgToLog
+    LevelOther otherLvl -> error "logMsg: LevelOther is not implemented"
