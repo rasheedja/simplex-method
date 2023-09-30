@@ -77,7 +77,8 @@ data PolyConstraint
 
 -- | Create an objective function.
 --   We can either 'Max'imize or 'Min'imize a 'VarTermSum'.
-data ObjectiveFunction = Max {objective :: VarLitMapSum} | Min {objective :: VarLitMapSum} deriving (Show, Read, Eq, Generic)
+data ObjectiveFunction = Max {objective :: VarLitMapSum} | Min {objective :: VarLitMapSum}
+  deriving (Show, Read, Eq, Generic)
 
 -- | TODO: Maybe we want this type
 -- TODO: A better/alternative name
