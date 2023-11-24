@@ -64,9 +64,24 @@ jobs:
           key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-deps-${{ hashFiles('**/stack.yaml', '**/package.yaml', '**/simplex-method.cabal') }}
           restore-keys: |
             ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-
+      
+      - name: Find .stack-work directories
+        run: find . -name .stack-work
+
+      - name: Check root directory after restore
+        run: ls -la .
+
+      - name: Check .stack-work directory after restore
+        run: ls -la .stack-work
 
       - name: Install dependencies
         run: stack build --only-dependencies
+
+      - name: Check root directory before save
+        run: ls -la .
+
+      - name: Check .stack-work directory before save
+        run: ls -la .stack-work
 
       # Cache dependencies already here, so that we do not have to rebuild them should the subsequent steps fail.
       - name: Save cached dependencies
