@@ -108,7 +108,7 @@ tableauInDictionaryForm =
 
 -- | If this function is given 'Nothing', return 'Nothing'.
 --  Otherwise, we 'lookup' the 'Integer' given in the first item of the pair in the map given in the second item of the pair.
---  This is typically used to extract the value of the 'ObjectiveFunction' after calling 'Linear.Simplex.Simplex.twoPhaseSimplex'.
+--  This is typically used to extract the value of the 'ObjectiveFunction' after calling 'Linear.Simplex.Solver.TwoPhase.twoPhaseSimplex'.
 extractObjectiveValue :: Maybe Result -> Maybe SimplexNum
 extractObjectiveValue = fmap $ \result ->
   case Map.lookup result.objectiveVar result.varValMap of

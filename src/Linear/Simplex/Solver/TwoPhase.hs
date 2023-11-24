@@ -1,5 +1,5 @@
 -- |
--- Module      : Linear.Simplex.Simplex
+-- Module      : Linear.Simplex.Simplex.TwoPhase
 -- Description : Implements the twoPhaseSimplex method
 -- Copyright   : (c) Junaid Rasheed, 2020-2022
 -- License     : BSD-3
@@ -10,7 +10,7 @@
 -- 'findFeasibleSolution' performs phase one of the two-phase simplex method.
 -- 'optimizeFeasibleSystem' performs phase two of the two-phase simplex method.
 -- 'twoPhaseSimplex' performs both phases of the two-phase simplex method.
-module Linear.Simplex.Simplex (findFeasibleSolution, optimizeFeasibleSystem, twoPhaseSimplex) where
+module Linear.Simplex.Solver.TwoPhase (findFeasibleSolution, optimizeFeasibleSystem, twoPhaseSimplex) where
 
 import Prelude hiding (EQ)
 

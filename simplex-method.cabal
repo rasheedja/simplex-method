@@ -28,7 +28,7 @@ source-repository head
 library
   exposed-modules:
       Linear.Simplex.Prettify
-      Linear.Simplex.Simplex
+      Linear.Simplex.Solver.TwoPhase
       Linear.Simplex.Types
       Linear.Simplex.Util
   other-modules:

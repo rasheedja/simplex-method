@@ -4,7 +4,7 @@
 
 ## Quick Overview
 
-The `Linear.Simplex.Simplex` module contain both phases of the simplex method.
+The `Linear.Simplex.Solver.TwoPhase` module contain both phases of the two-phase simplex method.
 
 ### Phase One
 

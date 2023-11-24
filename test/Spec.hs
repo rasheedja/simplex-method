@@ -5,7 +5,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Logger
 
 import Linear.Simplex.Prettify
-import Linear.Simplex.Simplex
+import Linear.Simplex.Solver.TwoPhase
 import Linear.Simplex.Types
 import Linear.Simplex.Util
 
