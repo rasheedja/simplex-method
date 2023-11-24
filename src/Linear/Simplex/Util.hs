@@ -176,3 +176,9 @@ logMsg lvl msg = do
     LevelWarn -> $logWarn msgToLog
     LevelError -> $logError msgToLog
     LevelOther otherLvl -> error "logMsg: LevelOther is not implemented"
+
+extractTableauValues :: Tableau -> Map.Map Var SimplexNum
+extractTableauValues = Map.map (.rhs)
+
+extractDictValues :: Dict -> Map.Map Var SimplexNum
+extractDictValues = Map.map (.constant)
