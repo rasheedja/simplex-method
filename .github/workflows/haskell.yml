@@ -56,7 +56,7 @@ jobs:
           stack build --test --bench --no-haddock --dry-run
         # The last step generates dist-newstyle/cache/plan.json for the cache key.
 
-      - name: Restore .stack-work dependencies
+      - name: Restore .stack-work cache
         uses: actions/cache/restore@v3
         id: cache-restore-stack-work
         with:
@@ -65,7 +65,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-work-
       
-      - name: Restore ~/.stack dependencies
+      - name: Restore ~/.stack cache
         uses: actions/cache/restore@v3
         id: cache-restore-stack-global
         with:
@@ -74,20 +74,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-
 
-      - name: Install dependencies
+      - name: Build dependencies
         run: stack build --only-dependencies
 
-      - name: Build
+      - name: Build the package
         run: stack build
 
-      - name: Save .stack-work dependencies
+      - name: Save .stack-work cache
         uses: actions/cache/save@v3
         id: cache-save-stack-work
         with:
           path: .stack-work
           key: ${{ steps.cache-restore-stack-work.outputs.cache-primary-key }}
       
-      - name: Save ~/.stack dependencies
+      - name: Save ~/.stack cache
         uses: actions/cache/save@v3
         id: cache-save-stack-global
         with:
