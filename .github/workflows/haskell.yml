@@ -61,7 +61,7 @@ jobs:
         id: cache
         with:
           path: .stack-work
-          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-plan-${{ hashFiles('**/plan.json') }}
+          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-deps-${{ hashFiles('**/stack.yaml', '**/package.yaml', '**/simplex-method.cabal') }}
           restore-keys: |
             ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-
 
