@@ -1,7 +1,7 @@
 -- |
 -- Module      : Linear.Simplex.Simplex.TwoPhase
 -- Description : Implements the twoPhaseSimplex method
--- Copyright   : (c) Junaid Rasheed, 2020-2022
+-- Copyright   : (c) Junaid Rasheed, 2020-2023
 -- License     : BSD-3
 -- Maintainer  : jrasheed178@gmail.com
 -- Stability   : experimental
