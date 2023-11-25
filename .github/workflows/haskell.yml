@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        os: [windows-latest, macos-latest, ubuntu-latest]
         ghc-version: ['9.6', '9.4', '9.2', '9.0']
 
     steps:
@@ -65,11 +65,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-work-
       
-      - name: Restore ~/.stack cache
+      - name: Restore ~/.stack cache (Unix)
         uses: actions/cache/restore@v3
-        id: cache-restore-stack-global
+        id: cache-restore-stack-global-unix
+        if: runner.os == 'Linux' || runner.os == 'macOS'
         with:
           path: ~/.stack
+          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-
+
+      - name: Restore %APPDATA%\stack, %LOCALAPPDATA%\Programs\stack cache (Windows)
+        uses: actions/cache/restore@v3
+        id: cache-restore-stack-global-windows
+        if: runner.os == 'Windows'
+        with:
+          path: |
+            ~\AppData\Roaming\stack
+            ~\AppData\Local\Programs\stack    
           key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}
           restore-keys: |
             ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-
@@ -80,19 +93,30 @@ jobs:
       - name: Build the package
         run: stack build
 
-      - name: Save .stack-work cache
+      - name: Save .stack-work cache (Unix)
         uses: actions/cache/save@v3
         id: cache-save-stack-work
+        if: runner.os == 'Linux' || runner.os == 'macOS'
         with:
           path: .stack-work
           key: ${{ steps.cache-restore-stack-work.outputs.cache-primary-key }}
-      
-      - name: Save ~/.stack cache
+   
+      - name: Save %APPDATA%\stack, %LOCALAPPDATA%\Programs\stack cache (Windows)
+        uses: actions/cache/save@v3
+        if: runner.os == 'Windows'
+        with:
+          path: |
+            ~\AppData\Roaming\stack
+            ~\AppData\Local\Programs\stack    
+          key: ${{ steps.cache-restore-stack-global-windows.outputs.cache-primary-key }}
+  
+      - name: Save ~/.stack cache (Unix)
         uses: actions/cache/save@v3
         id: cache-save-stack-global
+        if: runner.os == 'Linux' || runner.os == 'macOS'
         with:
           path: ~/.stack
-          key: ${{ steps.cache-restore-stack-global.outputs.cache-primary-key }}
+          key: ${{ steps.cache-restore-stack-global-unix.outputs.cache-primary-key }}
 
       - name: Run tests
         run: stack test
