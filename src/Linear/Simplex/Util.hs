@@ -1,17 +1,27 @@
-{- |
-Module      : Linear.Simplex.Util
-Description : Helper functions
-Copyright   : (c) Junaid Rasheed, 2020-2022
-License     : BSD-3
-Maintainer  : jrasheed178@gmail.com
-Stability   : experimental
-
-Helper functions for performing the two-phase simplex method.
--}
+-- |
+-- Module      : Linear.Simplex.Util
+-- Description : Helper functions
+-- Copyright   : (c) Junaid Rasheed, 2020-2023
+-- License     : BSD-3
+-- Maintainer  : jrasheed178@gmail.com
+-- Stability   : experimental
+--
+-- Helper functions for performing the two-phase simplex method.
 module Linear.Simplex.Util where
 
+import Control.Lens
+import Control.Monad.IO.Class (MonadIO (..))
+import Control.Monad.Logger (LogLevel (..), LogLine, MonadLogger, logDebug, logError, logInfo, logWarn)
 import Data.Bifunctor
+import Data.Generics.Labels ()
+import Data.Generics.Product (field)
 import Data.List
+import qualified Data.Map as Map
+import qualified Data.Map.Merge.Lazy as MapMerge
+import Data.Maybe (fromMaybe)
+import qualified Data.Text as T
+import Data.Time (getCurrentTime)
+import Data.Time.Format.ISO8601 (iso8601Show)
 import Linear.Simplex.Types
 import Prelude hiding (EQ)
 
@@ -20,17 +30,11 @@ isMax :: ObjectiveFunction -> Bool
 isMax (Max _) = True
 isMax (Min _) = False
 
--- | Extract the objective ('VarConstMap') from an 'ObjectiveFunction'
-getObjective :: ObjectiveFunction -> VarConstMap
-getObjective (Max o) = o
-getObjective (Min o) = o
-
-{- | Simplifies a system of 'PolyConstraint's by first calling 'simplifyPolyConstraint',
- then reducing 'LEQ' and 'GEQ' with same LHS and RHS (and other similar situations) into 'EQ',
- and finally removing duplicate elements using 'nub'.
--}
+-- | Simplifies a system of 'PolyConstraint's by first calling 'simplifyPolyConstraint',
+--  then reducing 'LEQ' and 'GEQ' with same LHS and RHS (and other similar situations) into 'EQ',
+--  and finally removing duplicate elements using 'nub'.
 simplifySystem :: [PolyConstraint] -> [PolyConstraint]
-simplifySystem = nub . reduceSystem . map simplifyPolyConstraint
+simplifySystem = nub . reduceSystem
   where
     reduceSystem :: [PolyConstraint] -> [PolyConstraint]
     reduceSystem [] = []
@@ -44,7 +48,7 @@ simplifySystem = nub . reduceSystem . map simplifyPolyConstraint
                   _ -> False
               )
               pcs
-       in if null matchingConstraints
+      in  if null matchingConstraints
             then LEQ lhs rhs : reduceSystem pcs
             else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
     -- Reduce GEQ with matching LEQ and EQ into EQ
@@ -57,7 +61,7 @@ simplifySystem = nub . reduceSystem . map simplifyPolyConstraint
                   _ -> False
               )
               pcs
-       in if null matchingConstraints
+      in  if null matchingConstraints
             then GEQ lhs rhs : reduceSystem pcs
             else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
     -- Reduce EQ with matching LEQ and GEQ into EQ
@@ -70,79 +74,111 @@ simplifySystem = nub . reduceSystem . map simplifyPolyConstraint
                   _ -> False
               )
               pcs
-       in if null matchingConstraints
+      in  if null matchingConstraints
             then EQ lhs rhs : reduceSystem pcs
             else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
 
--- | Simplify an 'ObjectiveFunction' by first 'sort'ing and then calling 'foldSumVarConstMap' on the 'VarConstMap'.
-simplifyObjectiveFunction :: ObjectiveFunction -> ObjectiveFunction
-simplifyObjectiveFunction (Max varConstMap) = Max (foldSumVarConstMap (sort varConstMap))
-simplifyObjectiveFunction (Min varConstMap) = Min (foldSumVarConstMap (sort varConstMap))
+-- | Converts a 'Dict' to a 'Tableau' using 'dictEntryToTableauEntry'.
+--  FIXME: maybe remove this line. The basic variables will have a coefficient of 1 in the 'Tableau'.
+dictionaryFormToTableau :: Dict -> Tableau
+dictionaryFormToTableau =
+  Map.mapWithKey
+    ( \basicVar (DictValue {..}) ->
+        TableauRow
+          { lhs = Map.insert basicVar 1 $ negate <$> varMapSum
+          , rhs = constant
+          }
+    )
 
--- | Simplify a 'PolyConstraint' by first 'sort'ing and then calling 'foldSumVarConstMap' on the 'VarConstMap'.
-simplifyPolyConstraint :: PolyConstraint -> PolyConstraint
-simplifyPolyConstraint (LEQ varConstMap rhs) = LEQ (foldSumVarConstMap (sort varConstMap)) rhs
-simplifyPolyConstraint (GEQ varConstMap rhs) = GEQ (foldSumVarConstMap (sort varConstMap)) rhs
-simplifyPolyConstraint (EQ varConstMap rhs) = EQ (foldSumVarConstMap (sort varConstMap)) rhs
+-- | Converts a 'Tableau' to a 'Dict'.
+--  We do this by isolating the basic variable on the LHS, ending up with all non basic variables and a 'SimplexNum' constant on the RHS.
+tableauInDictionaryForm :: Tableau -> Dict
+tableauInDictionaryForm =
+  Map.mapWithKey
+    ( \basicVar (TableauRow {..}) ->
+        let basicVarCoeff = fromMaybe 1 $ Map.lookup basicVar lhs
+        in  DictValue
+              { varMapSum =
+                  Map.map
+                    (\c -> negate c / basicVarCoeff)
+                    $ Map.delete basicVar lhs
+              , constant = rhs / basicVarCoeff
+              }
+    )
 
--- | Add a sorted list of 'VarConstMap's, folding where the variables are equal
-foldSumVarConstMap :: [(Integer, Rational)] -> [(Integer, Rational)]
-foldSumVarConstMap [] = []
-foldSumVarConstMap [(v, c)] = [(v, c)]
-foldSumVarConstMap ((v1, c1) : (v2, c2) : vcm) =
-  if v1 == v2
-    then
-      let newC = c1 + c2
-       in if newC == 0
-            then foldSumVarConstMap vcm
-            else foldSumVarConstMap $ (v1, c1 + c2) : vcm
-    else (v1, c1) : foldSumVarConstMap ((v2, c2) : vcm)
-
--- | Get a map of the value of every 'Integer' variable in a 'Tableau'
-displayTableauResults :: Tableau -> [(Integer, Rational)]
-displayTableauResults = map (\(basicVar, (_, rhs)) -> (basicVar, rhs))
-
--- | Get a map of the value of every 'Integer' variable in a 'DictionaryForm'
-displayDictionaryResults :: DictionaryForm -> [(Integer, Rational)]
-displayDictionaryResults dict = displayTableauResults $ dictionaryFormToTableau dict
-
--- | Map the given 'Integer' variable to the given 'ObjectiveFunction', for entering into 'DictionaryForm'.
-createObjectiveDict :: ObjectiveFunction -> Integer -> (Integer, VarConstMap)
-createObjectiveDict (Max obj) objectiveVar = (objectiveVar, obj)
-createObjectiveDict (Min obj) objectiveVar = (objectiveVar, map (second negate) obj)
-
-{- | Converts a 'Tableau' to 'DictionaryForm'.
- We do this by isolating the basic variable on the LHS, ending up with all non basic variables and a 'Rational' constant on the RHS.
- (-1) is used to represent the rational constant.
--}
-tableauInDictionaryForm :: Tableau -> DictionaryForm
-tableauInDictionaryForm [] = []
-tableauInDictionaryForm ((basicVar, (vcm, r)) : rows) =
-  (basicVar, (-1, r / basicCoeff) : map (\(v, c) -> (v, negate c / basicCoeff)) nonBasicVars) : tableauInDictionaryForm rows
-  where
-    basicCoeff = if null basicVars then 1 else snd $ head basicVars
-    (basicVars, nonBasicVars) = partition (\(v, _) -> v == basicVar) vcm
-
-{- | Converts a 'DictionaryForm' to a 'Tableau'.
- This is done by moving all non-basic variables from the right to the left.
- The rational constant (represented by the 'Integer' variable -1) stays on the right.
- The basic variables will have a coefficient of 1 in the 'Tableau'.
--}
-dictionaryFormToTableau :: DictionaryForm -> Tableau
-dictionaryFormToTableau [] = []
-dictionaryFormToTableau ((basicVar, row) : rows) =
-  (basicVar, ((basicVar, 1) : map (second negate) nonBasicVars, r)) : dictionaryFormToTableau rows
-  where
-    (rationalConstant, nonBasicVars) = partition (\(v, _) -> v == (-1)) row
-    r = if null rationalConstant then 0 else (snd . head) rationalConstant -- If there is no rational constant found in the right side, the rational constant is 0.
-
-{- | If this function is given 'Nothing', return 'Nothing'.
- Otherwise, we 'lookup' the 'Integer' given in the first item of the pair in the map given in the second item of the pair.
- This is typically used to extract the value of the 'ObjectiveFunction' after calling 'Linear.Simplex.Simplex.twoPhaseSimplex'.
--}
-extractObjectiveValue :: Maybe (Integer, [(Integer, Rational)]) -> Maybe Rational
-extractObjectiveValue Nothing = Nothing
-extractObjectiveValue (Just (objVar, results)) =
-  case lookup objVar results of
+-- | If this function is given 'Nothing', return 'Nothing'.
+--  Otherwise, we 'lookup' the 'Integer' given in the first item of the pair in the map given in the second item of the pair.
+--  This is typically used to extract the value of the 'ObjectiveFunction' after calling 'Linear.Simplex.Solver.TwoPhase.twoPhaseSimplex'.
+extractObjectiveValue :: Maybe Result -> Maybe SimplexNum
+extractObjectiveValue = fmap $ \result ->
+  case Map.lookup result.objectiveVar result.varValMap of
     Nothing -> error "Objective not found in results when extracting objective value"
-    r -> r
+    Just r -> r
+
+-- | Combines two 'VarLitMapSums together by summing values with matching keys
+combineVarLitMapSums :: VarLitMapSum -> VarLitMapSum -> VarLitMapSum
+combineVarLitMapSums =
+  MapMerge.merge
+    (MapMerge.mapMaybeMissing keepVal)
+    (MapMerge.mapMaybeMissing keepVal)
+    (MapMerge.zipWithMaybeMatched sumVals)
+  where
+    keepVal = const pure
+    sumVals k v1 v2 = Just $ v1 + v2
+
+foldDictValue :: [DictValue] -> DictValue
+foldDictValue [] = error "Empty list of DictValues given to foldDictValue"
+foldDictValue [x] = x
+foldDictValue (DictValue {varMapSum = vm1, constant = c1} : DictValue {varMapSum = vm2, constant = c2} : dvs) =
+  let combinedDictValue =
+        DictValue
+          { varMapSum = foldVarLitMap [vm1, vm2]
+          , constant = c1 + c2
+          }
+  in  foldDictValue $ combinedDictValue : dvs
+
+foldVarLitMap :: [VarLitMap] -> VarLitMap
+foldVarLitMap [] = error "Empty list of VarLitMaps given to foldVarLitMap"
+foldVarLitMap [x] = x
+foldVarLitMap (vm1 : vm2 : vms) =
+  let combinedVars = nub $ Map.keys vm1 <> Map.keys vm2
+
+      combinedVarMap =
+        Map.fromList $
+          map
+            ( \var ->
+                let mVm1VarVal = Map.lookup var vm1
+                    mVm2VarVal = Map.lookup var vm2
+                in  ( var
+                    , case (mVm1VarVal, mVm2VarVal) of
+                        (Just vm1VarVal, Just vm2VarVal) -> vm1VarVal + vm2VarVal
+                        (Just vm1VarVal, Nothing) -> vm1VarVal
+                        (Nothing, Just vm2VarVal) -> vm2VarVal
+                        (Nothing, Nothing) -> error "Reached unreachable branch in foldDictValue"
+                    )
+            )
+            combinedVars
+  in  foldVarLitMap $ combinedVarMap : vms
+
+insertPivotObjectiveToDict :: PivotObjective -> Dict -> Dict
+insertPivotObjectiveToDict objective = Map.insert objective.variable (DictValue {varMapSum = objective.function, constant = objective.constant})
+
+showT :: (Show a) => a -> T.Text
+showT = T.pack . show
+
+logMsg :: (MonadIO m, MonadLogger m) => LogLevel -> T.Text -> m ()
+logMsg lvl msg = do
+  currTime <- T.pack . iso8601Show <$> liftIO getCurrentTime
+  let msgToLog = currTime <> ": " <> msg
+  case lvl of
+    LevelDebug -> $logDebug msgToLog
+    LevelInfo -> $logInfo msgToLog
+    LevelWarn -> $logWarn msgToLog
+    LevelError -> $logError msgToLog
+    LevelOther otherLvl -> error "logMsg: LevelOther is not implemented"
+
+extractTableauValues :: Tableau -> Map.Map Var SimplexNum
+extractTableauValues = Map.map (.rhs)
+
+extractDictValues :: Dict -> Map.Map Var SimplexNum
+extractDictValues = Map.map (.constant)

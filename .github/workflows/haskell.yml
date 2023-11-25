@@ -17,21 +17,17 @@ jobs:
   
     steps:
       - uses: actions/checkout@v3
-      - uses: haskell-actions/run-fourmolu@v7
+      - uses: haskell-actions/run-fourmolu@v9
+        with:
+          version: "0.14.0.0"
   build:
     name: GHC ${{ matrix.ghc-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-        ghc-version: ['9.6', '9.4', '9.2', '9.0', '8.10']
-
-        include:
-          - os: windows-latest
-            ghc-version: '9.6'
-          - os: macos-latest
-            ghc-version: '9.6'
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        ghc-version: ['9.6', '9.4', '9.2', '9.0']
 
     steps:
       - uses: actions/checkout@v3
@@ -41,54 +37,94 @@ jobs:
         id: setup
         with:
           ghc-version: ${{ matrix.ghc-version }}
-          # Defaults, added for clarity:
-          cabal-version: 'latest'
-          cabal-update: true
+          enable-stack: true
 
-      - name: Installed minor versions of GHC and Cabal
+      - name: Installed minor versions of GHC, Cabal, and Stack
         shell: bash
         run: |
           GHC_VERSION=$(ghc --numeric-version)
           CABAL_VERSION=$(cabal --numeric-version)
+          STACK_VERSION=$(stack --numeric-version)
           echo "GHC_VERSION=${GHC_VERSION}"     >> "${GITHUB_ENV}"
           echo "CABAL_VERSION=${CABAL_VERSION}" >> "${GITHUB_ENV}"
+          echo "STACK_VERSION=${STACK_VERSION}" >> "${GITHUB_ENV}"
 
       - name: Configure the build
         run: |
-          cabal configure --enable-tests --enable-benchmarks --disable-documentation
-          cabal build --dry-run
+          # cabal configure --enable-tests --enable-benchmarks --disable-documentation
+          # cabal build --dry-run
+          stack build --test --bench --no-haddock --dry-run
         # The last step generates dist-newstyle/cache/plan.json for the cache key.
 
-      - name: Restore cached dependencies
+      - name: Restore .stack-work cache
         uses: actions/cache/restore@v3
-        id: cache
+        id: cache-restore-stack-work
         with:
-          path: ${{ steps.setup.outputs.cabal-store }}
-          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-cabal-${{ env.CABAL_VERSION }}-plan-${{ hashFiles('**/plan.json') }}
+          path: .stack-work
+          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-work-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}-${{ hashFiles('**/*.hs') }}
           restore-keys: |
-            ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-cabal-${{ env.CABAL_VERSION }}-
-
-      - name: Install dependencies
-        run: cabal build all --only-dependencies
-
-      # Cache dependencies already here, so that we do not have to rebuild them should the subsequent steps fail.
-      - name: Save cached dependencies
-        uses: actions/cache/save@v3
-        # Caches are immutable, trying to save with the same key would error.
-        if: ${{ !steps.cache.outputs.cache-hit
-          || steps.cache.outputs.cache-primary-key != steps.cache.outputs.cache-matched-key }}
+            ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-work-
+      
+      - name: Restore ~/.stack cache (Unix)
+        uses: actions/cache/restore@v3
+        id: cache-restore-stack-global-unix
+        if: runner.os == 'Linux' || runner.os == 'macOS'
         with:
-          path: ${{ steps.setup.outputs.cabal-store }}
-          key: ${{ steps.cache.outputs.cache-primary-key }}
+          path: ~/.stack
+          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-
 
-      - name: Build
-        run: cabal build all
+      - name: Restore %APPDATA%\stack, %LOCALAPPDATA%\Programs\stack cache (Windows)
+        uses: actions/cache/restore@v3
+        id: cache-restore-stack-global-windows
+        if: runner.os == 'Windows'
+        with:
+          path: |
+            ~\AppData\Roaming\stack
+            ~\AppData\Local\Programs\stack    
+          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-
+
+      - name: Build dependencies
+        run: stack build --only-dependencies
+
+      - name: Build the package
+        run: stack build
+
+      - name: Save .stack-work cache
+        uses: actions/cache/save@v3
+        id: cache-save-stack-work
+        if: steps.cache-restore-stack-work.outputs.cache-hit != 'true'
+        with:
+          path: .stack-work
+          key: ${{ steps.cache-restore-stack-work.outputs.cache-primary-key }}
+   
+      - name: Save %APPDATA%\stack, %LOCALAPPDATA%\Programs\stack cache (Windows)
+        uses: actions/cache/save@v3
+        if: runner.os == 'Windows'
+            && steps.cache-restore-stack-global-windows.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~\AppData\Roaming\stack
+            ~\AppData\Local\Programs\stack    
+          key: ${{ steps.cache-restore-stack-global-windows.outputs.cache-primary-key }}
+  
+      - name: Save ~/.stack cache (Unix)
+        uses: actions/cache/save@v3
+        id: cache-save-stack-global
+        if: (runner.os == 'Linux' || runner.os == 'macOS') 
+            && steps.cache-restore-stack-global-unix.outputs.cache-hit != 'true'
+        with:
+          path: ~/.stack
+          key: ${{ steps.cache-restore-stack-global-unix.outputs.cache-primary-key }}
 
       - name: Run tests
-        run: cabal test all
+        run: stack test
 
       - name: Check cabal file
         run: cabal check
 
       - name: Build documentation
-        run: cabal haddock all
+        run: stack haddock
