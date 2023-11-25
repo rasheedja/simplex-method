@@ -93,10 +93,9 @@ jobs:
       - name: Build the package
         run: stack build
 
-      - name: Save .stack-work cache (Unix)
+      - name: Save .stack-work cache
         uses: actions/cache/save@v3
         id: cache-save-stack-work
-        if: runner.os == 'Linux' || runner.os == 'macOS'
         with:
           path: .stack-work
           key: ${{ steps.cache-restore-stack-work.outputs.cache-primary-key }}
