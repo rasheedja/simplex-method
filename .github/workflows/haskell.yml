@@ -96,6 +96,7 @@ jobs:
       - name: Save .stack-work cache
         uses: actions/cache/save@v3
         id: cache-save-stack-work
+        if: steps.cache-restore-stack-work.outputs.cache-hit != 'true'
         with:
           path: .stack-work
           key: ${{ steps.cache-restore-stack-work.outputs.cache-primary-key }}
@@ -103,6 +104,7 @@ jobs:
       - name: Save %APPDATA%\stack, %LOCALAPPDATA%\Programs\stack cache (Windows)
         uses: actions/cache/save@v3
         if: runner.os == 'Windows'
+            && steps.cache-restore-stack-global-windows.outputs.cache-hit != 'true'
         with:
           path: |
             ~\AppData\Roaming\stack
@@ -112,7 +114,8 @@ jobs:
       - name: Save ~/.stack cache (Unix)
         uses: actions/cache/save@v3
         id: cache-save-stack-global
-        if: runner.os == 'Linux' || runner.os == 'macOS'
+        if: (runner.os == 'Linux' || runner.os == 'macOS') 
+            && steps.cache-restore-stack-global-unix.outputs.cache-hit != 'true'
         with:
           path: ~/.stack
           key: ${{ steps.cache-restore-stack-global-unix.outputs.cache-primary-key }}
