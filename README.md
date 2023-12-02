@@ -122,7 +122,7 @@ The result of the call above is:
 Just 
   (Result
     { objectiveVar = 7 -- Integer representing objective function
-    , varValMap = M.fromList  
+    , varValMap = Map.fromList  
       [ (7, 29) -- Value for variable 7, so max(3x1 + 5x2) = 29.
       , (1, 3) -- Value for variable 1, so x1 = 3 
       , (2, 4) -- Value for variable 2, so x2 = 4
