@@ -98,7 +98,7 @@ data TableauRow = TableauRow
 --   Each entry in the map is a row.
 type Tableau = M.Map Var TableauRow
 
--- | Values for a 'DictEntry'.
+-- | Values for a 'Dict'.
 data DictValue = DictValue
   { varMapSum :: VarLitMapSum
   , constant :: SimplexNum
