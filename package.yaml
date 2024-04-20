@@ -27,11 +27,14 @@ dependencies:
 - monad-logger >= 0.3.40 && < 0.4
 - text >= 2.0.2 && < 2.1
 - time
+- hspec
+- QuickCheck
 
 default-extensions:
   DataKinds
   DeriveFunctor
   DeriveGeneric
+  DerivingStrategies
   DisambiguateRecordFields
   DuplicateRecordFields
   FlexibleContexts
@@ -50,7 +53,8 @@ library:
 
 tests:
   simplex-haskell-test:
-    main:                Spec.hs
-    source-dirs:         test
+    defaults: hspec/hspec@main
     dependencies:
     - simplex-method
+    - hspec
+    - QuickCheck

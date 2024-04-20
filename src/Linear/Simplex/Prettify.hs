@@ -32,11 +32,11 @@ prettyShowVarConstMap = aux . M.toList
           where
             r' = if denominator r == 1 then show (numerator r) else show (numerator r) ++ " / " ++ show (numerator r)
 
--- | Convert a 'PolyConstraint' into a human-readable 'String'
-prettyShowPolyConstraint :: PolyConstraint -> String
-prettyShowPolyConstraint (LEQ vcm r) = prettyShowVarConstMap vcm ++ " <= " ++ show r
-prettyShowPolyConstraint (GEQ vcm r) = prettyShowVarConstMap vcm ++ " >= " ++ show r
-prettyShowPolyConstraint (Linear.Simplex.Types.EQ vcm r) = prettyShowVarConstMap vcm ++ " == " ++ show r
+-- | Convert a 'StandardConstraint' into a human-readable 'String'
+-- prettyShowStandardConstraint :: StandardConstraint -> String
+-- prettyShowStandardConstraint (LEQ vcm r) = prettyShowVarConstMap vcm ++ " <= " ++ show r
+-- prettyShowStandardConstraint (GEQ vcm r) = prettyShowVarConstMap vcm ++ " >= " ++ show r
+-- prettyShowStandardConstraint (Linear.Simplex.Types.EQ vcm r) = prettyShowVarConstMap vcm ++ " == " ++ show r
 
 -- | Convert an 'ObjectiveFunction' into a human-readable 'String'
 prettyShowObjectiveFunction :: ObjectiveFunction -> String

@@ -30,53 +30,53 @@ isMax :: ObjectiveFunction -> Bool
 isMax (Max _) = True
 isMax (Min _) = False
 
--- | Simplifies a system of 'PolyConstraint's by first calling 'simplifyPolyConstraint',
+-- | Simplifies a system of 'StandardConstraint's by first calling 'simplifyStandardConstraint',
 --  then reducing 'LEQ' and 'GEQ' with same LHS and RHS (and other similar situations) into 'EQ',
 --  and finally removing duplicate elements using 'nub'.
-simplifySystem :: [PolyConstraint] -> [PolyConstraint]
-simplifySystem = nub . reduceSystem
-  where
-    reduceSystem :: [PolyConstraint] -> [PolyConstraint]
-    reduceSystem [] = []
-    -- Reduce LEQ with matching GEQ and EQ into EQ
-    reduceSystem ((LEQ lhs rhs) : pcs) =
-      let matchingConstraints =
-            filter
-              ( \case
-                  GEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
-                  EQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
-                  _ -> False
-              )
-              pcs
-      in  if null matchingConstraints
-            then LEQ lhs rhs : reduceSystem pcs
-            else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
-    -- Reduce GEQ with matching LEQ and EQ into EQ
-    reduceSystem ((GEQ lhs rhs) : pcs) =
-      let matchingConstraints =
-            filter
-              ( \case
-                  LEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
-                  EQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
-                  _ -> False
-              )
-              pcs
-      in  if null matchingConstraints
-            then GEQ lhs rhs : reduceSystem pcs
-            else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
-    -- Reduce EQ with matching LEQ and GEQ into EQ
-    reduceSystem ((EQ lhs rhs) : pcs) =
-      let matchingConstraints =
-            filter
-              ( \case
-                  LEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
-                  GEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
-                  _ -> False
-              )
-              pcs
-      in  if null matchingConstraints
-            then EQ lhs rhs : reduceSystem pcs
-            else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
+-- simplifySystem :: [StandardConstraint] -> [StandardConstraint]
+-- simplifySystem = nub . reduceSystem
+--   where
+--     reduceSystem :: [StandardConstraint] -> [StandardConstraint]
+--     reduceSystem [] = []
+--     -- Reduce LEQ with matching GEQ and EQ into EQ
+--     reduceSystem ((LEQ lhs rhs) : pcs) =
+--       let matchingConstraints =
+--             filter
+--               ( \case
+--                   GEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+--                   EQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+--                   _ -> False
+--               )
+--               pcs
+--       in  if null matchingConstraints
+--             then LEQ lhs rhs : reduceSystem pcs
+--             else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
+--     -- Reduce GEQ with matching LEQ and EQ into EQ
+--     reduceSystem ((GEQ lhs rhs) : pcs) =
+--       let matchingConstraints =
+--             filter
+--               ( \case
+--                   LEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+--                   EQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+--                   _ -> False
+--               )
+--               pcs
+--       in  if null matchingConstraints
+--             then GEQ lhs rhs : reduceSystem pcs
+--             else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
+--     -- Reduce EQ with matching LEQ and GEQ into EQ
+--     reduceSystem ((EQ lhs rhs) : pcs) =
+--       let matchingConstraints =
+--             filter
+--               ( \case
+--                   LEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+--                   GEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+--                   _ -> False
+--               )
+--               pcs
+--       in  if null matchingConstraints
+--             then EQ lhs rhs : reduceSystem pcs
+--             else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
 
 -- | Converts a 'Dict' to a 'Tableau' using 'dictEntryToTableauEntry'.
 --  FIXME: maybe remove this line. The basic variables will have a coefficient of 1 in the 'Tableau'.
@@ -182,3 +182,17 @@ extractTableauValues = Map.map (.rhs)
 
 extractDictValues :: Dict -> Map.Map Var SimplexNum
 extractDictValues = Map.map (.constant)
+
+-- scanConstraintVars :: Constraint -> [Var]
+-- scanConstraintVars (Var x <= c) = x : scanConstraintVars c
+-- scanConstraintVars (c <= Var x) = x : scanConstraintVars c
+-- scanConstraintVars (Var x >= c) = x : scanConstraintVars c
+-- scanConstraintVars (c >= Var x) = x : scanConstraintVars c
+-- scanConstraintVars (Var x == c) = x : scanConstraintVars c
+-- scanConstraintVars (c == Var x) = x : scanConstraintVars c
+-- scanConstraintVars (c1 <= c2) = scanConstraintVars c1 <> scanConstraintVars c2
+-- scanConstraintVars (c1 >= c2) = scanConstraintVars c1 <> scanConstraintVars c2
+-- scanConstraintVars (c1 == c2) = scanConstraintVars c1 <> scanConstraintVars c2
+
+-- scanConstraintVarBounds :: Constraint -> VarBounds
+-- scanConstraintVarBounds (Var x <= c) = Map.singleton x (Just c, Nothing)

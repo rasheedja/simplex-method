@@ -11,15 +11,15 @@ The `Linear.Simplex.Solver.TwoPhase` module contain both phases of the two-phase
 Phase one is implemented by `findFeasibleSolution`:
 
 ```haskell
-findFeasibleSolution :: [PolyConstraint] -> Maybe (DictionaryForm, [Integer], [Integer], Integer)
+findFeasibleSolution :: [StandardConstraint] -> Maybe (DictionaryForm, [Integer], [Integer], Integer)
 ```
 
-`findFeasibleSolution` takes a list of `PolyConstraint`s.
-The `PolyConstraint` type, as well as other custom types required by this library, are defined in the `Linear.Simplex.Types` module.
-`PolyConstraint` is defined as:
+`findFeasibleSolution` takes a list of `StandardConstraint`s.
+The `StandardConstraint` type, as well as other custom types required by this library, are defined in the `Linear.Simplex.Types` module.
+`StandardConstraint` is defined as:
 
 ```haskell
-data PolyConstraint =
+data StandardConstraint =
   LEQ Vars Rational      | 
   GEQ Vars Rational      | 
   EQ  Vars Rational       deriving (Show, Eq);
@@ -34,11 +34,11 @@ type Vars = [(Integer, Rational)]
 A `Vars` is treated as a list of `Integer` variables mapped to their `Rational` coefficients, with an implicit `+` between each element in the list.
 For example: `[(1, 2), (2, (-3)), (1, 3)]` is equivalent to `(2x1 + (-3x2) + 3x1)`.
 
-And a `PolyConstraint` is an inequality/equality where the LHS is a `Vars` and the RHS is a `Rational`.
+And a `StandardConstraint` is an inequality/equality where the LHS is a `Vars` and the RHS is a `Rational`.
 For example: `LEQ [(1, 2), (2, (-3)), (1, 3)] 60` is equivalent to `(2x1 + (-3x2) + 3x1) <= 60`.
 
-Passing a `[PolyConstraint]` to `findFeasibleSolution` will return a feasible solution if it exists as well as a list of slack variables, artificial variables, and a variable that can be safely used to represent the objective for phase two.
-`Nothing` is returned if the given `[PolyConstraint]` is infeasible.
+Passing a `[StandardConstraint]` to `findFeasibleSolution` will return a feasible solution if it exists as well as a list of slack variables, artificial variables, and a variable that can be safely used to represent the objective for phase two.
+`Nothing` is returned if the given `[StandardConstraint]` is infeasible.
 The feasible system is returned as the type `DictionaryForm`:
 
 ```haskell
@@ -70,7 +70,7 @@ If a variable is not in this list, the variable is equal to 0.
 It has the type:
 
 ```haskell
-twoPhaseSimplex :: ObjectiveFunction -> [PolyConstraint] -> Maybe (Integer, [(Integer, Rational)])
+twoPhaseSimplex :: ObjectiveFunction -> [StandardConstraint] -> Maybe (Integer, [(Integer, Rational)])
 ```
 
 The return type is the same as that of `optimizeFeasibleSystem`
@@ -93,7 +93,7 @@ This implementation assumes that the user only provides positive `Integer` varia
 ## Example
 
 ```haskell
-exampleFunction :: (ObjectiveFunction, [PolyConstraint])
+exampleFunction :: (ObjectiveFunction, [StandardConstraint])
 exampleFunction =
   (
     Max [(1, 3), (2, 5)],      -- 3x1 + 5x2
@@ -122,7 +122,7 @@ Just
 ```
 
 There are many more examples in test/TestFunctions.hs.
-You may use `prettyShowVarConstMap`, `prettyShowPolyConstraint`, and `prettyShowObjectiveFunction` to convert these tests into a more human-readable format.
+You may use `prettyShowVarConstMap`, `prettyShowStandardConstraint`, and `prettyShowObjectiveFunction` to convert these tests into a more human-readable format.
 
 ## Issues
 

@@ -28,11 +28,11 @@ import GHC.Real (Ratio)
 import Linear.Simplex.Types
 import Linear.Simplex.Util
 
--- | Find a feasible solution for the given system of 'PolyConstraint's by performing the first phase of the two-phase simplex method
---  All variables in the 'PolyConstraint' must be positive.
+-- | Find a feasible solution for the given system of 'StandardConstraint's by performing the first phase of the two-phase simplex method
+--  All variables in the 'StandardConstraint' must be positive.
 --  If the system is infeasible, return 'Nothing'
 --  Otherwise, return the feasible system in 'Dict' as well as a list of slack variables, a list artificial variables, and the objective variable.
-findFeasibleSolution :: (MonadIO m, MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
+findFeasibleSolution :: (MonadIO m, MonadLogger m) => [StandardConstraint] -> m (Maybe FeasibleSystem)
 findFeasibleSolution unsimplifiedSystem = do
   logMsg LevelInfo $ "findFeasibleSolution: Looking for solution for " <> showT unsimplifiedSystem
   if null artificialVars -- No artificial vars, we have a feasible system
@@ -121,17 +121,19 @@ findFeasibleSolution unsimplifiedSystem = do
               <> showT systemWithBasicVarsAsDictionary
           pure Nothing
   where
+    simplifySystem = undefined
+
     system = simplifySystem unsimplifiedSystem
 
-    maxVar =
-      maximum $
-        map
-          ( \case
-              LEQ vcm _ -> maximum (map fst $ M.toList vcm)
-              GEQ vcm _ -> maximum (map fst $ M.toList vcm)
-              EQ vcm _ -> maximum (map fst $ M.toList vcm)
-          )
-          system
+    maxVar = undefined
+      -- maximum $
+      --   map
+      --     ( \case
+      --         LEQ vcm _ -> maximum (map fst $ M.toList vcm)
+      --         GEQ vcm _ -> maximum (map fst $ M.toList vcm)
+      --         EQ vcm _ -> maximum (map fst $ M.toList vcm)
+      --     )
+      --     system
 
     (systemWithSlackVars, slackVars) = systemInStandardForm system maxVar []
 
@@ -147,76 +149,76 @@ findFeasibleSolution unsimplifiedSystem = do
 
     objectiveVar = finalMaxVar + 1
 
-    -- Convert a system of 'PolyConstraint's to standard form; a system of only equations ('EQ').
+    -- Convert a system of 'StandardConstraint's to standard form; a system of only equations ('EQ').
     -- Add slack vars where necessary.
     -- This may give you an infeasible system if slack vars are negative when original variables are zero.
     -- If a constraint is already EQ, set the basic var to Nothing.
     -- Final system is a list of equalities for the given system.
     -- To be feasible, all vars must be >= 0.
-    systemInStandardForm :: [PolyConstraint] -> Var -> [Var] -> ([(Maybe Var, PolyConstraint)], [Var])
+    systemInStandardForm :: [StandardConstraint] -> Var -> [Var] -> ([(Maybe Var, StandardConstraint)], [Var])
     systemInStandardForm [] _ sVars = ([], sVars)
-    systemInStandardForm (EQ v r : xs) maxVar sVars = ((Nothing, EQ v r) : newSystem, newSlackVars)
-      where
-        (newSystem, newSlackVars) = systemInStandardForm xs maxVar sVars
-    systemInStandardForm (LEQ v r : xs) maxVar sVars = ((Just newSlackVar, EQ (M.insert newSlackVar 1 v) r) : newSystem, newSlackVars)
-      where
-        newSlackVar = maxVar + 1
-        (newSystem, newSlackVars) = systemInStandardForm xs newSlackVar (newSlackVar : sVars)
-    systemInStandardForm (GEQ v r : xs) maxVar sVars = ((Just newSlackVar, EQ (M.insert newSlackVar (-1) v) r) : newSystem, newSlackVars)
-      where
-        newSlackVar = maxVar + 1
-        (newSystem, newSlackVars) = systemInStandardForm xs newSlackVar (newSlackVar : sVars)
+    -- systemInStandardForm (EQ v r : xs) maxVar sVars = ((Nothing, EQ v r) : newSystem, newSlackVars)
+    --   where
+    --     (newSystem, newSlackVars) = systemInStandardForm xs maxVar sVars
+    -- systemInStandardForm (LEQ v r : xs) maxVar sVars = ((Just newSlackVar, EQ (M.insert newSlackVar 1 v) r) : newSystem, newSlackVars)
+    --   where
+    --     newSlackVar = maxVar + 1
+    --     (newSystem, newSlackVars) = systemInStandardForm xs newSlackVar (newSlackVar : sVars)
+    -- systemInStandardForm (GEQ v r : xs) maxVar sVars = ((Just newSlackVar, EQ (M.insert newSlackVar (-1) v) r) : newSystem, newSlackVars)
+    --   where
+    --     newSlackVar = maxVar + 1
+    --     (newSystem, newSlackVars) = systemInStandardForm xs newSlackVar (newSlackVar : sVars)
 
-    -- Add artificial vars to a system of 'PolyConstraint's.
+    -- Add artificial vars to a system of 'StandardConstraint's.
     -- Artificial vars are added when:
     --  Basic var is Nothing (When the original constraint was already an EQ).
     --  Slack var is equal to a negative value (this is infeasible, all vars need to be >= 0).
     --  Final system will be a feasible artificial system.
     -- We keep track of artificial vars in the second item of the returned pair so they can be eliminated once phase 1 is complete.
     -- If an artificial var would normally be negative, we negate the row so we can keep artificial variables equal to 1
-    systemWithArtificialVars :: [(Maybe Var, PolyConstraint)] -> Var -> (Tableau, [Var])
+    systemWithArtificialVars :: [(Maybe Var, StandardConstraint)] -> Var -> (Tableau, [Var])
     systemWithArtificialVars [] _ = (M.empty, [])
-    systemWithArtificialVars ((mVar, EQ v r) : pcs) maxVar =
-      case mVar of
-        Nothing ->
-          if r >= 0
-            then
-              ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar 1 v, rhs = r}) newSystemWithNewMaxVar
-              , newArtificialVar : artificialVarsWithNewMaxVar
-              )
-            else
-              ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar (-1) v, rhs = r}) newSystemWithNewMaxVar
-              , newArtificialVar : artificialVarsWithNewMaxVar
-              )
-        Just basicVar ->
-          case M.lookup basicVar v of
-            Just basicVarCoeff ->
-              if r == 0
-                then (M.insert basicVar (TableauRow {lhs = v, rhs = r}) newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
-                else
-                  if r > 0
-                    then
-                      if basicVarCoeff >= 0 -- Should only be 1 in the standard call path
-                        then (M.insert basicVar (TableauRow {lhs = v, rhs = r}) newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
-                        else
-                          ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar 1 v, rhs = r}) newSystemWithNewMaxVar
-                          , newArtificialVar : artificialVarsWithNewMaxVar -- Slack var is negative, r is positive (when original constraint was GEQ)
-                          )
-                    else -- r < 0
+    -- systemWithArtificialVars ((mVar, EQ v r) : pcs) maxVar =
+    --   case mVar of
+    --     Nothing ->
+    --       if r >= 0
+    --         then
+    --           ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar 1 v, rhs = r}) newSystemWithNewMaxVar
+    --           , newArtificialVar : artificialVarsWithNewMaxVar
+    --           )
+    --         else
+    --           ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar (-1) v, rhs = r}) newSystemWithNewMaxVar
+    --           , newArtificialVar : artificialVarsWithNewMaxVar
+    --           )
+    --     Just basicVar ->
+    --       case M.lookup basicVar v of
+    --         Just basicVarCoeff ->
+    --           if r == 0
+    --             then (M.insert basicVar (TableauRow {lhs = v, rhs = r}) newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
+    --             else
+    --               if r > 0
+    --                 then
+    --                   if basicVarCoeff >= 0 -- Should only be 1 in the standard call path
+    --                     then (M.insert basicVar (TableauRow {lhs = v, rhs = r}) newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
+    --                     else
+    --                       ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar 1 v, rhs = r}) newSystemWithNewMaxVar
+    --                       , newArtificialVar : artificialVarsWithNewMaxVar -- Slack var is negative, r is positive (when original constraint was GEQ)
+    --                       )
+    --                 else -- r < 0
 
-                      if basicVarCoeff <= 0 -- Should only be -1 in the standard call path
-                        then (M.insert basicVar (TableauRow {lhs = v, rhs = r}) newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
-                        else
-                          ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar (-1) v, rhs = r}) newSystemWithNewMaxVar
-                          , newArtificialVar : artificialVarsWithNewMaxVar -- Slack var is negative, r is negative (when original constraint was LEQ)
-                          )
-            Nothing -> error "1" -- undefined
-      where
-        newArtificialVar = maxVar + 1
+    --                   if basicVarCoeff <= 0 -- Should only be -1 in the standard call path
+    --                     then (M.insert basicVar (TableauRow {lhs = v, rhs = r}) newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
+    --                     else
+    --                       ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar (-1) v, rhs = r}) newSystemWithNewMaxVar
+    --                       , newArtificialVar : artificialVarsWithNewMaxVar -- Slack var is negative, r is negative (when original constraint was LEQ)
+    --                       )
+    --         Nothing -> error "1" -- undefined
+    --   where
+    --     newArtificialVar = maxVar + 1
 
-        (newSystemWithNewMaxVar, artificialVarsWithNewMaxVar) = systemWithArtificialVars pcs newArtificialVar
+    --     (newSystemWithNewMaxVar, artificialVarsWithNewMaxVar) = systemWithArtificialVars pcs newArtificialVar
 
-        (newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar) = systemWithArtificialVars pcs maxVar
+    --     (newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar) = systemWithArtificialVars pcs maxVar
     systemWithArtificialVars _ _ = error "systemWithArtificialVars: given system includes non-EQ constraints"
 
     -- \| Takes a 'Dict' and a '[Var]' as input and returns a 'PivotObjective'.
@@ -376,11 +378,11 @@ optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..})
               )
               (M.toList objFunction.objective)
 
--- | Perform the two phase simplex method with a given 'ObjectiveFunction' a system of 'PolyConstraint's.
---  Assumes the 'ObjectiveFunction' and 'PolyConstraint' is not empty.
+-- | Perform the two phase simplex method with a given 'ObjectiveFunction' a system of 'StandardConstraint's.
+--  Assumes the 'ObjectiveFunction' and 'StandardConstraint' is not empty.
 --  Returns a pair with the first item being the 'Integer' variable equal to the 'ObjectiveFunction'
 --  and the second item being a map of the values of all 'Integer' variables appearing in the system, including the 'ObjectiveFunction'.
-twoPhaseSimplex :: (MonadIO m, MonadLogger m) => ObjectiveFunction -> [PolyConstraint] -> m (Maybe Result)
+twoPhaseSimplex :: (MonadIO m, MonadLogger m) => ObjectiveFunction -> [StandardConstraint] -> m (Maybe Result)
 twoPhaseSimplex objFunction unsimplifiedSystem = do
   logMsg LevelInfo $
     "twoPhaseSimplex: Solving system " <> showT unsimplifiedSystem <> " with objective " <> showT objFunction

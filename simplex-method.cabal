@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.35.1.
+-- This file has been generated from package.yaml by hpack version 0.36.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -27,8 +27,10 @@ source-repository head
 
 library
   exposed-modules:
+      Linear.Simplex.DeriveBounds
       Linear.Simplex.Prettify
       Linear.Simplex.Solver.TwoPhase
+      Linear.Simplex.Standardize
       Linear.Simplex.Types
       Linear.Simplex.Util
   other-modules:
@@ -36,11 +38,13 @@ library
   hs-source-dirs:
       src
   default-extensions:
-      DataKinds DeriveFunctor DeriveGeneric DisambiguateRecordFields DuplicateRecordFields FlexibleContexts LambdaCase OverloadedLabels OverloadedRecordDot OverloadedStrings RecordWildCards TemplateHaskell TupleSections TypeApplications NamedFieldPuns
+      DataKinds DeriveFunctor DeriveGeneric DerivingStrategies DisambiguateRecordFields DuplicateRecordFields FlexibleContexts LambdaCase OverloadedLabels OverloadedRecordDot OverloadedStrings RecordWildCards TemplateHaskell TupleSections TypeApplications NamedFieldPuns
   build-depends:
-      base >=4.14 && <5
+      QuickCheck
+    , base >=4.14 && <5
     , containers >=0.6.5.1 && <0.7
     , generic-lens >=2.2.0 && <2.3
+    , hspec
     , lens >=5.2.2 && <5.3
     , monad-logger >=0.3.40 && <0.4
     , text >=2.0.2 && <2.1
@@ -51,19 +55,22 @@ test-suite simplex-haskell-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      TestFunctions
+      Linear.Simplex.TypesSpec
       Paths_simplex_method
   hs-source-dirs:
       test
   default-extensions:
-      DataKinds DeriveFunctor DeriveGeneric DisambiguateRecordFields DuplicateRecordFields FlexibleContexts LambdaCase OverloadedLabels OverloadedRecordDot OverloadedStrings RecordWildCards TemplateHaskell TupleSections TypeApplications NamedFieldPuns
+      DataKinds DeriveFunctor DeriveGeneric DerivingStrategies DisambiguateRecordFields DuplicateRecordFields FlexibleContexts LambdaCase OverloadedLabels OverloadedRecordDot OverloadedStrings RecordWildCards TemplateHaskell TupleSections TypeApplications NamedFieldPuns
   build-depends:
-      base >=4.14 && <5
+      QuickCheck
+    , base >=4.14 && <5
     , containers >=0.6.5.1 && <0.7
     , generic-lens >=2.2.0 && <2.3
+    , hspec
     , lens >=5.2.2 && <5.3
     , monad-logger >=0.3.40 && <0.4
     , simplex-method
     , text >=2.0.2 && <2.1
     , time
   default-language: Haskell2010
+  build-tool-depends: hspec-discover:hspec-discover == 2.*
