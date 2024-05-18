@@ -371,7 +371,23 @@ deriveBounds = foldr updateBounds M.empty
     updateBounds _ = id
 
     mergeBounds :: Bounds -> Bounds -> Bounds
-    mergeBounds (Bounds l1 u1) (Bounds l2 u2) = Bounds (liftA2 max l1 l2) (liftA2 min u1 u2)
+    mergeBounds (Bounds l1 u1) (Bounds l2 u2) = Bounds (mergeLower l1 l2) (mergeUpper u1 u2)
+      where
+        mergeLower Nothing b = b
+        mergeLower a Nothing = a
+        mergeLower (Just a) (Just b) = Just (max a b)
+
+        mergeUpper Nothing b = b
+        mergeUpper a Nothing = a
+        mergeUpper (Just a) (Just b) = Just (min a b)
+
+validateBounds :: VarBounds -> Bool
+validateBounds boundsMap = all soundBounds $ M.toList boundsMap
+  where
+    soundBounds (_, Bounds lowerBound upperBound) =
+      case (lowerBound, upperBound) of
+        (Just l, Just u) -> l <= u
+        (_, _) -> True
 
 -- Eliminate inequalities which are outside the bounds
 -- precondition: no zero coefficients
