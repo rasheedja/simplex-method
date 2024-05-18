@@ -341,6 +341,17 @@ type SimpleSystem = [SimpleConstraint]
 simplifySimpleSystem :: SimpleSystem -> SimpleSystem
 simplifySimpleSystem = map simplifySimpleConstraint
 
+findHighestVar :: SimpleSystem -> Var
+findHighestVar simpleSystem =
+  let
+    vars = [v | gc <- simpleSystem,
+                term <- exprToList $ getGenericConstraintLHS gc,
+                v <- case term of
+                       VarTerm v -> [v]
+                       CoeffTerm _ v -> [v]
+                       _ -> []]
+  in maximum vars
+
 data StandardFormRow = StandardFormRow
   { lhs :: Expr
   , rhs :: SimplexNum
@@ -405,9 +416,6 @@ removeUselessSystemBounds constraints bounds =
     _ -> True
   )
   constraints
-
-findHighestVar :: SimpleSystem -> Var
-findHighestVar = maximum . map (maximum . map (\case (CoeffTerm _ v) -> v; _ -> 0) . exprToList . getGenericConstraintLHS)
 
 -- | Eliminate negative lower bounds via substitution
 -- Return the system with the eliminated variables and a map of the eliminated variables to their equivalent expressions

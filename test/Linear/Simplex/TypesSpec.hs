@@ -539,6 +539,32 @@ spec = do
                 <> show simplifiedSimpleSystemEval
             ) $
             simpleSystemEval == simplifiedSimpleSystemEval
+    it "findHighestVar finds the highest variable in a simple system" $ do
+      let simpleSystem1 =
+            [ Expr (VarTerm 0) :>= 0
+            , Expr (VarTerm 0) :<= 1
+            , Expr (VarTerm 1) :>= 0
+            , Expr (VarTerm 1) :<= 1
+            ]
+          simpleSystem100 =
+            [ Expr (VarTerm 0) :<= 1
+            , Expr (VarTerm 50) :<= 1
+            , Expr (VarTerm 100) :<= 1
+            ]
+          simpleSystem10 =
+            [ Expr (VarTerm (-10)) :<= 1
+            , Expr (VarTerm 0) :<= 1
+            , Expr (VarTerm 10) :<= 1
+            ]
+          simpleSystemMinus10 =
+            [ Expr (VarTerm (-10)) :<= 1
+            , Expr (VarTerm (-20)) :<= 1
+            ]
+          
+      findHighestVar simpleSystem1 `shouldBe` 1
+      findHighestVar simpleSystem100 `shouldBe` 100
+      findHighestVar simpleSystem10 `shouldBe` 10
+      findHighestVar simpleSystemMinus10 `shouldBe` (-10)
   describe "Bounds" $ do
     it "validateBounds finds that deriving bounds for a system where -1 <= x <= 1 has valid bounds" $ do
       let simpleSystem =
@@ -691,4 +717,3 @@ spec = do
           simplifiedSimpleSystem = removeUselessSystemBounds simpleSystem bounds
           expectedSimpleSystem = [Expr (VarTerm 0) :<= 2, Expr (CoeffTerm 2 0) :<= 6]
       simplifiedSimpleSystem `shouldBe` expectedSimpleSystem
-      
