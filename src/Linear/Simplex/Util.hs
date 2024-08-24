@@ -9,13 +9,18 @@
 -- Helper functions for performing the two-phase simplex method.
 module Linear.Simplex.Util where
 
-import Control.Lens
 import Control.Monad.IO.Class (MonadIO (..))
-import Control.Monad.Logger (LogLevel (..), LogLine, MonadLogger, logDebug, logError, logInfo, logWarn)
-import Data.Bifunctor
-import Data.Generics.Labels ()
+import Control.Monad.Logger
+  ( LogLevel (..)
+  , LogLine
+  , MonadLogger
+  , logDebug
+  , logError
+  , logInfo
+  , logWarn
+  )
 import Data.Generics.Product (field)
-import Data.List
+import Data.List (map, nub)
 import qualified Data.Map as Map
 import qualified Data.Map.Merge.Lazy as MapMerge
 import Data.Maybe (fromMaybe)
@@ -23,6 +28,17 @@ import qualified Data.Text as T
 import Data.Time (getCurrentTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Linear.Simplex.Types
+  ( Dict
+  , DictValue (..)
+  , ObjectiveFunction (Max, Min)
+  , PivotObjective (constant, function, variable)
+  , Result (objectiveVar, varValMap)
+  , Tableau
+  , TableauRow (TableauRow, lhs, rhs)
+  , VarLitMap
+  , VarLitMapSum
+  )
+import Linear.Var.Types (SimplexNum, Var)
 import Prelude hiding (EQ)
 
 -- | Is the given 'ObjectiveFunction' to be 'Max'imized?
@@ -129,13 +145,17 @@ combineVarLitMapSums =
 foldDictValue :: [DictValue] -> DictValue
 foldDictValue [] = error "Empty list of DictValues given to foldDictValue"
 foldDictValue [x] = x
-foldDictValue (DictValue {varMapSum = vm1, constant = c1} : DictValue {varMapSum = vm2, constant = c2} : dvs) =
-  let combinedDictValue =
-        DictValue
-          { varMapSum = foldVarLitMap [vm1, vm2]
-          , constant = c1 + c2
-          }
-  in  foldDictValue $ combinedDictValue : dvs
+foldDictValue
+  ( DictValue {varMapSum = vm1, constant = c1}
+      : DictValue {varMapSum = vm2, constant = c2}
+      : dvs
+    ) =
+    let combinedDictValue =
+          DictValue
+            { varMapSum = foldVarLitMap [vm1, vm2]
+            , constant = c1 + c2
+            }
+    in  foldDictValue $ combinedDictValue : dvs
 
 foldVarLitMap :: [VarLitMap] -> VarLitMap
 foldVarLitMap [] = error "Empty list of VarLitMaps given to foldVarLitMap"
@@ -161,7 +181,10 @@ foldVarLitMap (vm1 : vm2 : vms) =
   in  foldVarLitMap $ combinedVarMap : vms
 
 insertPivotObjectiveToDict :: PivotObjective -> Dict -> Dict
-insertPivotObjectiveToDict objective = Map.insert objective.variable (DictValue {varMapSum = objective.function, constant = objective.constant})
+insertPivotObjectiveToDict objective =
+  Map.insert
+    objective.variable
+    (DictValue {varMapSum = objective.function, constant = objective.constant})
 
 showT :: (Show a) => a -> T.Text
 showT = T.pack . show

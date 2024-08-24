@@ -1,6 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE RankNTypes #-}
-
 -- |
 -- Module      : Linear.Simplex.Prettify
 -- Description : Prettifier for "Linear.Simplex.Types" types
@@ -12,11 +9,12 @@
 -- Converts "Linear.Simplex.Types" types into human-readable 'String's
 module Linear.Simplex.Prettify where
 
-import Control.Lens
-import Data.Generics.Labels ()
-import Data.Map qualified as M
-import Data.Ratio
+import qualified Data.Map as M
+import Data.Ratio (denominator, numerator)
 import Linear.Simplex.Types
+  ( ObjectiveFunction (Max, Min)
+  , VarLitMapSum
+  )
 
 -- | Convert a 'VarConstMap' into a human-readable 'String'
 prettyShowVarConstMap :: VarLitMapSum -> String
@@ -30,7 +28,10 @@ prettyShowVarConstMap = aux . M.toList
             then "(" ++ r' ++ ")"
             else r'
           where
-            r' = if denominator r == 1 then show (numerator r) else show (numerator r) ++ " / " ++ show (numerator r)
+            r' =
+              if denominator r == 1
+                then show (numerator r)
+                else show (numerator r) ++ " / " ++ show (numerator r)
 
 -- | Convert a 'StandardConstraint' into a human-readable 'String'
 -- prettyShowStandardConstraint :: StandardConstraint -> String

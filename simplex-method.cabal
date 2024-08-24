@@ -27,12 +27,30 @@ source-repository head
 
 library
   exposed-modules:
-      Linear.Simplex.DeriveBounds
+      Linear.Constraint.Generic.Types
+      Linear.Constraint.Linear.Types
+      Linear.Constraint.Simple.Types
+      Linear.Constraint.Simple.Util
+      Linear.Constraint.Types
+      Linear.Constraint.Util
+      Linear.Expr.Types
+      Linear.Expr.Util
       Linear.Simplex.Prettify
       Linear.Simplex.Solver.TwoPhase
+      Linear.Simplex.Solver.Types
       Linear.Simplex.Standardize
       Linear.Simplex.Types
       Linear.Simplex.Util
+      Linear.SlackForm.Types
+      Linear.SlackForm.Util
+      Linear.System.Linear.Types
+      Linear.System.Simple.Types
+      Linear.System.Simple.Util
+      Linear.System.Types
+      Linear.Term.Types
+      Linear.Term.Util
+      Linear.Var.Types
+      Linear.Var.Util
   other-modules:
       Paths_simplex_method
   hs-source-dirs:
@@ -51,11 +69,17 @@ library
     , time
   default-language: Haskell2010
 
-test-suite simplex-haskell-test
+test-suite simplex-method-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      Linear.Simplex.TypesSpec
+      Linear.Constraint.Simple.UtilSpec
+      Linear.Expr.UtilSpec
+      Linear.SlackForm.UtilSpec
+      Linear.System.Simple.UtilSpec
+      Linear.Term.UtilSpec
+      Linear.Var.UtilSpec
+      TestUtil
       Paths_simplex_method
   hs-source-dirs:
       test
