@@ -7,20 +7,18 @@
 -- Stability:   experimental
 module Linear.System.Simple.Util where
 
-import Data.List.NonEmpty (NonEmpty (..))
-import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
 import qualified Data.Set as Set
 import Linear.Constraint.Generic.Types
   ( GenericConstraint ((:<=), (:==), (:>=))
   )
 import Linear.Constraint.Simple.Types (SimpleConstraint)
-import Linear.Expr.Types (Expr (..))
+import Linear.Expr.Types (Expr (..), ExprVarsOnly (..))
 import Linear.System.Simple.Types
   ( SimpleSystem
   , simpleSystemVars
   )
-import Linear.Term.Types (Term (..))
+import Linear.Term.Types (Term (..), TermVarsOnly (..))
 import Linear.Var.Types (Bounds (..), VarBounds)
 
 -- | Derive bounds for all variables in a system
@@ -31,9 +29,9 @@ deriveBounds simpleSystem = foldr updateBounds initialVarBounds simpleSystem
     initialVarBounds = M.fromList [(v, Bounds Nothing Nothing) | v <- Set.toList systemVars]
 
     updateBounds :: SimpleConstraint -> VarBounds -> VarBounds
-    updateBounds (Expr ((VarTerm var) :| []) :<= num) = M.insertWith mergeBounds var (Bounds Nothing (Just num))
-    updateBounds (Expr ((VarTerm var) :| []) :>= num) = M.insertWith mergeBounds var (Bounds (Just num) Nothing)
-    updateBounds (Expr ((VarTerm var) :| []) :== num) = M.insertWith mergeBounds var (Bounds (Just num) (Just num))
+    updateBounds (ExprVarsOnly [VarTermVO var] :<= num) = M.insertWith mergeBounds var (Bounds Nothing (Just num))
+    updateBounds (ExprVarsOnly [VarTermVO var] :>= num) = M.insertWith mergeBounds var (Bounds (Just num) Nothing)
+    updateBounds (ExprVarsOnly [VarTermVO var] :== num) = M.insertWith mergeBounds var (Bounds (Just num) (Just num))
     updateBounds _ = id
 
     -- \| Merge two bounds, very simple
@@ -55,10 +53,10 @@ removeUselessSystemBounds :: SimpleSystem -> VarBounds -> SimpleSystem
 removeUselessSystemBounds constraints bounds =
   filter
     ( \case
-        (Expr ((VarTerm var) :| []) :<= num) -> case M.lookup var bounds of
+        (ExprVarsOnly [VarTermVO var] :<= num) -> case M.lookup var bounds of
           Just (Bounds _ (Just upper)) -> num <= upper
           _ -> True
-        (Expr ((VarTerm var) :| []) :>= num) -> case M.lookup var bounds of
+        (ExprVarsOnly [VarTermVO var] :>= num) -> case M.lookup var bounds of
           Just (Bounds (Just lower) _) -> num >= lower
           _ -> True
         _ -> True

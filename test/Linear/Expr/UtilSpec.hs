@@ -7,7 +7,6 @@
 -- Stability: experimental
 module Linear.Expr.UtilSpec where
 
-import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -177,7 +176,7 @@ spec = do
       let vars = Set.toList $ exprVars expr
       var <- elements vars
       varMap <- genVarMap vars
-      let varReplacement = Expr (VarTerm var :| [])
+      let varReplacement = Expr (VarTerm var : [])
           exprSubst = substVarExpr var varReplacement expr
           exprSimplified = simplifyExpr expr
           exprSubstEval = evalExpr varMap exprSubst
@@ -205,7 +204,7 @@ spec = do
     prop
       "substVarExpr with a constant is the same as evaluating with the variable mapped to the constant"
       $ \expr c -> do
-        let varReplacement = Expr (ConstTerm c :| [])
+        let varReplacement = Expr (ConstTerm c : [])
         let vars = Set.toList $ exprVars expr
         var <- elements vars
         initialVarMap <- genVarMap vars

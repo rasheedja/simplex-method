@@ -16,13 +16,15 @@ import Linear.Constraint.Simple.Types (SimpleConstraint)
 import Linear.Constraint.Types
   ( Constraint (..)
   )
-import Linear.Expr.Types (Expr)
-import Linear.Expr.Util (exprToList)
+import Linear.Expr.Types (Expr, ExprVarsOnly)
+import Linear.Expr.Util (exprToList, exprVarsOnlyToExpr)
 import Linear.Simplex.Types (VarLitMap)
 import Linear.System.Simple.Types (SimpleSystem)
 import Linear.Term.Types
   ( Term (..)
+  , TermVarsOnly
   )
+import Linear.Term.Util (termVarsOnlyToTerm)
 import Linear.Var.Types (SimplexNum, Var)
 import Test.QuickCheck (Arbitrary (..), Gen)
 import Prelude
@@ -41,8 +43,14 @@ evalTerm varMap (Linear.Term.Types.VarTerm v) =
     v
     varMap
 
+evalTermVarsOnly :: VarLitMap -> TermVarsOnly -> SimplexNum
+evalTermVarsOnly varMap terms = evalTerm varMap $ termVarsOnlyToTerm terms
+
 evalExpr :: VarLitMap -> Expr -> SimplexNum
 evalExpr varMap expr = sum $ map (evalTerm varMap) $ exprToList expr
+
+evalExprVarsOnly :: VarLitMap -> ExprVarsOnly -> SimplexNum
+evalExprVarsOnly varMap = evalExpr varMap . exprVarsOnlyToExpr
 
 evalConstraint :: VarLitMap -> Constraint -> Bool
 evalConstraint varMap (lhs :<= rhs) = evalExpr varMap lhs <= evalExpr varMap rhs
@@ -50,9 +58,9 @@ evalConstraint varMap (lhs :>= rhs) = evalExpr varMap lhs >= evalExpr varMap rhs
 evalConstraint varMap (lhs :== rhs) = evalExpr varMap lhs == evalExpr varMap rhs
 
 evalSimpleConstraint :: VarLitMap -> SimpleConstraint -> Bool
-evalSimpleConstraint varMap (lhs :<= rhs) = evalExpr varMap lhs <= rhs
-evalSimpleConstraint varMap (lhs :>= rhs) = evalExpr varMap lhs >= rhs
-evalSimpleConstraint varMap (lhs :== rhs) = evalExpr varMap lhs == rhs
+evalSimpleConstraint varMap (lhs :<= rhs) = evalExprVarsOnly varMap lhs <= rhs
+evalSimpleConstraint varMap (lhs :>= rhs) = evalExprVarsOnly varMap lhs >= rhs
+evalSimpleConstraint varMap (lhs :== rhs) = evalExprVarsOnly varMap lhs == rhs
 
 evalSimpleSystem :: VarLitMap -> SimpleSystem -> Bool
 evalSimpleSystem varMap = all (evalSimpleConstraint varMap)

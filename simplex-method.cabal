@@ -29,6 +29,7 @@ library
   exposed-modules:
       Linear.Constraint.Generic.Types
       Linear.Constraint.Linear.Types
+      Linear.Constraint.Linear.Util
       Linear.Constraint.Simple.Types
       Linear.Constraint.Simple.Util
       Linear.Constraint.Types
@@ -44,6 +45,7 @@ library
       Linear.SlackForm.Types
       Linear.SlackForm.Util
       Linear.System.Linear.Types
+      Linear.System.Linear.Util
       Linear.System.Simple.Types
       Linear.System.Simple.Util
       Linear.System.Types

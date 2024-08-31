@@ -15,8 +15,8 @@ import Linear.Constraint.Simple.Util
   ( simpleConstraintVars
   , simplifySimpleConstraint
   )
-import Linear.Expr.Util (exprToList)
-import Linear.Term.Types (Term (..))
+import Linear.Expr.Util (exprVarsOnlyToList)
+import Linear.Term.Types (TermVarsOnly (..))
 import Linear.Var.Types (Var)
 
 type SimpleSystem = [SimpleConstraint]
@@ -30,9 +30,8 @@ simpleSystemVars = Set.unions . map simpleConstraintVars
 findHighestVar :: SimpleSystem -> Var
 findHighestVar simpleSystem =
   let vars =
-        [ v | gc <- simpleSystem, term <- exprToList $ getGenericConstraintLHS gc, v <- case term of
-                                                                                    VarTerm v -> [v]
-                                                                                    CoeffTerm _ v -> [v]
-                                                                                    _ -> []
+        [ v | gc <- simpleSystem, term <- exprVarsOnlyToList $ getGenericConstraintLHS gc, v <- case term of
+                                                                                            VarTermVO v -> [v]
+                                                                                            CoeffTermVO _ v -> [v]
         ]
   in  maximum vars

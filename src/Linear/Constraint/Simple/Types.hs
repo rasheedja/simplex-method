@@ -8,7 +8,7 @@
 module Linear.Constraint.Simple.Types where
 
 import Linear.Constraint.Generic.Types (GenericConstraint)
-import Linear.Expr.Types (Expr)
+import Linear.Expr.Types (ExprVarsOnly)
 import Linear.Var.Types (SimplexNum)
 
-type SimpleConstraint = GenericConstraint Expr SimplexNum
+type SimpleConstraint = GenericConstraint ExprVarsOnly SimplexNum

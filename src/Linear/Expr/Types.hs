@@ -7,14 +7,13 @@
 -- Stability: experimental
 module Linear.Expr.Types where
 
-import qualified Data.List.NonEmpty as NE
-import GHC.Base (liftA2)
 import GHC.Generics (Generic)
 import Linear.Term.Types (Term, TermVarsOnly)
 import Test.QuickCheck (Arbitrary (..))
-import Test.QuickCheck.Gen (suchThat)
 
-newtype Expr = Expr {unExpr :: NE.NonEmpty Term}
+-- TODO: Use normal lists
+-- treat empty expr as 0
+newtype Expr = Expr {unExpr :: [Term]}
   deriving
     ( Show
     , Read
@@ -22,7 +21,7 @@ newtype Expr = Expr {unExpr :: NE.NonEmpty Term}
     , Generic
     )
 
-newtype ExprVarsOnly = ExprVarsOnly {unExprVarsOnly :: NE.NonEmpty TermVarsOnly}
+newtype ExprVarsOnly = ExprVarsOnly {unExprVarsOnly :: [TermVarsOnly]}
   deriving
     ( Show
     , Read
@@ -31,4 +30,7 @@ newtype ExprVarsOnly = ExprVarsOnly {unExprVarsOnly :: NE.NonEmpty TermVarsOnly}
     )
 
 instance Arbitrary Expr where
-  arbitrary = Expr . NE.fromList <$> arbitrary `suchThat` (not . null)
+  arbitrary = Expr <$> arbitrary
+
+instance Arbitrary ExprVarsOnly where
+  arbitrary = ExprVarsOnly <$> arbitrary

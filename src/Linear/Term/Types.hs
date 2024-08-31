@@ -29,3 +29,10 @@ instance Arbitrary Term where
       , CoeffTerm <$> arbitrary <*> arbitrary
       , VarTerm <$> arbitrary
       ]
+
+instance Arbitrary TermVarsOnly where
+  arbitrary =
+    oneof
+      [ VarTermVO <$> arbitrary
+      , CoeffTermVO <$> arbitrary <*> arbitrary
+      ]

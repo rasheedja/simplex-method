@@ -7,27 +7,27 @@
 -- Stability: experimental
 module Linear.Constraint.Simple.UtilSpec where
 
-import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Linear.Constraint.Simple.Util
   ( constraintToSimpleConstraint
-  , normalizeSimpleConstraint
   , simpleConstraintVars
   , simplifyCoeff
   , simplifySimpleConstraint
   , substVarSimpleConstraint
+  , substVarSimpleConstraintExpr
   )
 import Linear.Constraint.Util (constraintVars)
-import Linear.Expr.Types (Expr (..))
-import Linear.Expr.Util (exprVars)
-import Linear.Term.Types (Term (..))
+import Linear.Expr.Types (Expr (..), ExprVarsOnly (..))
+import Linear.Expr.Util (exprVars, exprVarsOnlyVars)
+import Linear.Term.Types (Term (..), TermVarsOnly (..))
 import Test.Hspec (Spec, describe)
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck (counterexample, elements)
 import TestUtil
   ( evalConstraint
   , evalExpr
+  , evalExprVarsOnly
   , evalSimpleConstraint
   , genVarMap
   )
@@ -37,14 +37,14 @@ spec :: Spec
 spec = do
   describe "SimpleConstraint" $ do
     prop
-      "substVarSimpleConstraint with a constant is the same as evaluating with the variable mapped to the constant"
+      "substVarSimpleConstraintExpr with a constant is the same as evaluating with the variable mapped to the constant"
       $ \simpleConstraint c -> do
         let vars = Set.toList $ simpleConstraintVars simpleConstraint
         var <- elements vars
-        let varReplacement = Expr (ConstTerm c :| [])
+        let varReplacement = Expr (ConstTerm c : [])
         initialVarMap <- genVarMap vars
         let varMap = Map.insert var c initialVarMap
-            substitutedSimpleConstraint = substVarSimpleConstraint var varReplacement simpleConstraint
+            substitutedSimpleConstraint = substVarSimpleConstraintExpr var varReplacement simpleConstraint
             substitutedSimpleConstraintEval = evalSimpleConstraint varMap substitutedSimpleConstraint
             simpleConstraintEval = evalSimpleConstraint varMap simpleConstraint
         pure
@@ -68,7 +68,7 @@ spec = do
             )
           $ substitutedSimpleConstraintEval == simpleConstraintEval
     prop
-      "substVarSimpleConstraint with an expr is the same as evaluating with the variable mapped to the expr"
+      "substVarSimpleConstraintExpr with an expr is the same as evaluating with the variable mapped to the expr"
       $ \simpleConstraint exprReplacement -> do
         let vars =
               Set.toList $ simpleConstraintVars simpleConstraint <> exprVars exprReplacement
@@ -76,7 +76,7 @@ spec = do
         initialVarMap <- genVarMap vars
         let exprReplacementEval = evalExpr initialVarMap exprReplacement
             varMap = Map.insert var exprReplacementEval initialVarMap
-            substitutedSimpleConstraint = substVarSimpleConstraint var exprReplacement simpleConstraint
+            substitutedSimpleConstraint = substVarSimpleConstraintExpr var exprReplacement simpleConstraint
             simpleConstraintEval = evalSimpleConstraint varMap simpleConstraint
             substitutedSimpleConstraintEval = evalSimpleConstraint initialVarMap substitutedSimpleConstraint
         pure
@@ -121,26 +121,6 @@ spec = do
               <> show simpleConstraintEval
           )
         $ constraintEval == simpleConstraintEval
-    prop "normalizeSimpleConstraint leads to the same evaluation" $ \simpleConstraint -> do
-      let vars = Set.toList $ simpleConstraintVars simpleConstraint
-      varMap <- genVarMap vars
-      let normalizedSimpleConstraint = normalizeSimpleConstraint simpleConstraint
-          simpleConstraintEval = evalSimpleConstraint varMap simpleConstraint
-          normalizedSimpleConstraintEval = evalSimpleConstraint varMap normalizedSimpleConstraint
-      pure
-        $ counterexample
-          ( "simpleConstraint: "
-              <> show simpleConstraint
-              <> "\nnormalizedSimpleConstraint: "
-              <> show normalizedSimpleConstraint
-              <> "\ninitialVarMap: "
-              <> show varMap
-              <> "\nsimpleConstraintEval: "
-              <> show simpleConstraintEval
-              <> "\nnormalizedSimpleConstraintEval"
-              <> show normalizedSimpleConstraintEval
-          )
-        $ simpleConstraintEval == normalizedSimpleConstraintEval
     prop "simplifyCoeff leads to the same evaluation" $ \simpleConstraint -> do
       let vars = Set.toList $ simpleConstraintVars simpleConstraint
       varMap <- genVarMap vars

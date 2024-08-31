@@ -8,32 +8,50 @@
 module Linear.Constraint.Simple.Util where
 
 import qualified Data.List as L
-import Data.List.NonEmpty (NonEmpty (..))
-import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import Linear.Constraint.Generic.Types
-  ( GenericConstraint ((:<=), (:==), (:>=))
+  ( GenericConstraint (..)
   )
 import Linear.Constraint.Simple.Types (SimpleConstraint)
 import Linear.Constraint.Types (Constraint)
-import Linear.Expr.Types (Expr (Expr))
+import Linear.Expr.Types (Expr (..), ExprVarsOnly (..))
 import Linear.Expr.Util
-  ( exprToList
+  ( exprToExprVarsOnly
+  , exprToList
   , exprVars
+  , exprVarsOnlyToExpr
   , listToExpr
   , simplifyExpr
+  , simplifyExprVarsOnly
   , substVarExpr
+  , substVarExprVarsOnly
   , subtractExpr
   , sumExprConstTerms
   , zeroConstExpr
   )
-import Linear.Term.Types (Term (CoeffTerm, ConstTerm, VarTerm))
+import Linear.Term.Types (Term (..), TermVarsOnly (..))
 import Linear.Var.Types (Var)
 
-substVarSimpleConstraint :: Var -> Expr -> SimpleConstraint -> SimpleConstraint
-substVarSimpleConstraint var varReplacement (a :<= b) = substVarExpr var varReplacement a :<= b
-substVarSimpleConstraint var varReplacement (a :>= b) = substVarExpr var varReplacement a :>= b
-substVarSimpleConstraint var varReplacement (a :== b) = substVarExpr var varReplacement a :== b
+substVarSimpleConstraintExpr ::
+  Var -> Expr -> SimpleConstraint -> SimpleConstraint
+substVarSimpleConstraintExpr var varReplacement (a :<= b) =
+  let newExpr = substVarExpr var varReplacement (exprVarsOnlyToExpr a)
+      newConstraint = newExpr :<= Expr [ConstTerm b]
+  in  constraintToSimpleConstraint newConstraint
+substVarSimpleConstraintExpr var varReplacement (a :>= b) =
+  let newExpr = substVarExpr var varReplacement (exprVarsOnlyToExpr a)
+      newConstraint = newExpr :>= Expr [ConstTerm b]
+  in  constraintToSimpleConstraint newConstraint
+substVarSimpleConstraintExpr var varReplacement (a :== b) =
+  let newExpr = substVarExpr var varReplacement (exprVarsOnlyToExpr a)
+      newConstraint = newExpr :== Expr [ConstTerm b]
+  in  constraintToSimpleConstraint newConstraint
+
+substVarSimpleConstraint ::
+  Var -> ExprVarsOnly -> SimpleConstraint -> SimpleConstraint
+substVarSimpleConstraint var varReplacement (a :<= b) = substVarExprVarsOnly var varReplacement a :<= b
+substVarSimpleConstraint var varReplacement (a :>= b) = substVarExprVarsOnly var varReplacement a :>= b
+substVarSimpleConstraint var varReplacement (a :== b) = substVarExprVarsOnly var varReplacement a :== b
 
 constraintToSimpleConstraint :: Constraint -> SimpleConstraint
 constraintToSimpleConstraint constraint =
@@ -51,79 +69,77 @@ constraintToSimpleConstraint constraint =
         aWithoutConst = simplifyExpr . zeroConstExpr $ a
         bWithoutConst = simplifyExpr . zeroConstExpr $ b
 
-        lhs = subtractExpr aWithoutConst bWithoutConst
-    calcRhs a b = rhs
-      where
-        aConsts = sumExprConstTerms a
-        bConsts = sumExprConstTerms b
-        rhs = bConsts - aConsts
-
-        aWithoutConst = simplifyExpr . zeroConstExpr $ a
-        bWithoutConst = simplifyExpr . zeroConstExpr $ b
-
-        lhs = subtractExpr aWithoutConst bWithoutConst
+        lhs' = subtractExpr aWithoutConst bWithoutConst
+        lhs = case exprToExprVarsOnly lhs' of
+          Right exprVarsOnly -> exprVarsOnly
+          Left err ->
+            error $
+              "constraintToSimpleConstraint: lhs is not ExprVarsOnly. Details: " <> err
 
 -- normalize simple constraints by moving all constants to the right
-normalizeSimpleConstraint :: SimpleConstraint -> SimpleConstraint
-normalizeSimpleConstraint (expr :<= num) =
-  let exprList = exprToList expr
+-- normalizeSimpleConstraint :: SimpleConstraint -> SimpleConstraint
+-- normalizeSimpleConstraint (expr :<= num) =
+--   let exprList = exprToList expr
 
-      isConstTerm (ConstTerm _) = True
-      isConstTerm _ = False
+--       isConstTerm (ConstTerm _) = True
+--       isConstTerm _ = False
 
-      (sumExprConstTerms, nonConstTerms) = L.partition isConstTerm exprList
+--       (sumExprConstTerms, nonConstTerms) = L.partition isConstTerm exprList
 
-      constTermsVal = sum . map (\case (ConstTerm c) -> c; _ -> 0) $ sumExprConstTerms
+--       constTermsVal = sum . map (\case (ConstTerm c) -> c; _ -> 0) $ sumExprConstTerms
 
-      newExpr = listToExpr nonConstTerms
-      newNum = num - constTermsVal
-  in  newExpr :<= newNum
-normalizeSimpleConstraint (expr :>= num) =
-  let exprList = exprToList expr
+--       newExpr = listToExpr nonConstTerms
+--       newNum = num - constTermsVal
+--   in  newExpr :<= newNum
+-- normalizeSimpleConstraint (expr :>= num) =
+--   let exprList = exprToList expr
 
-      isConstTerm (ConstTerm _) = True
-      isConstTerm _ = False
+--       isConstTerm (ConstTerm _) = True
+--       isConstTerm _ = False
 
-      (sumExprConstTerms, nonConstTerms) = L.partition isConstTerm exprList
+--       (sumExprConstTerms, nonConstTerms) = L.partition isConstTerm exprList
 
-      constTermsVal = sum . map (\case (ConstTerm c) -> c; _ -> 0) $ sumExprConstTerms
+--       constTermsVal = sum . map (\case (ConstTerm c) -> c; _ -> 0) $ sumExprConstTerms
 
-      newExpr = listToExpr nonConstTerms
-      newNum = num - constTermsVal
-  in  newExpr :>= newNum
-normalizeSimpleConstraint (expr :== num) =
-  let exprList = exprToList expr
+--       newExpr = listToExpr nonConstTerms
+--       newNum = num - constTermsVal
+--   in  newExpr :>= newNum
+-- normalizeSimpleConstraint (expr :== num) =
+--   let exprList = exprToList expr
 
-      isConstTerm (ConstTerm _) = True
-      isConstTerm _ = False
+--       isConstTerm (ConstTerm _) = True
+--       isConstTerm _ = False
 
-      (sumExprConstTerms, nonConstTerms) = L.partition isConstTerm exprList
+--       (sumExprConstTerms, nonConstTerms) = L.partition isConstTerm exprList
 
-      constTermsVal = sum . map (\case (ConstTerm c) -> c; _ -> 0) $ sumExprConstTerms
+--       constTermsVal = sum . map (\case (ConstTerm c) -> c; _ -> 0) $ sumExprConstTerms
 
-      newExpr = listToExpr nonConstTerms
-      newNum = num - constTermsVal
-  in  newExpr :== newNum
+--       newExpr = listToExpr nonConstTerms
+--       newNum = num - constTermsVal
+--   in  newExpr :== newNum
 
 -- | Simplify coeff constraints by dividing the coefficient from both sides
 simplifyCoeff :: SimpleConstraint -> SimpleConstraint
-simplifyCoeff expr@(Expr (CoeffTerm coeff var :| []) :<= num)
+simplifyCoeff expr@(ExprVarsOnly [CoeffTermVO coeff var] :<= num)
   | coeff == 0 = expr
-  | coeff > 0 = Expr (VarTerm var :| []) :<= (num / coeff)
-  | coeff < 0 = Expr (VarTerm var :| []) :>= (num / coeff)
-simplifyCoeff expr@(Expr (CoeffTerm coeff var :| []) :>= num)
+  | coeff > 0 = ExprVarsOnly [VarTermVO var] :<= (num / coeff)
+  | coeff < 0 = ExprVarsOnly [VarTermVO var] :>= (num / coeff)
+simplifyCoeff expr@(ExprVarsOnly [CoeffTermVO coeff var] :>= num)
   | coeff == 0 = expr
-  | coeff > 0 = Expr (VarTerm var :| []) :>= (num / coeff)
-  | coeff < 0 = Expr (VarTerm var :| []) :<= (num / coeff)
-simplifyCoeff expr@(Expr (CoeffTerm coeff var :| []) :== num) = if coeff == 0 then expr else Expr (VarTerm var :| []) :== (num / coeff)
+  | coeff > 0 = ExprVarsOnly [VarTermVO var] :>= (num / coeff)
+  | coeff < 0 = ExprVarsOnly [VarTermVO var] :<= (num / coeff)
+simplifyCoeff expr@(ExprVarsOnly [CoeffTermVO coeff var] :== num) =
+  if coeff == 0
+    then expr
+    else ExprVarsOnly [VarTermVO var] :== (num / coeff)
 simplifyCoeff expr = expr
 
 simplifySimpleConstraint :: SimpleConstraint -> SimpleConstraint
-simplifySimpleConstraint (expr :<= num) = simplifyCoeff . normalizeSimpleConstraint $ simplifyExpr expr :<= num
-simplifySimpleConstraint (expr :>= num) = simplifyCoeff . normalizeSimpleConstraint $ simplifyExpr expr :>= num
-simplifySimpleConstraint (expr :== num) = simplifyCoeff . normalizeSimpleConstraint $ simplifyExpr expr :== num
+simplifySimpleConstraint (expr :<= num) = simplifyCoeff $ simplifyExprVarsOnly expr :<= num
+simplifySimpleConstraint (expr :>= num) = simplifyCoeff $ simplifyExprVarsOnly expr :>= num
+simplifySimpleConstraint (expr :== num) = simplifyCoeff $ simplifyExprVarsOnly expr :== num
 
 simpleConstraintVars :: SimpleConstraint -> Set.Set Var
-simpleConstraintVars (expr :<= _) = exprVars expr
-simpleConstraintVars (expr :>= _) = exprVars expr
-simpleConstraintVars (expr :== _) = exprVars expr
+simpleConstraintVars (expr :<= _) = exprVars . exprVarsOnlyToExpr $ expr
+simpleConstraintVars (expr :>= _) = exprVars . exprVarsOnlyToExpr $ expr
+simpleConstraintVars (expr :== _) = exprVars . exprVarsOnlyToExpr $ expr

@@ -85,6 +85,9 @@ normalizeTerms =
             else x1 : combineTerms (x2 : xs)
         _otherwise -> x1 : combineTerms (x2 : xs)
 
+normalizeTermsVarsOnly :: [TermVarsOnly] -> [TermVarsOnly]
+normalizeTermsVarsOnly = map unsafeTermToTermVarsOnly . normalizeTerms . map termVarsOnlyToTerm
+
 termToTermVarsOnly :: Term -> Either String TermVarsOnly
 termToTermVarsOnly (VarTerm v) = Right $ VarTermVO v
 termToTermVarsOnly (CoeffTerm c v) = Right $ CoeffTermVO c v
@@ -96,6 +99,6 @@ unsafeTermToTermVarsOnly t =
     Right x -> x
     Left e -> error e
 
-termsVarOnlyToTerm :: TermVarsOnly -> Term
-termsVarOnlyToTerm (VarTermVO v) = VarTerm v
-termsVarOnlyToTerm (CoeffTermVO c v) = CoeffTerm c v
+termVarsOnlyToTerm :: TermVarsOnly -> Term
+termVarsOnlyToTerm (VarTermVO v) = VarTerm v
+termVarsOnlyToTerm (CoeffTermVO c v) = CoeffTerm c v

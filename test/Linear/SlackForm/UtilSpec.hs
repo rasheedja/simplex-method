@@ -3,7 +3,6 @@ module Linear.SlackForm.UtilSpec where
 import Control.Monad (forM)
 import Data.Functor ((<&>))
 import qualified Data.List as List
-import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
@@ -12,15 +11,18 @@ import Linear.Constraint.Generic.Types
   ( GenericConstraint ((:<=), (:==), (:>=))
   , getGenericConstraintLHS
   )
-import Linear.Expr.Types (Expr (..))
+import Linear.Constraint.Linear.Types (LinearEquation (..))
+import Linear.Expr.Types (Expr (..), ExprVarsOnly (..))
 import Linear.SlackForm.Util
   ( addSlackVariables
   , eliminateNonZeroLowerBounds
   , eliminateUnrestrictedLowerBounds
   )
+import Linear.System.Linear.Types (LinearSystem (..))
 import Linear.System.Simple.Util (deriveBounds)
 import Linear.Term.Types
   ( Term (..)
+  , TermVarsOnly (..)
   )
 import Test.Hspec (Spec, describe, it, shouldBe)
 import Test.QuickCheck (Testable (property), withMaxSuccess)
@@ -36,59 +38,59 @@ spec = do
       "eliminateNonZeroLowerBounds does not do anything when all lower bounds are zero"
       $ do
         let simpleSystem =
-              [ Expr (VarTerm 0 :| []) :>= 0
-              , Expr (VarTerm 1 :| []) :>= 0
+              [ ExprVarsOnly (VarTermVO 0 : []) :>= 0
+              , ExprVarsOnly (VarTermVO 1 : []) :>= 0
               ]
             (updatedBounds, updatedSystem) = eliminateNonZeroLowerBounds simpleSystem Map.empty
             expectedSimpleSystem =
-              [ Expr (VarTerm 0 :| []) :>= 0
-              , Expr (VarTerm 1 :| []) :>= 0
+              [ ExprVarsOnly (VarTermVO 0 : []) :>= 0
+              , ExprVarsOnly (VarTermVO 1 : []) :>= 0
               ]
             expectedEliminatedVarExprMap = Map.empty
         updatedSystem `shouldBe` expectedSimpleSystem
         updatedBounds `shouldBe` expectedEliminatedVarExprMap
     it "eliminateNonZeroLowerBounds correctly eliminates positive lower bounds" $ do
       let simpleSystem =
-            [ Expr (VarTerm 0 :| []) :>= 1
-            , Expr (VarTerm 1 :| []) :>= 0
+            [ ExprVarsOnly (VarTermVO 0 : []) :>= 1
+            , ExprVarsOnly (VarTermVO 1 : []) :>= 0
             ]
           (updatedBounds, updatedSystem) = eliminateNonZeroLowerBounds simpleSystem Map.empty
           expectedSimpleSystem =
-            [ Expr (VarTerm 2 :| []) :>= 0
-            , Expr (VarTerm 1 :| []) :>= 0
+            [ ExprVarsOnly (VarTermVO 2 : []) :>= 0
+            , ExprVarsOnly (VarTermVO 1 : []) :>= 0
             ]
-          expectedEliminatedVarExprMap = Map.fromList [(0, Expr (VarTerm 2 :| [ConstTerm 1]))]
+          expectedEliminatedVarExprMap = Map.fromList [(0, Expr (VarTerm 2 : [ConstTerm 1]))]
       updatedSystem `shouldBe` expectedSimpleSystem
       updatedBounds `shouldBe` expectedEliminatedVarExprMap
     it "eliminateNonZeroLowerBounds correctly eliminates negative lower bounds" $ do
       let simpleSystem =
-            [ Expr (VarTerm 0 :| []) :>= (-1)
-            , Expr (VarTerm 1 :| []) :>= 0
+            [ ExprVarsOnly (VarTermVO 0 : []) :>= (-1)
+            , ExprVarsOnly (VarTermVO 1 : []) :>= 0
             ]
           (updatedBounds, updatedSystem) = eliminateNonZeroLowerBounds simpleSystem Map.empty
           expectedSimpleSystem =
-            [ Expr (VarTerm 2 :| []) :>= 0
-            , Expr (VarTerm 1 :| []) :>= 0
+            [ ExprVarsOnly (VarTermVO 2 : []) :>= 0
+            , ExprVarsOnly (VarTermVO 1 : []) :>= 0
             ]
-          expectedEliminatedVarExprMap = Map.fromList [(0, Expr (VarTerm 2 :| [ConstTerm (-1)]))]
+          expectedEliminatedVarExprMap = Map.fromList [(0, Expr (VarTerm 2 : [ConstTerm (-1)]))]
       updatedSystem `shouldBe` expectedSimpleSystem
       updatedBounds `shouldBe` expectedEliminatedVarExprMap
     it
       "eliminateNonZeroLowerBounds correctly eliminates positive and negative lower bounds"
       $ do
         let simpleSystem =
-              [ Expr (VarTerm 0 :| []) :>= 1
-              , Expr (VarTerm 1 :| []) :>= (-1)
+              [ ExprVarsOnly (VarTermVO 0 : []) :>= 1
+              , ExprVarsOnly (VarTermVO 1 : []) :>= (-1)
               ]
             (updatedBounds, updatedSystem) = eliminateNonZeroLowerBounds simpleSystem Map.empty
             expectedSimpleSystem =
-              [ Expr (VarTerm 2 :| []) :>= 0
-              , Expr (VarTerm 3 :| []) :>= 0
+              [ ExprVarsOnly (VarTermVO 2 : []) :>= 0
+              , ExprVarsOnly (VarTermVO 3 : []) :>= 0
               ]
             expectedEliminatedVarExprMap =
               Map.fromList
-                [ (0, Expr (VarTerm 2 :| [ConstTerm 1]))
-                , (1, Expr (VarTerm 3 :| [ConstTerm (-1)]))
+                [ (0, Expr (VarTerm 2 : [ConstTerm 1]))
+                , (1, Expr (VarTerm 3 : [ConstTerm (-1)]))
                 ]
         updatedSystem `shouldBe` expectedSimpleSystem
         updatedBounds `shouldBe` expectedEliminatedVarExprMap
@@ -96,17 +98,17 @@ spec = do
       "eliminateNonZeroLowerBounds correctly substitutes vars with non-zero lower bounds"
       $ do
         let simpleSystem =
-              [ Expr (VarTerm 0 :| []) :>= 1
-              , Expr (VarTerm 1 :| []) :>= 0
-              , Expr (VarTerm 0 :| [VarTerm 1]) :>= 1
+              [ ExprVarsOnly (VarTermVO 0 : []) :>= 1
+              , ExprVarsOnly (VarTermVO 1 : []) :>= 0
+              , ExprVarsOnly (VarTermVO 0 : [VarTermVO 1]) :>= 1
               ]
             (updatedBounds, updatedSystem) = eliminateNonZeroLowerBounds simpleSystem Map.empty
             expectedSimpleSystem =
-              [ Expr (VarTerm 2 :| []) :>= 0
-              , Expr (VarTerm 1 :| []) :>= 0
-              , Expr (VarTerm 1 :| [VarTerm 2]) :>= 0
+              [ ExprVarsOnly (VarTermVO 2 : []) :>= 0
+              , ExprVarsOnly (VarTermVO 1 : []) :>= 0
+              , ExprVarsOnly (VarTermVO 1 : [VarTermVO 2]) :>= 0
               ]
-            expectedEliminatedVarExprMap = Map.fromList [(0, Expr (VarTerm 2 :| [ConstTerm 1]))]
+            expectedEliminatedVarExprMap = Map.fromList [(0, Expr (VarTerm 2 : [ConstTerm 1]))]
         updatedSystem `shouldBe` expectedSimpleSystem
         updatedBounds `shouldBe` expectedEliminatedVarExprMap
     it "eliminateNonZeroLowerBounds property based test lower bounds" $ do
@@ -114,7 +116,7 @@ spec = do
         let (updatedBounds, updatedSystem) = eliminateNonZeroLowerBounds simpleSystem Map.empty
         all
           ( \case
-              Expr (VarTerm _ :| []) :>= num -> num == 0
+              ExprVarsOnly (VarTermVO _ : []) :>= num -> num == 0
               _ -> True
           )
           updatedSystem
@@ -137,15 +139,16 @@ spec = do
       "addSlackVariables correctly transforms inequalities to equalities (wikipedia case)"
       $ do
         let simpleSystem =
-              [ Expr (VarTerm 2 :| [CoeffTerm 2 3]) :<= 3 -- x_2 + 2x_3 <= 3
-              , Expr (CoeffTerm (-1) 4 :| [CoeffTerm 3 5]) :>= 2 -- -x_4 + 3x_5 >= 2
+              [ ExprVarsOnly (VarTermVO 2 : [CoeffTermVO 2 3]) :<= 3 -- x_2 + 2x_3 <= 3
+              , ExprVarsOnly (CoeffTermVO (-1) 4 : [CoeffTermVO 3 5]) :>= 2 -- -x_4 + 3x_5 >= 2
               ]
             expectedSystem =
-              [ Expr (VarTerm 2 :| [CoeffTerm 2 3, VarTerm 6]) :== 3 -- x_2 + 2x_3 + x_6 = 3
-              , Expr (VarTerm 6 :| []) :>= 0 -- x_6 >= 0
-              , Expr (CoeffTerm (-1) 4 :| [CoeffTerm 3 5, CoeffTerm (-1) 7]) :== 2 -- -x_4 + 3x_5 + x_7 = 2
-              , Expr (VarTerm 7 :| []) :>= 0 -- x_7 >= 0
-              ]
+              LinearSystem
+                [ LinearEquation (ExprVarsOnly (VarTermVO 2 : [CoeffTermVO 2 3, VarTermVO 6])) 3 -- x_2 + 2x_3 + x_6 = 3
+                , LinearEquation
+                    (ExprVarsOnly (CoeffTermVO (-1) 4 : [CoeffTermVO 3 5, CoeffTermVO (-1) 7]))
+                    2 -- -x_4 + 3x_5 + x_7 = 2
+                ]
             expectedSlackVars = [6, 7]
             (slackVars, updatedSystem) = addSlackVariables simpleSystem
         updatedSystem `shouldBe` expectedSystem
@@ -154,15 +157,16 @@ spec = do
       "addSlackVariables correctly transforms inequalities to equalities (test case 1)"
       $ do
         let simpleSystem =
-              [ Expr (VarTerm 1 :| [CoeffTerm 2 2]) :<= 4 -- x_1 + 2x_2 <= 4
-              , Expr (CoeffTerm (-1) 3 :| [CoeffTerm 2 4]) :>= 3 -- -x_3 + 2x_4 >= 3
+              [ ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2]) :<= 4 -- x_1 + 2x_2 <= 4
+              , ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4]) :>= 3 -- -x_3 + 2x_4 >= 3
               ]
             expectedSystem =
-              [ Expr (VarTerm 1 :| [CoeffTerm 2 2, VarTerm 5]) :== 4 -- x_1 + 2x_2 + x_5 = 4
-              , Expr (VarTerm 5 :| []) :>= 0 -- x_5 >= 0
-              , Expr (CoeffTerm (-1) 3 :| [CoeffTerm 2 4, CoeffTerm (-1) 6]) :== 3 -- -x_3 + 2x_4 - x_6 = 3
-              , Expr (VarTerm 6 :| []) :>= 0 -- x_6 >= 0
-              ]
+              LinearSystem
+                [ LinearEquation (ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2, VarTermVO 5])) 4 -- x_1 + 2x_2 + x_5 = 4
+                , LinearEquation
+                    (ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4, CoeffTermVO (-1) 6]))
+                    3 -- -x_3 + 2x_4 - x_6 = 3
+                ]
             expectedSlackVars = [5, 6]
             (slackVars, updatedSystem) = addSlackVariables simpleSystem
         updatedSystem `shouldBe` expectedSystem
@@ -171,15 +175,16 @@ spec = do
       "addSlackVariables correctly transforms inequalities to equalities (test case 2)"
       $ do
         let simpleSystem =
-              [ Expr (VarTerm 1 :| [CoeffTerm 2 2]) :<= 5 -- x_1 + 2x_2 <= 5
-              , Expr (CoeffTerm (-1) 3 :| [CoeffTerm 2 4]) :>= 4 -- -x_3 + 2x_4 >= 4
+              [ ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2]) :<= 5 -- x_1 + 2x_2 <= 5
+              , ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4]) :>= 4 -- -x_3 + 2x_4 >= 4
               ]
             expectedSystem =
-              [ Expr (VarTerm 1 :| [CoeffTerm 2 2, VarTerm 5]) :== 5 -- x_1 + 2x_2 + x_5 = 5
-              , Expr (VarTerm 5 :| []) :>= 0 -- x_5 >= 0
-              , Expr (CoeffTerm (-1) 3 :| [CoeffTerm 2 4, CoeffTerm (-1) 6]) :== 4 -- -x_3 + 2x_4 - x_6 = 4
-              , Expr (VarTerm 6 :| []) :>= 0 -- x_6 >= 0
-              ]
+              LinearSystem
+                [ LinearEquation (ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2, VarTermVO 5])) 5 -- x_1 + 2x_2 + x_5 = 5
+                , LinearEquation
+                    (ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4, CoeffTermVO (-1) 6]))
+                    4 -- -x_3 + 2x_4 - x_6 = 4
+                ]
             expectedSlackVars = [5, 6]
             (slackVars, updatedSystem) = addSlackVariables simpleSystem
         updatedSystem `shouldBe` expectedSystem
@@ -188,14 +193,14 @@ spec = do
       "addSlackVariables correctly transforms inequalities to equalities (test case 3)"
       $ do
         let simpleSystem =
-              [ Expr (VarTerm 1 :| [CoeffTerm 2 2]) :<= 5 -- x_1 + 2x_2 <= 5
-              , Expr (CoeffTerm (-1) 3 :| [CoeffTerm 2 4]) :== 4 -- -x_3 + 2x_4 = 4
+              [ ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2]) :<= 5 -- x_1 + 2x_2 <= 5
+              , ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4]) :== 4 -- -x_3 + 2x_4 = 4
               ]
             expectedSystem =
-              [ Expr (VarTerm 1 :| [CoeffTerm 2 2, VarTerm 5]) :== 5 -- x_1 + 2x_2 + x_5 = 5
-              , Expr (VarTerm 5 :| []) :>= 0 -- x_5 >= 0
-              , Expr (CoeffTerm (-1) 3 :| [CoeffTerm 2 4]) :== 4 -- -x_3 + 2x_4 = 4
-              ]
+              LinearSystem
+                [ LinearEquation (ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2, VarTermVO 5])) 5 -- x_1 + 2x_2 + x_5 = 5
+                , LinearEquation (ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4])) 4 -- -x_3 + 2x_4 = 4
+                ]
             expectedSlackVars = [5]
             (slackVars, updatedSystem) = addSlackVariables simpleSystem
         updatedSystem `shouldBe` expectedSystem
@@ -204,13 +209,14 @@ spec = do
       "addSlackVariables correctly transforms inequalities to equalities (test case 4)"
       $ do
         let simpleSystem =
-              [ Expr (VarTerm 1 :| [CoeffTerm 2 2]) :== 5 -- x_1 + 2x_2 = 5
-              , Expr (CoeffTerm (-1) 3 :| [CoeffTerm 2 4]) :== 4 -- -x_3 + 2x_4 = 4
+              [ ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2]) :== 5 -- x_1 + 2x_2 = 5
+              , ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4]) :== 4 -- -x_3 + 2x_4 = 4
               ]
             expectedSystem =
-              [ Expr (VarTerm 1 :| [CoeffTerm 2 2]) :== 5 -- x_1 + 2x_2 = 5
-              , Expr (CoeffTerm (-1) 3 :| [CoeffTerm 2 4]) :== 4 -- -x_3 + 2x_4 = 4
-              ]
+              LinearSystem
+                [ LinearEquation (ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2])) 5 -- x_1 + 2x_2 = 5
+                , LinearEquation (ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4])) 4 -- -x_3 + 2x_4 = 4
+                ]
             expectedSlackVars = []
             (slackVars, updatedSystem) = addSlackVariables simpleSystem
         updatedSystem `shouldBe` expectedSystem
@@ -219,8 +225,8 @@ spec = do
       "eliminateUnrestrictedLowerBounds correctly eliminates unrestricted lower bounds (wikipedia case)"
       $ do
         let simpleSystem =
-              [ Expr (VarTerm 1 :| []) :>= 0 -- x_1 >= 0
-              , Expr (VarTerm 1 :| [VarTerm 2]) :>= 0 -- x_1 + x_2 >= 0
+              [ ExprVarsOnly (VarTermVO 1 : []) :>= 0 -- x_1 >= 0
+              , ExprVarsOnly (VarTermVO 1 : [VarTermVO 2]) :>= 0 -- x_1 + x_2 >= 0
               ]
             systemBounds = deriveBounds simpleSystem
             (eliminatedNonZeroLowerBounds, systemWithoutNonZeroLowerBounds) = eliminateNonZeroLowerBounds simpleSystem Map.empty
@@ -230,24 +236,27 @@ spec = do
                 systemWithSlackVars
                 systemBounds
                 eliminatedNonZeroLowerBounds
+            expectedSlackVars = [3, 4]
             expectedSystem =
-              [ Expr (VarTerm 5 :| []) :>= 0 -- x_5 >= 0
-              , Expr (VarTerm 6 :| []) :>= 0 -- x_6 >= 0
-              , Expr (CoeffTerm (-1) 3 :| [VarTerm 1]) :== 0 -- -x_3 + x_1 = 0
-              , Expr (VarTerm 3 :| []) :>= 0 -- x_3 >= 0
-              , Expr (CoeffTerm (-1) 4 :| [CoeffTerm (-1) 6, VarTerm 1, VarTerm 5]) :== 0 -- -x_4 - x_6 + x_1 + x_5 = 0
-              , Expr (VarTerm 4 :| []) :>= 0 -- x_4 >= 0
-              ]
-            expectedEliminatedVarExprMap = Map.fromList [(2, Expr (VarTerm 5 :| [CoeffTerm (-1) 6]))]
+              LinearSystem
+                [ LinearEquation (ExprVarsOnly (CoeffTermVO (-1) 3 : [VarTermVO 1])) 0 -- -x_3 + x_1 = 0
+                , LinearEquation
+                    ( ExprVarsOnly
+                        (CoeffTermVO (-1) 4 : [CoeffTermVO (-1) 6, VarTermVO 1, VarTermVO 5])
+                    )
+                    0 -- -x_4 - x_6 + x_1 + x_5 = 0
+                ]
+            expectedEliminatedVarExprMap = Map.fromList [(2, Expr (VarTerm 5 : [CoeffTerm (-1) 6]))]
 
+        slackVars `shouldBe` expectedSlackVars
         updatedSystem `shouldBe` expectedSystem
         updatedEliminatedVarsMap `shouldBe` expectedEliminatedVarExprMap
     it
       "eliminateUnrestrictedLowerBounds correctly eliminates unrestricted lower bounds (test case 2)"
       $ do
         let simpleSystem =
-              [ Expr (VarTerm 1 :| []) :>= 0 -- x_1 >= 0
-              , Expr (VarTerm 1 :| [VarTerm 2, VarTerm 3]) :>= 0 -- x_1 + x_2 + x_3 >= 0
+              [ ExprVarsOnly (VarTermVO 1 : []) :>= 0 -- x_1 >= 0
+              , ExprVarsOnly (VarTermVO 1 : [VarTermVO 2, VarTermVO 3]) :>= 0 -- x_1 + x_2 + x_3 >= 0
               ]
             systemBounds = deriveBounds simpleSystem
             (eliminatedNonZeroLowerBounds, systemWithoutNonZeroLowerBounds) = eliminateNonZeroLowerBounds simpleSystem Map.empty
@@ -257,25 +266,24 @@ spec = do
                 systemWithSlackVars
                 systemBounds
                 eliminatedNonZeroLowerBounds
+            expectedSlackVars = [4, 5]
             expectedSystem =
-              [ Expr (VarTerm 8 :| []) :>= 0 -- x_8 >= 0
-              , Expr (VarTerm 9 :| []) :>= 0 -- x_9 >= 0
-              , Expr (VarTerm 6 :| []) :>= 0 -- x_6 >= 0
-              , Expr (VarTerm 7 :| []) :>= 0 -- x_7 >= 0
-              , Expr (CoeffTerm (-1) 4 :| [VarTerm 1]) :== 0 -- -x_4 + x_1 = 0
-              , Expr (VarTerm 4 :| []) :>= 0 -- x_4 >= 0
-              , Expr
-                  ( CoeffTerm (-1) 5
-                      :| [CoeffTerm (-1) 7, CoeffTerm (-1) 9, VarTerm 1, VarTerm 6, VarTerm 8]
-                  )
-                  :== 0 -- -x_5 - x_7 - x_9 + x_1 + x_6 + x_8 = 0
-              , Expr (VarTerm 5 :| []) :>= 0 -- x_5 >= 0
-              ]
+              LinearSystem
+                [ LinearEquation (ExprVarsOnly (CoeffTermVO (-1) 4 : [VarTermVO 1])) 0 -- -x_4 + x_1 = 0
+                , LinearEquation
+                    ( ExprVarsOnly
+                        ( CoeffTermVO (-1) 5
+                            : [CoeffTermVO (-1) 7, CoeffTermVO (-1) 9, VarTermVO 1, VarTermVO 6, VarTermVO 8]
+                        )
+                    )
+                    0 -- -x_5 - x_7 - x_9 + x_1 + x_6 + x_8 = 0
+                ]
             expectedEliminatedVarExprMap =
               Map.fromList
-                [ (2, Expr (VarTerm 6 :| [CoeffTerm (-1) 7]))
-                , (3, Expr (VarTerm 8 :| [CoeffTerm (-1) 9]))
+                [ (2, Expr (VarTerm 6 : [CoeffTerm (-1) 7]))
+                , (3, Expr (VarTerm 8 : [CoeffTerm (-1) 9]))
                 ]
+        slackVars `shouldBe` expectedSlackVars
         updatedSystem `shouldBe` expectedSystem
         updatedEliminatedVarsMap `shouldBe` expectedEliminatedVarExprMap
 
@@ -283,74 +291,78 @@ spec = do
       "eliminateUnrestrictedLowerBounds correctly eliminates unrestricted lower bounds (test case 3)"
       $ do
         let simpleSystem =
-              [ Expr (VarTerm 1 :| []) :>= 0 -- x_1 >= 0
-              , Expr (VarTerm 1 :| [VarTerm 2]) :>= 0 -- x_1 + x_2 >= 0
-              , Expr (VarTerm 2 :| [VarTerm 3]) :>= 0 -- x_2 + x_3 >= 0
+              [ ExprVarsOnly (VarTermVO 1 : []) :>= 0 -- x_1 >= 0
+              , ExprVarsOnly (VarTermVO 1 : [VarTermVO 2]) :>= 0 -- x_1 + x_2 >= 0
+              , ExprVarsOnly (VarTermVO 2 : [VarTermVO 3]) :>= 0 -- x_2 + x_3 >= 0
               ]
             systemBounds = deriveBounds simpleSystem
             (eliminatedNonZeroLowerBounds, systemWithoutNonZeroLowerBounds) = eliminateNonZeroLowerBounds simpleSystem Map.empty
             (slackVars, systemWithSlackVars) = addSlackVariables systemWithoutNonZeroLowerBounds
+            expectedSlackVars = [4, 5, 6]
             (updatedEliminatedVarsMap, updatedSystem) =
               eliminateUnrestrictedLowerBounds
                 systemWithSlackVars
                 systemBounds
                 eliminatedNonZeroLowerBounds
             expectedSystem =
-              [ Expr (VarTerm 9 :| []) :>= 0 -- x_9 >= 0
-              , Expr (VarTerm 10 :| []) :>= 0 -- x_10 >= 0
-              , Expr (VarTerm 7 :| []) :>= 0 -- x_7 >= 0
-              , Expr (VarTerm 8 :| []) :>= 0 -- x_8 >= 0
-              , Expr (CoeffTerm (-1) 4 :| [VarTerm 1]) :== 0 -- -x_4 + x_1 = 0
-              , Expr (VarTerm 4 :| []) :>= 0 -- x_4 >= 0
-              , Expr (CoeffTerm (-1) 5 :| [CoeffTerm (-1) 8, VarTerm 1, VarTerm 7]) :== 0 -- -x_5 - x_8 + x_1 + x_7 = 0
-              , Expr (VarTerm 5 :| []) :>= 0 -- x_5 >= 0
-              , Expr
-                  ( CoeffTerm (-1) 6 :| [CoeffTerm (-1) 8, CoeffTerm (-1) 10, VarTerm 7, VarTerm 9]
-                  )
-                  :== 0 -- -x_6 - x_8 - x_10 + x_7 + x_9 = 0
-              , Expr (VarTerm 6 :| []) :>= 0 -- x_6 >= 0
-              ]
+              LinearSystem
+                [ LinearEquation (ExprVarsOnly (CoeffTermVO (-1) 4 : [VarTermVO 1])) 0 -- -x_4 + x_1 = 0
+                , LinearEquation
+                    ( ExprVarsOnly
+                        (CoeffTermVO (-1) 5 : [CoeffTermVO (-1) 8, VarTermVO 1, VarTermVO 7])
+                    )
+                    0 -- -x_5 - x_8 + x_1 + x_7 = 0
+                , LinearEquation
+                    ( ExprVarsOnly
+                        ( CoeffTermVO (-1) 6
+                            : [CoeffTermVO (-1) 8, CoeffTermVO (-1) 10, VarTermVO 7, VarTermVO 9]
+                        )
+                    )
+                    0 -- -x_6 - x_8 - x_10 + x_7 + x_9 = 0
+                ]
             expectedEliminatedVarExprMap =
               Map.fromList
-                [ (2, Expr (VarTerm 7 :| [CoeffTerm (-1) 8]))
-                , (3, Expr (VarTerm 9 :| [CoeffTerm (-1) 10]))
+                [ (2, Expr (VarTerm 7 : [CoeffTerm (-1) 8]))
+                , (3, Expr (VarTerm 9 : [CoeffTerm (-1) 10]))
                 ]
+        slackVars `shouldBe` expectedSlackVars
         updatedSystem `shouldBe` expectedSystem
         updatedEliminatedVarsMap `shouldBe` expectedEliminatedVarExprMap
     it
       "eliminateUnrestrictedLowerBounds correctly eliminates non-zero lower bounds for all variables"
       $ do
         let simpleSystem =
-              [ Expr (VarTerm 1 :| [CoeffTerm 2 1]) :>= 0 -- x_1 + 2 >= 0
-              , Expr (VarTerm 2 :| [CoeffTerm 3 1]) :>= 0 -- x_2 + 3 >= 0
+              [ ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 1]) :>= 0 -- x_1 + 2x_1 >= 0
+              , ExprVarsOnly (VarTermVO 2 : [CoeffTermVO 3 1]) :>= 0 -- x_2 + 3x_1 >= 0
               ]
             systemBounds = deriveBounds simpleSystem
             (eliminatedNonZeroLowerBounds, systemWithoutNonZeroLowerBounds) = eliminateNonZeroLowerBounds simpleSystem Map.empty
             (slackVars, systemWithSlackVars) = addSlackVariables systemWithoutNonZeroLowerBounds
+            expectedSlackVars = [3, 4]
             (updatedEliminatedVarsMap, updatedSystem) =
               eliminateUnrestrictedLowerBounds
                 systemWithSlackVars
                 systemBounds
                 eliminatedNonZeroLowerBounds
             expectedSystem =
-              [ Expr (VarTerm 7 :| []) :>= 0 -- x_7 >= 0
-              , Expr (VarTerm 8 :| []) :>= 0 -- x_8 >= 0
-              , Expr (VarTerm 5 :| []) :>= 0 -- x_5 >= 0
-              , Expr (VarTerm 6 :| []) :>= 0 -- x_6 >= 0
-              , Expr (CoeffTerm (-3) 6 :| [CoeffTerm (-1) 3, CoeffTerm 3 5]) :== 0 -- -3x_6 - x_3 + 3x_5 = 0
-              , Expr (VarTerm 3 :| []) :>= 0 -- x_3 >= 0
-              , Expr
-                  ( CoeffTerm (-3) 6
-                      :| [CoeffTerm (-1) 4, CoeffTerm (-1) 8, CoeffTerm 3 5, VarTerm 7]
-                  )
-                  :== 0 -- -3x_6 - x_4 - x_8 + 3x_5 + x_7 = 0
-              , Expr (VarTerm 4 :| []) :>= 0 -- x_4 >= 0
-              ]
+              LinearSystem
+                [ LinearEquation
+                    (ExprVarsOnly (CoeffTermVO (-3) 6 : [CoeffTermVO (-1) 3, CoeffTermVO 3 5]))
+                    0 -- -3x_6 - x_3 + 3x_5 = 0
+                , LinearEquation
+                    ( ExprVarsOnly
+                        ( CoeffTermVO (-3) 6
+                            : [CoeffTermVO (-1) 4, CoeffTermVO (-1) 8, CoeffTermVO 3 5, VarTermVO 7]
+                        )
+                    )
+                    0 -- -3x_6 - x_4 - x_8 + 3x_5 + x_7 = 0
+                ]
             expectedEliminatedVarExprMap =
               Map.fromList
-                [ (1, Expr (VarTerm 5 :| [CoeffTerm (-1) 6]))
-                , (2, Expr (VarTerm 7 :| [CoeffTerm (-1) 8]))
+                [ (1, Expr (VarTerm 5 : [CoeffTerm (-1) 6]))
+                , (2, Expr (VarTerm 7 : [CoeffTerm (-1) 8]))
                 ]
+        slackVars `shouldBe` expectedSlackVars
         updatedSystem `shouldBe` expectedSystem
         updatedEliminatedVarsMap `shouldBe` expectedEliminatedVarExprMap
 
@@ -358,23 +370,24 @@ spec = do
       "eliminateUnrestrictedLowerBounds correctly handles all variables with zero lower bounds"
       $ do
         let simpleSystem =
-              [ Expr (VarTerm 1 :| []) :>= 0 -- x_1 >= 0
-              , Expr (VarTerm 2 :| []) :>= 0 -- x_2 >= 0
+              [ ExprVarsOnly (VarTermVO 1 : []) :>= 0 -- x_1 >= 0
+              , ExprVarsOnly (VarTermVO 2 : []) :>= 0 -- x_2 >= 0
               ]
             systemBounds = deriveBounds simpleSystem
             (eliminatedNonZeroLowerBounds, systemWithoutNonZeroLowerBounds) = eliminateNonZeroLowerBounds simpleSystem Map.empty
             (slackVars, systemWithSlackVars) = addSlackVariables systemWithoutNonZeroLowerBounds
+            expectedSlackVars = [3, 4]
             (updatedEliminatedVarsMap, updatedSystem) =
               eliminateUnrestrictedLowerBounds
                 systemWithSlackVars
                 systemBounds
                 eliminatedNonZeroLowerBounds
             expectedSystem =
-              [ (Expr (VarTerm 1 :| [CoeffTerm (-1) 3])) :== 0 -- x_1 - x_3 = 0
-              , Expr (VarTerm 3 :| []) :>= 0 -- x_3 >= 0
-              , (Expr (VarTerm 2 :| [CoeffTerm (-1) 4])) :== 0 -- x_2 - x_4 = 0
-              , Expr (VarTerm 4 :| []) :>= 0 -- x_4 >= 0
-              ]
+              LinearSystem
+                [ LinearEquation (ExprVarsOnly (VarTermVO 1 : [CoeffTermVO (-1) 3])) 0 -- x_1 - x_3 = 0
+                , LinearEquation (ExprVarsOnly (VarTermVO 2 : [CoeffTermVO (-1) 4])) 0 -- x_2 - x_4 = 0
+                ]
             expectedEliminatedVarExprMap = Map.empty
+        slackVars `shouldBe` expectedSlackVars
         updatedSystem `shouldBe` expectedSystem
         updatedEliminatedVarsMap `shouldBe` expectedEliminatedVarExprMap
