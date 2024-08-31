@@ -7,21 +7,12 @@
 module Linear.Constraint.Linear.Types where
 
 import GHC.Generics (Generic)
-import Linear.Expr.Types (Expr)
+import Linear.Expr.Types (ExprVarsOnly)
 import Linear.Var.Types (SimplexNum)
 
--- TODO: Expr -> ExprVarsOnly
 -- lhs == rhs
 data LinearEquation = LinearEquation
-  { lhs :: Expr
+  { lhs :: ExprVarsOnly
   , rhs :: SimplexNum
   }
   deriving (Show, Eq, Read, Generic)
-
--- class CanBeLinearEquation a where
---   toLinearEquation :: a -> LinearEquation
---   fromLinearEquation :: LinearEquation -> a
-
--- instance CanBeLinearEquation LinearEquation where
---   toLinearEquation = id
---   fromLinearEquation = id
