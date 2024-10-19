@@ -7,6 +7,7 @@
 -- Stability: experimental
 module Linear.SlackForm.Util where
 
+import qualified Data.Bifunctor as Bifunctor
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import Linear.Constraint.Generic.Types
@@ -14,6 +15,7 @@ import Linear.Constraint.Generic.Types
   )
 import Linear.Constraint.Linear.Types (LinearEquation (..))
 import qualified Linear.Constraint.Linear.Util as CLU
+import Linear.Constraint.Simple.Types (SimpleConstraint (..))
 import Linear.Constraint.Simple.Util
   ( substVarSimpleConstraintExpr
   )
@@ -22,7 +24,7 @@ import Linear.Expr.Util (exprVarsOnlyToExpr)
 import Linear.System.Linear.Types (LinearSystem (..))
 import qualified Linear.System.Linear.Util as SLU
 import Linear.System.Simple.Types
-  ( SimpleSystem
+  ( SimpleSystem (..)
   , simplifySimpleSystem
   )
 import qualified Linear.System.Simple.Types as SST
@@ -37,28 +39,29 @@ import Linear.Var.Types (Bounds (..), Var, VarBounds)
 -- First step here https://en.wikipedia.org/wiki/Simplex_algorithm#Standard_form
 eliminateNonZeroLowerBounds ::
   SimpleSystem -> Map.Map Var Expr -> (Map.Map Var Expr, SimpleSystem)
-eliminateNonZeroLowerBounds constraints eliminatedVarsMap = aux [] constraints
+eliminateNonZeroLowerBounds constraints eliminatedVarsMap = aux [] constraints.unSimpleSystem
   where
     -- Eliminate non-zero lower bounds
-
-    aux :: SimpleSystem -> SimpleSystem -> (Map.Map Var Expr, SimpleSystem)
+    aux ::
+      [SimpleConstraint] -> [SimpleConstraint] -> (Map.Map Var Expr, SimpleSystem)
     aux _ [] = (eliminatedVarsMap, constraints)
     aux checked (c : cs) = case c of
       -- x >= 5
-      (ExprVarsOnly (VarTermVO var : []) :>= lowerBound) ->
+      (SimpleConstraint (ExprVarsOnly [VarTermVO var] :>= lowerBound)) ->
         if lowerBound == 0
           then aux (checked ++ [c]) cs
           else
-            let newVar = SST.findHighestVar constraints + 1
+            let newVar = SST.nextAvailableVar constraints
                 -- y >= 0
-                newVarLowerBound = ExprVarsOnly (VarTermVO newVar : []) :>= 0
+                newVarLowerBound = SimpleConstraint $ ExprVarsOnly [VarTermVO newVar] :>= 0
 
                 -- x = y + 5
                 substOldVarWith = Expr (VarTerm newVar : [ConstTerm lowerBound])
                 substFn = substVarSimpleConstraintExpr var substOldVarWith
 
                 newConstraints =
-                  simplifySimpleSystem $ map substFn checked ++ newVarLowerBound : map substFn cs
+                  simplifySimpleSystem . SimpleSystem $
+                    map substFn checked ++ newVarLowerBound : map substFn cs
                 updatedEliminatedVarsMap = Map.insert var substOldVarWith eliminatedVarsMap
             in  eliminateNonZeroLowerBounds newConstraints updatedEliminatedVarsMap -- TODO: Make more efficient if needed
             -- TODO: (do) Deal with == ?
@@ -71,13 +74,12 @@ eliminateNonZeroLowerBounds constraints eliminatedVarsMap = aux [] constraints
 -- Return system of equalities and the slack variables
 addSlackVariables :: SimpleSystem -> ([Var], LinearSystem)
 addSlackVariables constraints =
-  let nextAvailableVar = SST.findHighestVar constraints + 1
-  in  aux constraints nextAvailableVar []
+  let nextAvailableVar = SST.nextAvailableVar constraints
+  in  aux constraints.unSimpleSystem nextAvailableVar []
   where
-    aux :: SimpleSystem -> Var -> [Var] -> ([Var], LinearSystem)
     aux [] _ slackVars = (slackVars, LinearSystem [])
     aux (c : cs) nextVar slackVars = case c of
-      (expr@(ExprVarsOnly exprTs) :<= num) ->
+      (SimpleConstraint (ExprVarsOnly exprTs :<= num)) ->
         let slackVar = nextVar
             newNextVar = nextVar + 1
             newExpr = ExprVarsOnly $ exprTs ++ [VarTermVO slackVar]
@@ -86,7 +88,7 @@ addSlackVariables constraints =
         in  ( nextVar : newSlackVars
             , SLU.prependLinearEquation (LinearEquation newExpr num) newConstraints
             )
-      (expr@(ExprVarsOnly exprTs) :>= num) ->
+      (SimpleConstraint (ExprVarsOnly exprTs :>= num)) ->
         let slackVar = nextVar
             newNextVar = nextVar + 1
             newExpr = ExprVarsOnly $ exprTs ++ [CoeffTermVO (-1) slackVar]
@@ -95,7 +97,7 @@ addSlackVariables constraints =
         in  ( nextVar : newSlackVars
             , SLU.prependLinearEquation (LinearEquation newExpr num) newConstraints
             )
-      (expr :== num) ->
+      (SimpleConstraint (expr :== num)) ->
         let (newSlackVars, newConstraints) = aux cs nextVar slackVars
         in  ( newSlackVars
             , SLU.prependLinearEquation (LinearEquation expr num) newConstraints
@@ -126,7 +128,6 @@ eliminateUnrestrictedLowerBounds constraints varBoundMap eliminatedVarsMap = aux
           newConstraints =
             LinearSystem $
               map (CLU.substVarWith var substOldVarWith) (unLinearSystem constraints) -- TODO: simplify?
-              -- TODO: Update this name
           updatedEliminatedVarsMap = Map.insert var (exprVarsOnlyToExpr substOldVarWith) eliminatedVarsMap
       in  eliminateUnrestrictedLowerBounds
             newConstraints

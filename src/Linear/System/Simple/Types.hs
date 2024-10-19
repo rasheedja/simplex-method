@@ -16,22 +16,42 @@ import Linear.Constraint.Simple.Util
   , simplifySimpleConstraint
   )
 import Linear.Expr.Util (exprVarsOnlyToList)
+import Linear.System.Types (System)
 import Linear.Term.Types (TermVarsOnly (..))
 import Linear.Var.Types (Var)
+import Test.QuickCheck (Arbitrary (..))
 
-type SimpleSystem = [SimpleConstraint]
+-- TODO: Use a more descriptive name
+newtype SimpleSystem = SimpleSystem {unSimpleSystem :: [SimpleConstraint]}
+  deriving (Show, Eq, Read, Generic)
+
+instance Arbitrary SimpleSystem where
+  arbitrary = SimpleSystem <$> arbitrary
 
 simplifySimpleSystem :: SimpleSystem -> SimpleSystem
-simplifySimpleSystem = map simplifySimpleConstraint
+simplifySimpleSystem = SimpleSystem . map simplifySimpleConstraint . unSimpleSystem
 
 simpleSystemVars :: SimpleSystem -> Set.Set Var
-simpleSystemVars = Set.unions . map simpleConstraintVars
+simpleSystemVars = Set.unions . map simpleConstraintVars . unSimpleSystem
 
-findHighestVar :: SimpleSystem -> Var
+findHighestVar :: SimpleSystem -> Maybe Var
 findHighestVar simpleSystem =
-  let vars =
-        [ v | gc <- simpleSystem, term <- exprVarsOnlyToList $ getGenericConstraintLHS gc, v <- case term of
-                                                                                            VarTermVO v -> [v]
-                                                                                            CoeffTermVO _ v -> [v]
-        ]
-  in  maximum vars
+  let vars = simpleSystemVars simpleSystem
+  in  if Set.null vars
+        then Nothing
+        else Just $ Set.findMax vars
+
+nextAvailableVar :: SimpleSystem -> Var
+nextAvailableVar simpleSystem =
+  case findHighestVar simpleSystem of
+    Just v -> v + 1
+    Nothing -> 0
+
+class CanBeSimpleSystem a where
+  toSimpleSystem :: a -> SimpleSystem
+
+instance CanBeSimpleSystem SimpleSystem where
+  toSimpleSystem = id
+
+instance CanBeSimpleSystem System where
+  toSimpleSystem = undefined

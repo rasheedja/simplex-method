@@ -7,18 +7,30 @@
 -- Stability: experimental
 module Linear.SlackForm.Types where
 
+import qualified Data.Set as Set
 import GHC.Generics (Generic)
-import Linear.Expr.Types (Expr)
-import Linear.System.Linear.Types (LinearSystem)
+import Linear.Constraint.Linear.Types (LinearEquation (..))
+import Linear.Expr.Types (ExprVarsOnly)
+import Linear.Expr.Util (exprVarsOnlyVars)
+import Linear.System.Linear.Types (LinearSystem (..))
+import Linear.System.Simple.Types
 import Linear.Var.Types (SimplexNum, Var)
 
 -- Expr == SimplexNum
+-- TODO: think about a better name for this type, CanonicalForm?
 data SlackForm = SlackForm
-  { maxObjective :: Expr -- TODO: should be ExprVarsOnly
+  { maxObjective :: ExprVarsOnly
   , constraints :: LinearSystem
-  , vars :: [Var] -- all vars are non-negative
+  , vars :: Set.Set Var -- all vars are non-negative
   }
   deriving (Show, Eq, Read, Generic)
 
 class CanBeSlackForm a where
-  toSlackForm :: a -> SlackForm
+  toSlackForm :: a -> ExprVarsOnly -> SlackForm
+
+instance CanBeSlackForm LinearSystem where
+  toSlackForm ls obj =
+    SlackForm
+      obj
+      ls
+      (Set.unions $ map (exprVarsOnlyVars . lhs) ls.unLinearSystem)

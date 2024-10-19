@@ -10,5 +10,14 @@ module Linear.Constraint.Simple.Types where
 import Linear.Constraint.Generic.Types (GenericConstraint)
 import Linear.Expr.Types (ExprVarsOnly)
 import Linear.Var.Types (SimplexNum)
+import GHC.Generics (Generic)
+import Test.QuickCheck (Arbitrary (..))
 
-type SimpleConstraint = GenericConstraint ExprVarsOnly SimplexNum
+newtype SimpleConstraint = SimpleConstraint { unSimpleConstraint :: GenericConstraint ExprVarsOnly SimplexNum }
+  deriving (Show, Eq, Read, Generic)
+
+instance Arbitrary SimpleConstraint where
+  arbitrary = SimpleConstraint <$> arbitrary
+
+class CanBeSimpleConstraint a where
+  toSimpleConstraint :: a -> SimpleConstraint

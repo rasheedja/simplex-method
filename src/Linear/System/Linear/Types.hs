@@ -11,6 +11,7 @@ import GHC.Generics (Generic)
 import Linear.Constraint.Linear.Types (LinearEquation)
 import Linear.Expr.Types (Expr)
 
+-- TODO: name this system of equations or something
 newtype LinearSystem = LinearSystem {unLinearSystem :: [LinearEquation]}
   deriving (Show, Eq, Read, Generic)
 

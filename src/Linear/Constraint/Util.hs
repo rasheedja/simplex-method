@@ -11,11 +11,11 @@ import qualified Data.Set as Set
 import Linear.Constraint.Generic.Types
   ( GenericConstraint ((:<=), (:==), (:>=))
   )
-import Linear.Constraint.Types (Constraint)
+import Linear.Constraint.Types (Constraint (..))
 import Linear.Expr.Util (exprVars)
 import Linear.Var.Types (Var)
 
 constraintVars :: Constraint -> Set.Set Var
-constraintVars (lhs :<= rhs) = exprVars lhs <> exprVars rhs
-constraintVars (lhs :>= rhs) = exprVars lhs <> exprVars rhs
-constraintVars (lhs :== rhs) = exprVars lhs <> exprVars rhs
+constraintVars (Constraint (lhs :<= rhs)) = exprVars lhs <> exprVars rhs
+constraintVars (Constraint (lhs :>= rhs)) = exprVars lhs <> exprVars rhs
+constraintVars (Constraint (lhs :== rhs)) = exprVars lhs <> exprVars rhs

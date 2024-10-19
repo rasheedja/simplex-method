@@ -12,14 +12,14 @@ import qualified Data.Map as Map
 import Linear.Constraint.Generic.Types
   ( GenericConstraint ((:<=), (:==), (:>=))
   )
-import Linear.Constraint.Simple.Types (SimpleConstraint)
+import Linear.Constraint.Simple.Types (SimpleConstraint (..))
 import Linear.Constraint.Types
   ( Constraint (..)
   )
 import Linear.Expr.Types (Expr, ExprVarsOnly)
 import Linear.Expr.Util (exprToList, exprVarsOnlyToExpr)
 import Linear.Simplex.Types (VarLitMap)
-import Linear.System.Simple.Types (SimpleSystem)
+import Linear.System.Simple.Types (SimpleSystem (..))
 import Linear.Term.Types
   ( Term (..)
   , TermVarsOnly
@@ -53,17 +53,17 @@ evalExprVarsOnly :: VarLitMap -> ExprVarsOnly -> SimplexNum
 evalExprVarsOnly varMap = evalExpr varMap . exprVarsOnlyToExpr
 
 evalConstraint :: VarLitMap -> Constraint -> Bool
-evalConstraint varMap (lhs :<= rhs) = evalExpr varMap lhs <= evalExpr varMap rhs
-evalConstraint varMap (lhs :>= rhs) = evalExpr varMap lhs >= evalExpr varMap rhs
-evalConstraint varMap (lhs :== rhs) = evalExpr varMap lhs == evalExpr varMap rhs
+evalConstraint varMap (Constraint (lhs :<= rhs)) = evalExpr varMap lhs <= evalExpr varMap rhs
+evalConstraint varMap (Constraint (lhs :>= rhs)) = evalExpr varMap lhs >= evalExpr varMap rhs
+evalConstraint varMap (Constraint (lhs :== rhs)) = evalExpr varMap lhs == evalExpr varMap rhs
 
 evalSimpleConstraint :: VarLitMap -> SimpleConstraint -> Bool
-evalSimpleConstraint varMap (lhs :<= rhs) = evalExprVarsOnly varMap lhs <= rhs
-evalSimpleConstraint varMap (lhs :>= rhs) = evalExprVarsOnly varMap lhs >= rhs
-evalSimpleConstraint varMap (lhs :== rhs) = evalExprVarsOnly varMap lhs == rhs
+evalSimpleConstraint varMap (SimpleConstraint (lhs :<= rhs)) = evalExprVarsOnly varMap lhs <= rhs
+evalSimpleConstraint varMap (SimpleConstraint (lhs :>= rhs)) = evalExprVarsOnly varMap lhs >= rhs
+evalSimpleConstraint varMap (SimpleConstraint (lhs :== rhs)) = evalExprVarsOnly varMap lhs == rhs
 
 evalSimpleSystem :: VarLitMap -> SimpleSystem -> Bool
-evalSimpleSystem varMap = all (evalSimpleConstraint varMap)
+evalSimpleSystem varMap = all (evalSimpleConstraint varMap) . unSimpleSystem
 
 genVarMap :: [Var] -> Gen VarLitMap
 genVarMap vars = do

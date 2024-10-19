@@ -11,6 +11,8 @@ import Linear.Expr.Types (ExprVarsOnly)
 import Linear.Var.Types (SimplexNum)
 
 -- lhs == rhs
+-- TODO: Should I move this? Typicially, this would for a 'LinearConstraint', but I'm renaming 'Constraint' to 'LinearConstraint'.
+-- TODO: Maybe I should move 'Constraint' here?
 data LinearEquation = LinearEquation
   { lhs :: ExprVarsOnly
   , rhs :: SimplexNum

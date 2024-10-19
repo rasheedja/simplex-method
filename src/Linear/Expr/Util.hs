@@ -121,8 +121,7 @@ exprToExprVarsOnly expr@(Expr ts) = do
     then
       if sumExprConstTerms expr == 0
         then Right $ ExprVarsOnly []
-        else
-          Left $ "safeExprToExprVarsOnly: Expr contains ConstTerm. Expr: " <> show expr
+        else Left $ "safeExprToExprVarsOnly: Expr contains ConstTerm. Expr: " <> show expr
     else Right $ unsafeExprToExprVarsOnly expr
   where
     isConstTerm :: Term -> Bool

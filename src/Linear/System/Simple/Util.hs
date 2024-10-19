@@ -12,10 +12,10 @@ import qualified Data.Set as Set
 import Linear.Constraint.Generic.Types
   ( GenericConstraint ((:<=), (:==), (:>=))
   )
-import Linear.Constraint.Simple.Types (SimpleConstraint)
+import Linear.Constraint.Simple.Types (SimpleConstraint (..))
 import Linear.Expr.Types (Expr (..), ExprVarsOnly (..))
 import Linear.System.Simple.Types
-  ( SimpleSystem
+  ( SimpleSystem (..)
   , simpleSystemVars
   )
 import Linear.Term.Types (Term (..), TermVarsOnly (..))
@@ -23,15 +23,15 @@ import Linear.Var.Types (Bounds (..), VarBounds)
 
 -- | Derive bounds for all variables in a system
 deriveBounds :: SimpleSystem -> VarBounds
-deriveBounds simpleSystem = foldr updateBounds initialVarBounds simpleSystem
+deriveBounds simpleSystem = foldr updateBounds initialVarBounds simpleSystem.unSimpleSystem
   where
     systemVars = simpleSystemVars simpleSystem
     initialVarBounds = M.fromList [(v, Bounds Nothing Nothing) | v <- Set.toList systemVars]
 
     updateBounds :: SimpleConstraint -> VarBounds -> VarBounds
-    updateBounds (ExprVarsOnly [VarTermVO var] :<= num) = M.insertWith mergeBounds var (Bounds Nothing (Just num))
-    updateBounds (ExprVarsOnly [VarTermVO var] :>= num) = M.insertWith mergeBounds var (Bounds (Just num) Nothing)
-    updateBounds (ExprVarsOnly [VarTermVO var] :== num) = M.insertWith mergeBounds var (Bounds (Just num) (Just num))
+    updateBounds (SimpleConstraint (ExprVarsOnly [VarTermVO var] :<= num)) = M.insertWith mergeBounds var (Bounds Nothing (Just num))
+    updateBounds (SimpleConstraint (ExprVarsOnly [VarTermVO var] :>= num)) = M.insertWith mergeBounds var (Bounds (Just num) Nothing)
+    updateBounds (SimpleConstraint (ExprVarsOnly [VarTermVO var] :== num)) = M.insertWith mergeBounds var (Bounds (Just num) (Just num))
     updateBounds _ = id
 
     -- \| Merge two bounds, very simple
@@ -51,14 +51,15 @@ deriveBounds simpleSystem = foldr updateBounds initialVarBounds simpleSystem
 -- TODO: better name
 removeUselessSystemBounds :: SimpleSystem -> VarBounds -> SimpleSystem
 removeUselessSystemBounds constraints bounds =
-  filter
-    ( \case
-        (ExprVarsOnly [VarTermVO var] :<= num) -> case M.lookup var bounds of
-          Just (Bounds _ (Just upper)) -> num <= upper
+  SimpleSystem $
+    filter
+      ( \case
+          (SimpleConstraint (ExprVarsOnly [VarTermVO var] :<= num)) -> case M.lookup var bounds of
+            Just (Bounds _ (Just upper)) -> num <= upper
+            _ -> True
+          (SimpleConstraint  (ExprVarsOnly [VarTermVO var] :>= num)) -> case M.lookup var bounds of
+            Just (Bounds (Just lower) _) -> num >= lower
+            _ -> True
           _ -> True
-        (ExprVarsOnly [VarTermVO var] :>= num) -> case M.lookup var bounds of
-          Just (Bounds (Just lower) _) -> num >= lower
-          _ -> True
-        _ -> True
-    )
-    constraints
+      )
+      constraints.unSimpleSystem

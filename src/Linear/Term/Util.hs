@@ -14,7 +14,6 @@ import Linear.Term.Types
   )
 import Linear.Var.Types (Var)
 
--- TODO: Test each function when reasonable
 simplifyTerm :: Term -> Term
 simplifyTerm (CoeffTerm 0 _) = ConstTerm 0
 simplifyTerm (CoeffTerm 1 v) = VarTerm v

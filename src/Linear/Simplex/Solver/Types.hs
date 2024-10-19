@@ -2,7 +2,7 @@ module Linear.Simplex.Solver.Types where
 
 import qualified Data.Map as Map
 import GHC.Generics (Generic)
-import Linear.Expr.Types (Expr)
+import Linear.Expr.Types (ExprVarsOnly)
 import Linear.System.Linear.Types (CanBeLinearSystem)
 import Linear.Var.Types (SimplexNum, Var)
 
@@ -10,7 +10,7 @@ data OptimisationDirection = Minimize | Maximize
   deriving (Show, Eq, GHC.Generics.Generic)
 
 data Objective = Objective
-  { expr :: Linear.Expr.Types.Expr -- TODO: this should be ExprVarsOnly
+  { expr :: Linear.Expr.Types.ExprVarsOnly
   , direction :: OptimisationDirection
   }
   deriving (Show, Eq, GHC.Generics.Generic)

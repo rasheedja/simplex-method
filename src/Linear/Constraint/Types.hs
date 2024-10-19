@@ -11,6 +11,12 @@ import qualified Data.Set as Set
 import GHC.Generics (Generic)
 import Linear.Constraint.Generic.Types (GenericConstraint)
 import Linear.Expr.Types (Expr)
+import Test.QuickCheck (Arbitrary (..))
 
 -- Input
-type Constraint = GenericConstraint Expr Expr
+-- TODO: Consider LinearConstraint
+newtype Constraint = Constraint {unConstraint :: GenericConstraint Expr Expr}
+  deriving (Show, Eq, Read, Generic)
+
+instance Arbitrary Constraint where
+  arbitrary = Constraint <$> arbitrary

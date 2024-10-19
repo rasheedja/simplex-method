@@ -11,8 +11,8 @@ import GHC.Generics (Generic)
 import Linear.Term.Types (Term, TermVarsOnly)
 import Test.QuickCheck (Arbitrary (..))
 
--- TODO: Use normal lists
 -- treat empty expr as 0
+-- Consider a version with a num instance, use + and * operators for the input
 newtype Expr = Expr {unExpr :: [Term]}
   deriving
     ( Show
