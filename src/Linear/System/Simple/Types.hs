@@ -18,7 +18,7 @@ import Linear.Constraint.Simple.Util
 import Linear.Expr.Util (exprVarsOnlyToList)
 import Linear.System.Types (System)
 import Linear.Term.Types (TermVarsOnly (..))
-import Linear.Var.Types (Var)
+import Linear.Var.Types (Var(..))
 import Test.QuickCheck (Arbitrary (..))
 
 -- TODO: Use a more descriptive name
@@ -44,8 +44,8 @@ findHighestVar simpleSystem =
 nextAvailableVar :: SimpleSystem -> Var
 nextAvailableVar simpleSystem =
   case findHighestVar simpleSystem of
-    Just v -> v + 1
-    Nothing -> 0
+    Just v -> Var $ v.unVar + 1
+    Nothing -> Var 0
 
 class CanBeSimpleSystem a where
   toSimpleSystem :: a -> SimpleSystem

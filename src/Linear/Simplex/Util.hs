@@ -37,8 +37,9 @@ import Linear.Simplex.Types
   , TableauRow (TableauRow, lhs, rhs)
   , VarLitMap
   , VarLitMapSum
+  , Var
   )
-import Linear.Var.Types (SimplexNum, Var)
+import Linear.Var.Types (SimplexNum)
 import Prelude hiding (EQ)
 
 -- | Is the given 'ObjectiveFunction' to be 'Max'imized?

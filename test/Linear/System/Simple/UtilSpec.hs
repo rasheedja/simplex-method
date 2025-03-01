@@ -26,7 +26,7 @@ import Linear.System.Simple.Util
   , removeObviousInequalities
   )
 import Linear.Term.Types (TermVarsOnly (..))
-import Linear.Var.Types (Bounds (..))
+import Linear.Var.Types (Bounds (..), Var(..))
 import Linear.Var.Util (validateBounds)
 import Test.Hspec (Spec, describe, it, shouldBe)
 import Test.Hspec.QuickCheck (prop)
@@ -59,45 +59,45 @@ spec = do
     it "findHighestVar finds the highest variable in a simple system" $ do
       let simpleSystem1 =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :<= 1
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :<= 1
               ]
           simpleSystem100 =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 50] :<= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 100] :<= 1
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 50)] :<= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 100)] :<= 1
               ]
           simpleSystem10 =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (-10)] :<= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 10] :<= 1
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var (-10))] :<= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 10)] :<= 1
               ]
           simpleSystemMinus10 =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (-10)] :<= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO (-20)] :<= 1
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var (-10))] :<= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var (-20))] :<= 1
               ]
 
       findHighestVar (SimpleSystem []) `shouldBe` Nothing
-      findHighestVar simpleSystem1 `shouldBe` Just 1
-      findHighestVar simpleSystem100 `shouldBe` Just 100
-      findHighestVar simpleSystem10 `shouldBe` Just 10
-      findHighestVar simpleSystemMinus10 `shouldBe` Just (-10)
+      findHighestVar simpleSystem1 `shouldBe` Just (Var 1)
+      findHighestVar simpleSystem100 `shouldBe` Just (Var 100)
+      findHighestVar simpleSystem10 `shouldBe` Just (Var 10)
+      findHighestVar simpleSystemMinus10 `shouldBe` Just (Var (-10))
   describe "Bounds"
     $ it
       "validateBounds finds that deriving bounds for a system where -1 <= x <= 1 has valid bounds"
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= (-1)
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 1
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= (-1)
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 1
               ]
           derivedBounds = deriveBounds simpleSystem
-          expectedBounds = Map.fromList [(0, Bounds (Just (-1)) (Just 1))]
+          expectedBounds = Map.fromList [(Var 0, Bounds (Just (-1)) (Just 1))]
       derivedBounds `shouldBe` expectedBounds
       validateBounds derivedBounds `shouldBe` True
   it
@@ -105,11 +105,11 @@ spec = do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 1
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 1
               ]
           derivedBounds = deriveBounds simpleSystem
-          expectedBounds = Map.fromList [(0, Bounds (Just 0) (Just 1))]
+          expectedBounds = Map.fromList [(Var 0, Bounds (Just 0) (Just 1))]
       derivedBounds `shouldBe` expectedBounds
       validateBounds derivedBounds `shouldBe` True
   it
@@ -117,11 +117,11 @@ spec = do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 1
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 1
               ]
           derivedBounds = deriveBounds simpleSystem
-          expectedBounds = Map.fromList [(0, Bounds (Just 1) (Just 1))]
+          expectedBounds = Map.fromList [(Var 0, Bounds (Just 1) (Just 1))]
       derivedBounds `shouldBe` expectedBounds
       validateBounds derivedBounds `shouldBe` True
   it
@@ -129,11 +129,11 @@ spec = do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 0
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 0
               ]
           derivedBounds = deriveBounds simpleSystem
-          expectedBounds = Map.fromList [(0, Bounds (Just 1) (Just 0))]
+          expectedBounds = Map.fromList [(Var 0, Bounds (Just 1) (Just 0))]
       derivedBounds `shouldBe` expectedBounds
       validateBounds derivedBounds `shouldBe` False
   it
@@ -141,13 +141,13 @@ spec = do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :<= 3
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :<= 3
               ]
           derivedBounds = deriveBounds simpleSystem
-          expectedBounds = Map.fromList [(0, Bounds (Just 0) (Just 1)), (1, Bounds (Just 1) (Just 3))]
+          expectedBounds = Map.fromList [(Var 0, Bounds (Just 0) (Just 1)), (Var 1, Bounds (Just 1) (Just 3))]
       derivedBounds `shouldBe` expectedBounds
       validateBounds derivedBounds `shouldBe` True
   it
@@ -155,13 +155,13 @@ spec = do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 3
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :<= 1
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 3
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :<= 1
               ]
           derivedBounds = deriveBounds simpleSystem
-          expectedBounds = Map.fromList [(0, Bounds (Just 1) (Just 0)), (1, Bounds (Just 3) (Just 1))]
+          expectedBounds = Map.fromList [(Var 0, Bounds (Just 1) (Just 0)), (Var 1, Bounds (Just 3) (Just 1))]
       derivedBounds `shouldBe` expectedBounds
       validateBounds derivedBounds `shouldBe` False
   it
@@ -169,13 +169,13 @@ spec = do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :<= 3
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :<= 3
               ]
           derivedBounds = deriveBounds simpleSystem
-          expectedBounds = Map.fromList [(0, Bounds (Just 1) (Just 0)), (1, Bounds (Just 1) (Just 3))]
+          expectedBounds = Map.fromList [(Var 0, Bounds (Just 1) (Just 0)), (Var 1, Bounds (Just 1) (Just 3))]
       derivedBounds `shouldBe` expectedBounds
       validateBounds derivedBounds `shouldBe` False
   it
@@ -183,67 +183,67 @@ spec = do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 3
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :<= 1
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 3
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :<= 1
               ]
           derivedBounds = deriveBounds simpleSystem
-          expectedBounds = Map.fromList [(0, Bounds (Just 0) (Just 1)), (1, Bounds (Just 3) (Just 1))]
+          expectedBounds = Map.fromList [(Var 0, Bounds (Just 0) (Just 1)), (Var 1, Bounds (Just 3) (Just 1))]
       derivedBounds `shouldBe` expectedBounds
       validateBounds derivedBounds `shouldBe` False
   it "removeObviousInequalities removes x <= 3 when bounds say x <= 2" $ do
     let simpleSystem =
           SimpleSystem
-            [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 2
-            , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 3
+            [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 2
+            , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 3
             ]
-        bounds = Map.fromList [(0, Bounds (Just 0) (Just 2))]
+        bounds = Map.fromList [(Var 0, Bounds (Just 0) (Just 2))]
         simplifiedSimpleSystem = removeObviousInequalities simpleSystem bounds
-        expectedSimpleSystem = SimpleSystem [SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 2]
+        expectedSimpleSystem = SimpleSystem [SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 2]
     simplifiedSimpleSystem `shouldBe` expectedSimpleSystem
   it "removeObviousInequalities does not remove x <= 2 when bounds say x <= 2" $ do
     let simpleSystem =
           SimpleSystem
-            [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 2
+            [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 2
             ]
-        bounds = Map.fromList [(0, Bounds (Just 0) (Just 2))]
+        bounds = Map.fromList [(Var 0, Bounds (Just 0) (Just 2))]
         simplifiedSimpleSystem = removeObviousInequalities simpleSystem bounds
-        expectedSimpleSystem = SimpleSystem [SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 2]
+        expectedSimpleSystem = SimpleSystem [SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 2]
     simplifiedSimpleSystem `shouldBe` expectedSimpleSystem
   it "removeObviousInequalities removes x >= 3 when bounds say x >= 4" $ do
     let simpleSystem =
           SimpleSystem
-            [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 4
-            , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 3
+            [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 4
+            , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 3
             ]
-        bounds = Map.fromList [(0, Bounds (Just 4) (Just 5))]
+        bounds = Map.fromList [(Var 0, Bounds (Just 4) (Just 5))]
         simplifiedSimpleSystem = removeObviousInequalities simpleSystem bounds
-        expectedSimpleSystem = SimpleSystem [SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 4]
+        expectedSimpleSystem = SimpleSystem [SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 4]
     simplifiedSimpleSystem `shouldBe` expectedSimpleSystem
   it "removeObviousInequalities does not remove x >= 4 when bounds say x >= 4" $ do
     let simpleSystem =
           SimpleSystem
-            [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 4
+            [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 4
             ]
-        bounds = Map.fromList [(0, Bounds (Just 4) (Just 5))]
+        bounds = Map.fromList [(Var 0, Bounds (Just 4) (Just 5))]
         simplifiedSimpleSystem = removeObviousInequalities simpleSystem bounds
-        expectedSimpleSystem = SimpleSystem [SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 4]
+        expectedSimpleSystem = SimpleSystem [SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 4]
     simplifiedSimpleSystem `shouldBe` expectedSimpleSystem
   it
     "removeObviousInequalities does not remove 0 <= x <= 2 when bounds say 0 <= x <= 2"
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 2
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 2
               ]
-          bounds = Map.fromList [(0, Bounds (Just 0) (Just 2))]
+          bounds = Map.fromList [(Var 0, Bounds (Just 0) (Just 2))]
           simplifiedSimpleSystem = removeObviousInequalities simpleSystem bounds
           expectedSimpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 2
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 2
               ]
       simplifiedSimpleSystem `shouldBe` expectedSimpleSystem
   it
@@ -251,37 +251,37 @@ spec = do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 2
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 2
               ]
-          bounds = Map.fromList [(0, Bounds (Just 0) (Just 1))]
+          bounds = Map.fromList [(Var 0, Bounds (Just 0) (Just 1))]
           simplifiedSimpleSystem = removeObviousInequalities simpleSystem bounds
-          expectedSimpleSystem = SimpleSystem [SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 0]
+          expectedSimpleSystem = SimpleSystem [SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 0]
       simplifiedSimpleSystem `shouldBe` expectedSimpleSystem
   it
     "removeObviousInequalities removes lower bound of 0 <= x <= 2 when bounds say 1 <= x <= 2"
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 2
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 2
               ]
-          bounds = Map.fromList [(0, Bounds (Just 1) (Just 2))]
+          bounds = Map.fromList [(Var 0, Bounds (Just 1) (Just 2))]
           simplifiedSimpleSystem = removeObviousInequalities simpleSystem bounds
-          expectedSimpleSystem = SimpleSystem [SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 2]
+          expectedSimpleSystem = SimpleSystem [SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 2]
       simplifiedSimpleSystem `shouldBe` expectedSimpleSystem
   it "removeUselssSystemBounds only removes constraints of the form x <= c" $ do
     let simpleSystem =
           SimpleSystem
-            [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 2
-            , SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 3
-            , SimpleConstraint $ ExprVarsOnly [CoeffTermVO 2 0] :<= 6
+            [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 2
+            , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 3
+            , SimpleConstraint $ ExprVarsOnly [CoeffTermVO 2 (Var 0)] :<= 6
             ]
-        bounds = Map.fromList [(0, Bounds (Just 0) (Just 2))]
+        bounds = Map.fromList [(Var 0, Bounds (Just 0) (Just 2))]
         simplifiedSimpleSystem = removeObviousInequalities simpleSystem bounds
         expectedSimpleSystem =
           SimpleSystem
-            [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :<= 2
-            , SimpleConstraint $ ExprVarsOnly [CoeffTermVO 2 0] :<= 6
+            [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :<= 2
+            , SimpleConstraint $ ExprVarsOnly [CoeffTermVO 2 (Var 0)] :<= 6
             ]
     simplifiedSimpleSystem `shouldBe` expectedSimpleSystem

@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.36.0.
+-- This file has been generated from package.yaml by hpack version 0.37.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -28,6 +28,7 @@ source-repository head
 library
   exposed-modules:
       Comparison.Types
+      Linear.CanonicalForm.Solver
       Linear.CanonicalForm.Types
       Linear.CanonicalForm.Util
       Linear.Constraint.Linear.Types
@@ -49,6 +50,7 @@ library
       Linear.System.Simple.Types
       Linear.System.Simple.Util
       Linear.System.Types
+      Linear.Tableau.Types
       Linear.Term.Types
       Linear.Term.Util
       Linear.Var.Types
@@ -58,7 +60,7 @@ library
   hs-source-dirs:
       src
   default-extensions:
-      DataKinds DeriveFunctor DeriveGeneric DerivingStrategies DisambiguateRecordFields DuplicateRecordFields FlexibleContexts LambdaCase OverloadedLabels OverloadedRecordDot OverloadedStrings RecordWildCards TemplateHaskell TupleSections TypeApplications TypeFamilies NamedFieldPuns
+      DataKinds DeriveFunctor DeriveGeneric DerivingStrategies DisambiguateRecordFields DuplicateRecordFields FlexibleContexts GeneralizedNewtypeDeriving LambdaCase OverloadedLabels OverloadedRecordDot OverloadedStrings RecordWildCards TemplateHaskell TupleSections TypeApplications TypeFamilies NamedFieldPuns
   build-depends:
       QuickCheck
     , base >=4.14 && <5
@@ -79,6 +81,7 @@ test-suite simplex-method-test
       Linear.Constraint.Simple.UtilSpec
       Linear.Expr.UtilSpec
       Linear.System.Simple.UtilSpec
+      Linear.Tableau.TypesSpec
       Linear.Term.UtilSpec
       Linear.Var.UtilSpec
       TestUtil
@@ -86,7 +89,7 @@ test-suite simplex-method-test
   hs-source-dirs:
       test
   default-extensions:
-      DataKinds DeriveFunctor DeriveGeneric DerivingStrategies DisambiguateRecordFields DuplicateRecordFields FlexibleContexts LambdaCase OverloadedLabels OverloadedRecordDot OverloadedStrings RecordWildCards TemplateHaskell TupleSections TypeApplications TypeFamilies NamedFieldPuns
+      DataKinds DeriveFunctor DeriveGeneric DerivingStrategies DisambiguateRecordFields DuplicateRecordFields FlexibleContexts GeneralizedNewtypeDeriving LambdaCase OverloadedLabels OverloadedRecordDot OverloadedStrings RecordWildCards TemplateHaskell TupleSections TypeApplications TypeFamilies NamedFieldPuns
   build-depends:
       QuickCheck
     , base >=4.14 && <5

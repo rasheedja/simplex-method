@@ -35,7 +35,8 @@ import Linear.Term.Types
   ( Term (..)
   , TermVarsOnly (..)
   )
-import Linear.Var.Types (Bounds (..), Var, VarBounds)
+import Linear.Var.Types (Bounds (..), Var(..), VarBounds)
+import qualified Linear.Var.Util as LVU
 
 -- | Eliminate non-zero lower bounds via substitution
 -- Return the system with the eliminated variables and a map of the eliminated variables to their equivalent expressions
@@ -85,7 +86,7 @@ addSlackVars constraints =
     aux (c : cs) nextVar slackVars = case c of
       (SimpleConstraint (ExprVarsOnly exprTs :<= num)) ->
         let slackVar = nextVar
-            newNextVar = nextVar + 1
+            newNextVar = LVU.nextVar nextVar
             newExpr = ExprVarsOnly $ exprTs ++ [VarTermVO slackVar]
             -- slackVarLowerBound = Expr (VarTerm slackVar : []) :>= 0
             (newSlackVars, newConstraints) = aux cs newNextVar slackVars
@@ -94,7 +95,7 @@ addSlackVars constraints =
             )
       (SimpleConstraint (ExprVarsOnly exprTs :>= num)) ->
         let slackVar = nextVar
-            newNextVar = nextVar + 1
+            newNextVar = LVU.nextVar nextVar
             newExpr = ExprVarsOnly $ exprTs ++ [CoeffTermVO (-1) slackVar]
             -- slackVarLowerBound = Expr (VarTerm slackVar : []) :>= 0
             (newSlackVars, newConstraints) = aux cs newNextVar slackVars
@@ -120,9 +121,9 @@ eliminateUnrestrictedLowerBounds constraints varBoundMap eliminatedVarsMap = aux
       LinearSystem -> [(Var, Bounds)] -> (Map.Map Var Expr, LinearSystem)
     aux _ [] = (eliminatedVarsMap, constraints)
     aux cs ((var, Bounds Nothing _) : bounds) =
-      let highestVar = Maybe.fromMaybe (-1) $ SLU.findHighestVar constraints
-          newVarPlus = highestVar + 1
-          newVarMinus = newVarPlus + 1
+      let highestVar = Maybe.fromMaybe (Var (-1)) $ SLU.findHighestVar constraints
+          newVarPlus = LVU.nextVar highestVar
+          newVarMinus = LVU.nextVar newVarPlus
           -- newVarPlusLowerBound = Expr (VarTerm newVarPlus : []) :>= 0
           -- newVarMinusLowerBound = Expr (VarTerm newVarMinus : []) :>= 0
 

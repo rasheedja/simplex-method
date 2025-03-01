@@ -43,6 +43,7 @@ import Linear.Simplex.Types
   , Tableau
   , TableauRow (rhs)
   , VarLitMapSum
+  , Var
   )
 import Linear.Simplex.Util
   ( combineVarLitMapSums
@@ -54,7 +55,7 @@ import Linear.Simplex.Util
   , showT
   , tableauInDictionaryForm
   )
-import Linear.Var.Types (SimplexNum, Var)
+import Linear.Var.Types (SimplexNum)
 import Prelude hiding (EQ)
 
 -- | Find a feasible solution for the given system of 'StandardConstraint's by performing the first phase of the two-phase simplex method

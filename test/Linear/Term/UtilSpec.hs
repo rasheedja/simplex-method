@@ -29,105 +29,105 @@ import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck (counterexample)
 import TestUtil (evalTerm, genVarMap)
 import Prelude
+import Linear.Var.Types (Var(..))
 
 spec :: Spec
-spec = do
-  describe "Term" $ do
-    prop "simplifying leads to same evaluation" $ \term -> do
-      varMap <- maybe (pure Map.empty) (genVarMap . List.singleton) $ termVar term
-      let simplifiedTerm = simplifyTerm term
-          termEval = evalTerm varMap term
-          simplifiedTermEval = evalTerm varMap simplifiedTerm
-      pure
-        $ counterexample
-          ( "term: "
-              <> show term
-              <> "simplifiedTerm: "
-              <> show simplifiedTerm
-              <> "\nvarMap: "
-              <> show varMap
-              <> "\ntermEval: "
-              <> show termEval
-              <> "\nsimplifiedTermEval: "
-              <> show simplifiedTermEval
-          )
-        $ evalTerm varMap (simplifyTerm term) == evalTerm varMap term
-    prop "simplifyTerm is idempotent" $ \term -> do
-      let simplifiedTerm = simplifyTerm term
-          simplifiedTwiceTerm = simplifyTerm simplifiedTerm
-      counterexample
+spec = describe "Term" $ do
+  prop "simplifying leads to same evaluation" $ \term -> do
+    varMap <- maybe (pure Map.empty) (genVarMap . List.singleton) $ termVar term
+    let simplifiedTerm = simplifyTerm term
+        termEval = evalTerm varMap term
+        simplifiedTermEval = evalTerm varMap simplifiedTerm
+    pure
+      $ counterexample
         ( "term: "
             <> show term
-            <> "\nsimplifiedTerm: "
+            <> "simplifiedTerm: "
             <> show simplifiedTerm
-            <> "\nsimplifiedTwiceTerm: "
-            <> show simplifiedTwiceTerm
+            <> "\nvarMap: "
+            <> show varMap
+            <> "\ntermEval: "
+            <> show termEval
+            <> "\nsimplifiedTermEval: "
+            <> show simplifiedTermEval
         )
-        $ simplifiedTwiceTerm == simplifiedTerm
-    prop "negating and evaluating is the same as negating the evaluation" $ \term -> do
-      varMap <- maybe (pure $ Map.empty) (genVarMap . List.singleton) $ termVar term
-      let negatedTerm = negateTerm term
-          termEval = evalTerm varMap term
-          negatedTermEval = evalTerm varMap negatedTerm
-      pure
-        $ counterexample
-          ( "term: "
-              <> show term
-              <> "\nnegatedTerm: "
-              <> show negatedTerm
-              <> "\nvarMap: "
-              <> show varMap
-              <> "\ntermEval: "
-              <> show termEval
-              <> "\nnegatedTermEval: "
-              <> show negatedTermEval
-          )
-        $ negate termEval == negatedTermEval
-    prop "negating  twice is the same as not negating" $ \term -> do
-      let simplifiedTerm = simplifyTerm term
-          negatedTwiceSimpleTerm = negateTerm (negateTerm simplifiedTerm)
-      counterexample
+      $ evalTerm varMap (simplifyTerm term) == evalTerm varMap term
+  prop "simplifyTerm is idempotent" $ \term -> do
+    let simplifiedTerm = simplifyTerm term
+        simplifiedTwiceTerm = simplifyTerm simplifiedTerm
+    counterexample
+      ( "term: "
+          <> show term
+          <> "\nsimplifiedTerm: "
+          <> show simplifiedTerm
+          <> "\nsimplifiedTwiceTerm: "
+          <> show simplifiedTwiceTerm
+      )
+      $ simplifiedTwiceTerm == simplifiedTerm
+  prop "negating and evaluating is the same as negating the evaluation" $ \term -> do
+    varMap <- maybe (pure $ Map.empty) (genVarMap . List.singleton) $ termVar term
+    let negatedTerm = negateTerm term
+        termEval = evalTerm varMap term
+        negatedTermEval = evalTerm varMap negatedTerm
+    pure
+      $ counterexample
         ( "term: "
             <> show term
-            <> "\nsimplifiedTerm: "
-            <> show simplifiedTerm
-            <> "\nnegatedTwiceSimpleTerm: "
-            <> show negatedTwiceSimpleTerm
+            <> "\nnegatedTerm: "
+            <> show negatedTerm
+            <> "\nvarMap: "
+            <> show varMap
+            <> "\ntermEval: "
+            <> show termEval
+            <> "\nnegatedTermEval: "
+            <> show negatedTermEval
         )
-        $ negatedTwiceSimpleTerm == simplifiedTerm
-    prop "zeroConstTerm correctly zeroes constant terms" $ \term -> do
-      let termZeroedConsts = zeroConstTerm term
-      counterexample
-        ( "term: "
-            <> show term
-            <> "\ntermZeroedConsts: "
-            <> show termZeroedConsts
-        )
-        $ case term of
-          ConstTerm _ -> termZeroedConsts == ConstTerm 0
-          _ -> termZeroedConsts == term
-    it "isConstTerm correctly identifies constant terms" $ do
-      isConstTerm (ConstTerm 0) `shouldBe` True
-      isConstTerm (ConstTerm 1) `shouldBe` True
-      isConstTerm (CoeffTerm 1 1) `shouldBe` False
-      isConstTerm (VarTerm 1) `shouldBe` False
-    it "termToTermVarsOnly correctly converts terms to vars only" $ do
-      termToTermVarsOnly (ConstTerm 0) `shouldSatisfy` Either.isLeft
-      termToTermVarsOnly (ConstTerm 1) `shouldSatisfy` Either.isLeft
-      termToTermVarsOnly (CoeffTerm 1 1) `shouldBe` Right (CoeffTermVO 1 1)
-      termToTermVarsOnly (VarTerm 1) `shouldBe` Right (VarTermVO 1)
-    it "unsafeTermToTermVarsOnly correctly converts terms without vars" $ do
-      unsafeTermToTermVarsOnly (CoeffTerm 1 1) `shouldBe` (CoeffTermVO 1 1)
-      unsafeTermToTermVarsOnly (VarTerm 1) `shouldBe` (VarTermVO 1)
-    prop "normalizeTerms is idempotent" $ \terms -> do
-      let normalizedTerms = normalizeTerms terms
-          normalizedTwiceTerms = normalizeTerms normalizedTerms
-      counterexample
-        ( "terms: "
-            <> show terms
-            <> "\nnormalizedTerms: "
-            <> show normalizedTerms
-            <> "\nnormalizedTwiceTerms: "
-            <> show normalizedTwiceTerms
-        )
-        $ normalizedTwiceTerms == normalizedTerms
+      $ negate termEval == negatedTermEval
+  prop "negating  twice is the same as not negating" $ \term -> do
+    let simplifiedTerm = simplifyTerm term
+        negatedTwiceSimpleTerm = negateTerm (negateTerm simplifiedTerm)
+    counterexample
+      ( "term: "
+          <> show term
+          <> "\nsimplifiedTerm: "
+          <> show simplifiedTerm
+          <> "\nnegatedTwiceSimpleTerm: "
+          <> show negatedTwiceSimpleTerm
+      )
+      $ negatedTwiceSimpleTerm == simplifiedTerm
+  prop "zeroConstTerm correctly zeroes constant terms" $ \term -> do
+    let termZeroedConsts = zeroConstTerm term
+    counterexample
+      ( "term: "
+          <> show term
+          <> "\ntermZeroedConsts: "
+          <> show termZeroedConsts
+      )
+      $ case term of
+        ConstTerm _ -> termZeroedConsts == ConstTerm 0
+        _ -> termZeroedConsts == term
+  it "isConstTerm correctly identifies constant terms" $ do
+    isConstTerm (ConstTerm 0) `shouldBe` True
+    isConstTerm (ConstTerm 1) `shouldBe` True
+    isConstTerm (CoeffTerm 1 (Var 1)) `shouldBe` False
+    isConstTerm (VarTerm (Var 1)) `shouldBe` False
+  it "termToTermVarsOnly correctly converts terms to vars only" $ do
+    termToTermVarsOnly (ConstTerm 0) `shouldSatisfy` Either.isLeft
+    termToTermVarsOnly (ConstTerm 1) `shouldSatisfy` Either.isLeft
+    termToTermVarsOnly (CoeffTerm 1 (Var 1)) `shouldBe` Right (CoeffTermVO 1 (Var 1))
+    termToTermVarsOnly (VarTerm (Var 1)) `shouldBe` Right (VarTermVO (Var 1))
+  it "unsafeTermToTermVarsOnly correctly converts terms without vars" $ do
+    unsafeTermToTermVarsOnly (CoeffTerm 1 (Var 1)) `shouldBe` (CoeffTermVO 1 (Var 1))
+    unsafeTermToTermVarsOnly (VarTerm (Var 1)) `shouldBe` (VarTermVO (Var 1))
+  prop "normalizeTerms is idempotent" $ \terms -> do
+    let normalizedTerms = normalizeTerms terms
+        normalizedTwiceTerms = normalizeTerms normalizedTerms
+    counterexample
+      ( "terms: "
+          <> show terms
+          <> "\nnormalizedTerms: "
+          <> show normalizedTerms
+          <> "\nnormalizedTwiceTerms: "
+          <> show normalizedTwiceTerms
+      )
+      $ normalizedTwiceTerms == normalizedTerms

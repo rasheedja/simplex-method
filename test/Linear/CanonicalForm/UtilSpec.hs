@@ -26,6 +26,9 @@ import Linear.Term.Types
   ( Term (..)
   , TermVarsOnly (..)
   )
+import Linear.Var.Types
+  ( Var (..)
+  )
 import Test.Hspec (Spec, describe, it, shouldBe)
 import Test.QuickCheck (Testable (property), withMaxSuccess)
 
@@ -40,14 +43,14 @@ spec = describe "Slack Form Transformations" $ do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 0
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 0
               ]
           (updatedBounds, updatedSystem) = eliminateNonZeroLowerBounds simpleSystem Map.empty
           expectedSimpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 0
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 0
               ]
           expectedEliminatedVarExprMap = Map.empty
       updatedSystem `shouldBe` expectedSimpleSystem
@@ -55,31 +58,31 @@ spec = describe "Slack Form Transformations" $ do
   it "eliminateNonZeroLowerBounds correctly eliminates positive lower bounds" $ do
     let simpleSystem =
           SimpleSystem
-            [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 1
-            , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 0
+            [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 1
+            , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 0
             ]
         (updatedBounds, updatedSystem) = eliminateNonZeroLowerBounds simpleSystem Map.empty
         expectedSimpleSystem =
           SimpleSystem
-            [ SimpleConstraint $ ExprVarsOnly [VarTermVO 2] :>= 0
-            , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 0
+            [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 2)] :>= 0
+            , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 0
             ]
-        expectedEliminatedVarExprMap = Map.fromList [(0, Expr (VarTerm 2 : [ConstTerm 1]))]
+        expectedEliminatedVarExprMap = Map.fromList [(Var 0, Expr (VarTerm (Var 2) : [ConstTerm 1]))]
     updatedSystem `shouldBe` expectedSimpleSystem
     updatedBounds `shouldBe` expectedEliminatedVarExprMap
   it "eliminateNonZeroLowerBounds correctly eliminates negative lower bounds" $ do
     let simpleSystem =
           SimpleSystem
-            [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= (-1)
-            , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 0
+            [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= (-1)
+            , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 0
             ]
         (updatedBounds, updatedSystem) = eliminateNonZeroLowerBounds simpleSystem Map.empty
         expectedSimpleSystem =
           SimpleSystem
-            [ SimpleConstraint $ ExprVarsOnly [VarTermVO 2] :>= 0
-            , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 0
+            [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 2)] :>= 0
+            , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 0
             ]
-        expectedEliminatedVarExprMap = Map.fromList [(0, Expr (VarTerm 2 : [ConstTerm (-1)]))]
+        expectedEliminatedVarExprMap = Map.fromList [(Var 0, Expr (VarTerm (Var 2) : [ConstTerm (-1)]))]
     updatedSystem `shouldBe` expectedSimpleSystem
     updatedBounds `shouldBe` expectedEliminatedVarExprMap
   it
@@ -87,19 +90,19 @@ spec = describe "Slack Form Transformations" $ do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= (-1)
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= (-1)
               ]
           (updatedBounds, updatedSystem) = eliminateNonZeroLowerBounds simpleSystem Map.empty
           expectedSimpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 2] :>= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 3] :>= 0
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 2)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 3)] :>= 0
               ]
           expectedEliminatedVarExprMap =
             Map.fromList
-              [ (0, Expr (VarTerm 2 : [ConstTerm 1]))
-              , (1, Expr (VarTerm 3 : [ConstTerm (-1)]))
+              [ (Var 0, Expr (VarTerm (Var 2) : [ConstTerm 1]))
+              , (Var 1, Expr (VarTerm (Var 3) : [ConstTerm (-1)]))
               ]
       updatedSystem `shouldBe` expectedSimpleSystem
       updatedBounds `shouldBe` expectedEliminatedVarExprMap
@@ -108,25 +111,25 @@ spec = describe "Slack Form Transformations" $ do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 0] :>= 1
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 0
-              , SimpleConstraint $ ExprVarsOnly (VarTermVO 0 : [VarTermVO 1]) :>= 1
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 0)] :>= 1
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly (VarTermVO (Var 0) : [VarTermVO (Var 1)]) :>= 1
               ]
           (updatedBounds, updatedSystem) = eliminateNonZeroLowerBounds simpleSystem Map.empty
           expectedSimpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 2] :>= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 0
-              , SimpleConstraint $ ExprVarsOnly (VarTermVO 1 : [VarTermVO 2]) :>= 0
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 2)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 0
+              , SimpleConstraint $ ExprVarsOnly (VarTermVO (Var 1) : [VarTermVO (Var 2)]) :>= 0
               ]
-          expectedEliminatedVarExprMap = Map.fromList [(0, Expr (VarTerm 2 : [ConstTerm 1]))]
+          expectedEliminatedVarExprMap = Map.fromList [(Var 0, Expr (VarTerm (Var 2) : [ConstTerm 1]))]
       updatedSystem `shouldBe` expectedSimpleSystem
       updatedBounds `shouldBe` expectedEliminatedVarExprMap
   it "eliminateNonZeroLowerBounds property based test lower bounds" $ withMaxSuccess 5 $ property $ \simpleSystem -> do
     let (updatedBounds, updatedSystem) = eliminateNonZeroLowerBounds simpleSystem Map.empty
     all
       ( \case
-          SimpleConstraint (ExprVarsOnly [VarTermVO _] :>= num) -> num == 0
+          SimpleConstraint (ExprVarsOnly [VarTermVO (Var _)] :>= num) -> num == 0
           _ -> True
       )
       updatedSystem.unSimpleSystem
@@ -149,17 +152,17 @@ spec = describe "Slack Form Transformations" $ do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly (VarTermVO 2 : [CoeffTermVO 2 3]) :<= 3 -- x_2 + 2x_3 <= 3
-              , SimpleConstraint $ ExprVarsOnly (CoeffTermVO (-1) 4 : [CoeffTermVO 3 5]) :>= 2 -- -x_4 + 3x_5 >= 2
+              [ SimpleConstraint $ ExprVarsOnly (VarTermVO (Var 2) : [CoeffTermVO 2 (Var 3)]) :<= 3 -- x_2 + 2x_3 <= 3
+              , SimpleConstraint $ ExprVarsOnly (CoeffTermVO (-1) (Var 4) : [CoeffTermVO 3 (Var 5)]) :>= 2 -- -x_4 + 3x_5 >= 2
               ]
           expectedSystem =
             LinearSystem
-              [ LinearEquation (ExprVarsOnly (VarTermVO 2 : [CoeffTermVO 2 3, VarTermVO 6])) 3 -- x_2 + 2x_3 + x_6 = 3
+              [ LinearEquation (ExprVarsOnly (VarTermVO (Var 2) : [CoeffTermVO 2 (Var 3), VarTermVO (Var 6)])) 3 -- x_2 + 2x_3 + x_6 = 3
               , LinearEquation
-                  (ExprVarsOnly (CoeffTermVO (-1) 4 : [CoeffTermVO 3 5, CoeffTermVO (-1) 7]))
+                  (ExprVarsOnly (CoeffTermVO (-1) (Var 4) : [CoeffTermVO 3 (Var 5), CoeffTermVO (-1) (Var 7)]))
                   2 -- -x_4 + 3x_5 + x_7 = 2
               ]
-          expectedSlackVars = [6, 7]
+          expectedSlackVars = [Var 6, Var 7]
           (slackVars, updatedSystem) = addSlackVars simpleSystem
       updatedSystem `shouldBe` expectedSystem
       slackVars `shouldBe` expectedSlackVars
@@ -168,17 +171,17 @@ spec = describe "Slack Form Transformations" $ do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2]) :<= 4 -- x_1 + 2x_2 <= 4
-              , SimpleConstraint $ ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4]) :>= 3 -- -x_3 + 2x_4 >= 3
+              [ SimpleConstraint $ ExprVarsOnly (VarTermVO (Var 1) : [CoeffTermVO 2 (Var 2)]) :<= 4 -- x_1 + 2x_2 <= 4
+              , SimpleConstraint $ ExprVarsOnly (CoeffTermVO (-1) (Var 3) : [CoeffTermVO 2 (Var 4)]) :>= 3 -- -x_3 + 2x_4 >= 3
               ]
           expectedSystem =
             LinearSystem
-              [ LinearEquation (ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2, VarTermVO 5])) 4 -- x_1 + 2x_2 + x_5 = 4
+              [ LinearEquation (ExprVarsOnly (VarTermVO (Var 1) : [CoeffTermVO 2 (Var 2), VarTermVO (Var 5)])) 4 -- x_1 + 2x_2 + x_5 = 4
               , LinearEquation
-                  (ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4, CoeffTermVO (-1) 6]))
+                  (ExprVarsOnly (CoeffTermVO (-1) (Var 3) : [CoeffTermVO 2 (Var 4), CoeffTermVO (-1) (Var 6)]))
                   3 -- -x_3 + 2x_4 - x_6 = 3
               ]
-          expectedSlackVars = [5, 6]
+          expectedSlackVars = [Var 5, Var 6]
           (slackVars, updatedSystem) = addSlackVars simpleSystem
       updatedSystem `shouldBe` expectedSystem
       slackVars `shouldBe` expectedSlackVars
@@ -187,17 +190,17 @@ spec = describe "Slack Form Transformations" $ do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2]) :<= 5 -- x_1 + 2x_2 <= 5
-              , SimpleConstraint $ ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4]) :>= 4 -- -x_3 + 2x_4 >= 4
+              [ SimpleConstraint $ ExprVarsOnly (VarTermVO (Var 1) : [CoeffTermVO 2 (Var 2)]) :<= 5 -- x_1 + 2x_2 <= 5
+              , SimpleConstraint $ ExprVarsOnly (CoeffTermVO (-1) (Var 3) : [CoeffTermVO 2 (Var 4)]) :>= 4 -- -x_3 + 2x_4 >= 4
               ]
           expectedSystem =
             LinearSystem
-              [ LinearEquation (ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2, VarTermVO 5])) 5 -- x_1 + 2x_2 + x_5 = 5
+              [ LinearEquation (ExprVarsOnly (VarTermVO (Var 1) : [CoeffTermVO 2 (Var 2), VarTermVO (Var 5)])) 5 -- x_1 + 2x_2 + x_5 = 5
               , LinearEquation
-                  (ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4, CoeffTermVO (-1) 6]))
+                  (ExprVarsOnly (CoeffTermVO (-1) (Var 3) : [CoeffTermVO 2 (Var 4), CoeffTermVO (-1) (Var 6)]))
                   4 -- -x_3 + 2x_4 - x_6 = 4
               ]
-          expectedSlackVars = [5, 6]
+          expectedSlackVars = [Var 5, Var 6]
           (slackVars, updatedSystem) = addSlackVars simpleSystem
       updatedSystem `shouldBe` expectedSystem
       slackVars `shouldBe` expectedSlackVars
@@ -206,15 +209,15 @@ spec = describe "Slack Form Transformations" $ do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2]) :<= 5 -- x_1 + 2x_2 <= 5
-              , SimpleConstraint $ ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4]) :== 4 -- -x_3 + 2x_4 = 4
+              [ SimpleConstraint $ ExprVarsOnly (VarTermVO (Var 1) : [CoeffTermVO 2 (Var 2)]) :<= 5 -- x_1 + 2x_2 <= 5
+              , SimpleConstraint $ ExprVarsOnly (CoeffTermVO (-1) (Var 3) : [CoeffTermVO 2 (Var 4)]) :== 4 -- -x_3 + 2x_4 = 4
               ]
           expectedSystem =
             LinearSystem
-              [ LinearEquation (ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2, VarTermVO 5])) 5 -- x_1 + 2x_2 + x_5 = 5
-              , LinearEquation (ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4])) 4 -- -x_3 + 2x_4 = 4
+              [ LinearEquation (ExprVarsOnly (VarTermVO (Var 1) : [CoeffTermVO 2 (Var 2), VarTermVO (Var 5)])) 5 -- x_1 + 2x_2 + x_5 = 5
+              , LinearEquation (ExprVarsOnly (CoeffTermVO (-1) (Var 3) : [CoeffTermVO 2 (Var 4)])) 4 -- -x_3 + 2x_4 = 4
               ]
-          expectedSlackVars = [5]
+          expectedSlackVars = [Var 5]
           (slackVars, updatedSystem) = addSlackVars simpleSystem
       updatedSystem `shouldBe` expectedSystem
       slackVars `shouldBe` expectedSlackVars
@@ -223,13 +226,13 @@ spec = describe "Slack Form Transformations" $ do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2]) :== 5 -- x_1 + 2x_2 = 5
-              , SimpleConstraint $ ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4]) :== 4 -- -x_3 + 2x_4 = 4
+              [ SimpleConstraint $ ExprVarsOnly (VarTermVO (Var 1) : [CoeffTermVO 2 (Var 2)]) :== 5 -- x_1 + 2x_2 = 5
+              , SimpleConstraint $ ExprVarsOnly (CoeffTermVO (-1) (Var 3) : [CoeffTermVO 2 (Var 4)]) :== 4 -- -x_3 + 2x_4 = 4
               ]
           expectedSystem =
             LinearSystem
-              [ LinearEquation (ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 2])) 5 -- x_1 + 2x_2 = 5
-              , LinearEquation (ExprVarsOnly (CoeffTermVO (-1) 3 : [CoeffTermVO 2 4])) 4 -- -x_3 + 2x_4 = 4
+              [ LinearEquation (ExprVarsOnly (VarTermVO (Var 1) : [CoeffTermVO 2 (Var 2)])) 5 -- x_1 + 2x_2 = 5
+              , LinearEquation (ExprVarsOnly (CoeffTermVO (-1) (Var 3) : [CoeffTermVO 2 (Var 4)])) 4 -- -x_3 + 2x_4 = 4
               ]
           expectedSlackVars = []
           (slackVars, updatedSystem) = addSlackVars simpleSystem
@@ -240,8 +243,8 @@ spec = describe "Slack Form Transformations" $ do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 0 -- x_1 >= 0
-              , SimpleConstraint $ ExprVarsOnly (VarTermVO 1 : [VarTermVO 2]) :>= 0 -- x_1 + x_2 >= 0
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 0 -- x_1 >= 0
+              , SimpleConstraint $ ExprVarsOnly (VarTermVO (Var 1) : [VarTermVO (Var 2)]) :>= 0 -- x_1 + x_2 >= 0
               ]
           systemBounds = deriveBounds simpleSystem
           (eliminatedNonZeroLowerBounds, systemWithoutNonZeroLowerBounds) = eliminateNonZeroLowerBounds simpleSystem Map.empty
@@ -251,17 +254,17 @@ spec = describe "Slack Form Transformations" $ do
               systemWithSlackVars
               systemBounds
               eliminatedNonZeroLowerBounds
-          expectedSlackVars = [3, 4]
+          expectedSlackVars = [Var 3, Var 4]
           expectedSystem =
             LinearSystem
-              [ LinearEquation (ExprVarsOnly (CoeffTermVO (-1) 3 : [VarTermVO 1])) 0 -- -x_3 + x_1 = 0
+              [ LinearEquation (ExprVarsOnly (CoeffTermVO (-1) (Var 3) : [VarTermVO (Var 1)])) 0 -- -x_3 + x_1 = 0
               , LinearEquation
                   ( ExprVarsOnly
-                      (CoeffTermVO (-1) 4 : [CoeffTermVO (-1) 6, VarTermVO 1, VarTermVO 5])
+                      (CoeffTermVO (-1) (Var 4) : [CoeffTermVO (-1) (Var 6), VarTermVO (Var 1), VarTermVO (Var 5)])
                   )
                   0 -- -x_4 - x_6 + x_1 + x_5 = 0
               ]
-          expectedEliminatedVarExprMap = Map.fromList [(2, Expr (VarTerm 5 : [CoeffTerm (-1) 6]))]
+          expectedEliminatedVarExprMap = Map.fromList [(Var 2, Expr (VarTerm (Var 5) : [CoeffTerm (-1) (Var 6)]))]
 
       slackVars `shouldBe` expectedSlackVars
       updatedSystem `shouldBe` expectedSystem
@@ -271,8 +274,8 @@ spec = describe "Slack Form Transformations" $ do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 0 -- x_1 >= 0
-              , SimpleConstraint $ ExprVarsOnly (VarTermVO 1 : [VarTermVO 2, VarTermVO 3]) :>= 0 -- x_1 + x_2 + x_3 >= 0
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 0 -- x_1 >= 0
+              , SimpleConstraint $ ExprVarsOnly (VarTermVO (Var 1) : [VarTermVO (Var 2), VarTermVO (Var 3)]) :>= 0 -- x_1 + x_2 + x_3 >= 0
               ]
           systemBounds = deriveBounds simpleSystem
           (eliminatedNonZeroLowerBounds, systemWithoutNonZeroLowerBounds) = eliminateNonZeroLowerBounds simpleSystem Map.empty
@@ -282,22 +285,22 @@ spec = describe "Slack Form Transformations" $ do
               systemWithSlackVars
               systemBounds
               eliminatedNonZeroLowerBounds
-          expectedSlackVars = [4, 5]
+          expectedSlackVars = [Var 4, Var 5]
           expectedSystem =
             LinearSystem
-              [ LinearEquation (ExprVarsOnly (CoeffTermVO (-1) 4 : [VarTermVO 1])) 0 -- -x_4 + x_1 = 0
+              [ LinearEquation (ExprVarsOnly (CoeffTermVO (-1) (Var 4) : [VarTermVO (Var 1)])) 0 -- -x_4 + x_1 = 0
               , LinearEquation
                   ( ExprVarsOnly
-                      ( CoeffTermVO (-1) 5
-                          : [CoeffTermVO (-1) 7, CoeffTermVO (-1) 9, VarTermVO 1, VarTermVO 6, VarTermVO 8]
+                      ( CoeffTermVO (-1) (Var 5)
+                          : [CoeffTermVO (-1) (Var 7), CoeffTermVO (-1) (Var 9), VarTermVO (Var 1), VarTermVO (Var 6), VarTermVO (Var 8)]
                       )
                   )
                   0 -- -x_5 - x_7 - x_9 + x_1 + x_6 + x_8 = 0
               ]
           expectedEliminatedVarExprMap =
             Map.fromList
-              [ (2, Expr (VarTerm 6 : [CoeffTerm (-1) 7]))
-              , (3, Expr (VarTerm 8 : [CoeffTerm (-1) 9]))
+              [ (Var 2, Expr (VarTerm (Var 6) : [CoeffTerm (-1) (Var 7)]))
+              , (Var 3, Expr (VarTerm (Var 8) : [CoeffTerm (-1) (Var 9)]))
               ]
       slackVars `shouldBe` expectedSlackVars
       updatedSystem `shouldBe` expectedSystem
@@ -308,14 +311,14 @@ spec = describe "Slack Form Transformations" $ do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 0 -- x_1 >= 0
-              , SimpleConstraint $ ExprVarsOnly (VarTermVO 1 : [VarTermVO 2]) :>= 0 -- x_1 + x_2 >= 0
-              , SimpleConstraint $ ExprVarsOnly (VarTermVO 2 : [VarTermVO 3]) :>= 0 -- x_2 + x_3 >= 0
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 0 -- x_1 >= 0
+              , SimpleConstraint $ ExprVarsOnly (VarTermVO (Var 1) : [VarTermVO (Var 2)]) :>= 0 -- x_1 + x_2 >= 0
+              , SimpleConstraint $ ExprVarsOnly (VarTermVO (Var 2) : [VarTermVO (Var 3)]) :>= 0 -- x_2 + x_3 >= 0
               ]
           systemBounds = deriveBounds simpleSystem
           (eliminatedNonZeroLowerBounds, systemWithoutNonZeroLowerBounds) = eliminateNonZeroLowerBounds simpleSystem Map.empty
           (slackVars, systemWithSlackVars) = addSlackVars systemWithoutNonZeroLowerBounds
-          expectedSlackVars = [4, 5, 6]
+          expectedSlackVars = [Var 4, Var 5, Var 6]
           (updatedEliminatedVarsMap, updatedSystem) =
             eliminateUnrestrictedLowerBounds
               systemWithSlackVars
@@ -323,24 +326,24 @@ spec = describe "Slack Form Transformations" $ do
               eliminatedNonZeroLowerBounds
           expectedSystem =
             LinearSystem
-              [ LinearEquation (ExprVarsOnly (CoeffTermVO (-1) 4 : [VarTermVO 1])) 0 -- -x_4 + x_1 = 0
+              [ LinearEquation (ExprVarsOnly (CoeffTermVO (-1) (Var 4) : [VarTermVO (Var 1)])) 0 -- -x_4 + x_1 = 0
               , LinearEquation
                   ( ExprVarsOnly
-                      (CoeffTermVO (-1) 5 : [CoeffTermVO (-1) 8, VarTermVO 1, VarTermVO 7])
+                      (CoeffTermVO (-1) (Var 5) : [CoeffTermVO (-1) (Var 8), VarTermVO (Var 1), VarTermVO (Var 7)])
                   )
                   0 -- -x_5 - x_8 + x_1 + x_7 = 0
               , LinearEquation
                   ( ExprVarsOnly
-                      ( CoeffTermVO (-1) 6
-                          : [CoeffTermVO (-1) 8, CoeffTermVO (-1) 10, VarTermVO 7, VarTermVO 9]
+                      ( CoeffTermVO (-1) (Var 6)
+                          : [CoeffTermVO (-1) (Var 8), CoeffTermVO (-1) (Var 10), VarTermVO (Var 7), VarTermVO (Var 9)]
                       )
                   )
                   0 -- -x_6 - x_8 - x_10 + x_7 + x_9 = 0
               ]
           expectedEliminatedVarExprMap =
             Map.fromList
-              [ (2, Expr (VarTerm 7 : [CoeffTerm (-1) 8]))
-              , (3, Expr (VarTerm 9 : [CoeffTerm (-1) 10]))
+              [ (Var 2, Expr (VarTerm (Var 7) : [CoeffTerm (-1) (Var 8)]))
+              , (Var 3, Expr (VarTerm (Var 9) : [CoeffTerm (-1) (Var 10)]))
               ]
       slackVars `shouldBe` expectedSlackVars
       updatedSystem `shouldBe` expectedSystem
@@ -350,13 +353,13 @@ spec = describe "Slack Form Transformations" $ do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly (VarTermVO 1 : [CoeffTermVO 2 1]) :>= 0 -- x_1 + 2x_1 >= 0
-              , SimpleConstraint $ ExprVarsOnly (VarTermVO 2 : [CoeffTermVO 3 1]) :>= 0 -- x_2 + 3x_1 >= 0
+              [ SimpleConstraint $ ExprVarsOnly (VarTermVO (Var 1) : [CoeffTermVO 2 (Var 1)]) :>= 0 -- x_1 + 2x_1 >= 0
+              , SimpleConstraint $ ExprVarsOnly (VarTermVO (Var 2) : [CoeffTermVO 3 (Var 1)]) :>= 0 -- x_2 + 3x_1 >= 0
               ]
           systemBounds = deriveBounds simpleSystem
           (eliminatedNonZeroLowerBounds, systemWithoutNonZeroLowerBounds) = eliminateNonZeroLowerBounds simpleSystem Map.empty
           (slackVars, systemWithSlackVars) = addSlackVars systemWithoutNonZeroLowerBounds
-          expectedSlackVars = [3, 4]
+          expectedSlackVars = [Var 3, Var 4]
           (updatedEliminatedVarsMap, updatedSystem) =
             eliminateUnrestrictedLowerBounds
               systemWithSlackVars
@@ -365,20 +368,20 @@ spec = describe "Slack Form Transformations" $ do
           expectedSystem =
             LinearSystem
               [ LinearEquation
-                  (ExprVarsOnly (CoeffTermVO (-3) 6 : [CoeffTermVO (-1) 3, CoeffTermVO 3 5]))
+                  (ExprVarsOnly (CoeffTermVO (-3) (Var 6) : [CoeffTermVO (-1) (Var 3), CoeffTermVO 3 (Var 5)]))
                   0 -- -3x_6 - x_3 + 3x_5 = 0
               , LinearEquation
                   ( ExprVarsOnly
-                      ( CoeffTermVO (-3) 6
-                          : [CoeffTermVO (-1) 4, CoeffTermVO (-1) 8, CoeffTermVO 3 5, VarTermVO 7]
+                      ( CoeffTermVO (-3) (Var 6)
+                          : [CoeffTermVO (-1) (Var 4), CoeffTermVO (-1) (Var 8), CoeffTermVO 3 (Var 5), VarTermVO (Var 7)]
                       )
                   )
                   0 -- -3x_6 - x_4 - x_8 + 3x_5 + x_7 = 0
               ]
           expectedEliminatedVarExprMap =
             Map.fromList
-              [ (1, Expr (VarTerm 5 : [CoeffTerm (-1) 6]))
-              , (2, Expr (VarTerm 7 : [CoeffTerm (-1) 8]))
+              [ (Var 1, Expr (VarTerm (Var 5) : [CoeffTerm (-1) (Var 6)]))
+              , (Var 2, Expr (VarTerm (Var 7) : [CoeffTerm (-1) (Var 8)]))
               ]
       slackVars `shouldBe` expectedSlackVars
       updatedSystem `shouldBe` expectedSystem
@@ -389,13 +392,13 @@ spec = describe "Slack Form Transformations" $ do
     $ do
       let simpleSystem =
             SimpleSystem
-              [ SimpleConstraint $ ExprVarsOnly [VarTermVO 1] :>= 0 -- x_1 >= 0
-              , SimpleConstraint $ ExprVarsOnly [VarTermVO 2] :>= 0 -- x_2 >= 0
+              [ SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 1)] :>= 0 -- x_1 >= 0
+              , SimpleConstraint $ ExprVarsOnly [VarTermVO (Var 2)] :>= 0 -- x_2 >= 0
               ]
           systemBounds = deriveBounds simpleSystem
           (eliminatedNonZeroLowerBounds, systemWithoutNonZeroLowerBounds) = eliminateNonZeroLowerBounds simpleSystem Map.empty
           (slackVars, systemWithSlackVars) = addSlackVars systemWithoutNonZeroLowerBounds
-          expectedSlackVars = [3, 4]
+          expectedSlackVars = [Var 3, Var 4]
           (updatedEliminatedVarsMap, updatedSystem) =
             eliminateUnrestrictedLowerBounds
               systemWithSlackVars
@@ -403,8 +406,8 @@ spec = describe "Slack Form Transformations" $ do
               eliminatedNonZeroLowerBounds
           expectedSystem =
             LinearSystem
-              [ LinearEquation (ExprVarsOnly (VarTermVO 1 : [CoeffTermVO (-1) 3])) 0 -- x_1 - x_3 = 0
-              , LinearEquation (ExprVarsOnly (VarTermVO 2 : [CoeffTermVO (-1) 4])) 0 -- x_2 - x_4 = 0
+              [ LinearEquation (ExprVarsOnly (VarTermVO (Var 1) : [CoeffTermVO (-1) (Var 3)])) 0 -- x_1 - x_3 = 0
+              , LinearEquation (ExprVarsOnly (VarTermVO (Var 2) : [CoeffTermVO (-1) (Var 4)])) 0 -- x_2 - x_4 = 0
               ]
           expectedEliminatedVarExprMap = Map.empty
       slackVars `shouldBe` expectedSlackVars

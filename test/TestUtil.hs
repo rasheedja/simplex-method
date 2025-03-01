@@ -18,7 +18,6 @@ import Linear.Constraint.Types
   )
 import Linear.Expr.Types (Expr, ExprVarsOnly)
 import Linear.Expr.Util (exprToList, exprVarsOnlyToExpr)
-import Linear.Simplex.Types (VarLitMap)
 import Linear.System.Simple.Types (SimpleSystem (..))
 import Linear.Term.Types
   ( Term (..)
@@ -29,7 +28,7 @@ import Linear.Var.Types (SimplexNum, Var)
 import Test.QuickCheck (Arbitrary (..), Gen)
 import Prelude
 
-evalTerm :: VarLitMap -> Linear.Term.Types.Term -> SimplexNum
+evalTerm :: Map.Map Var SimplexNum -> Linear.Term.Types.Term -> SimplexNum
 evalTerm _ (Linear.Term.Types.ConstTerm c) = c
 evalTerm varMap (Linear.Term.Types.CoeffTerm c v) =
   c
@@ -43,29 +42,29 @@ evalTerm varMap (Linear.Term.Types.VarTerm v) =
     v
     varMap
 
-evalTermVarsOnly :: VarLitMap -> TermVarsOnly -> SimplexNum
+evalTermVarsOnly :: Map.Map Var SimplexNum -> TermVarsOnly -> SimplexNum
 evalTermVarsOnly varMap terms = evalTerm varMap $ termVarsOnlyToTerm terms
 
-evalExpr :: VarLitMap -> Expr -> SimplexNum
+evalExpr :: Map.Map Var SimplexNum -> Expr -> SimplexNum
 evalExpr varMap expr = sum $ map (evalTerm varMap) $ exprToList expr
 
-evalExprVarsOnly :: VarLitMap -> ExprVarsOnly -> SimplexNum
+evalExprVarsOnly :: Map.Map Var SimplexNum -> ExprVarsOnly -> SimplexNum
 evalExprVarsOnly varMap = evalExpr varMap . exprVarsOnlyToExpr
 
-evalConstraint :: VarLitMap -> Constraint -> Bool
+evalConstraint :: Map.Map Var SimplexNum -> Constraint -> Bool
 evalConstraint varMap (Constraint (lhs :<= rhs)) = evalExpr varMap lhs <= evalExpr varMap rhs
 evalConstraint varMap (Constraint (lhs :>= rhs)) = evalExpr varMap lhs >= evalExpr varMap rhs
 evalConstraint varMap (Constraint (lhs :== rhs)) = evalExpr varMap lhs == evalExpr varMap rhs
 
-evalSimpleConstraint :: VarLitMap -> SimpleConstraint -> Bool
+evalSimpleConstraint :: Map.Map Var SimplexNum -> SimpleConstraint -> Bool
 evalSimpleConstraint varMap (SimpleConstraint (lhs :<= rhs)) = evalExprVarsOnly varMap lhs <= rhs
 evalSimpleConstraint varMap (SimpleConstraint (lhs :>= rhs)) = evalExprVarsOnly varMap lhs >= rhs
 evalSimpleConstraint varMap (SimpleConstraint (lhs :== rhs)) = evalExprVarsOnly varMap lhs == rhs
 
-evalSimpleSystem :: VarLitMap -> SimpleSystem -> Bool
+evalSimpleSystem :: Map.Map Var SimplexNum -> SimpleSystem -> Bool
 evalSimpleSystem varMap = all (evalSimpleConstraint varMap) . unSimpleSystem
 
-genVarMap :: [Var] -> Gen VarLitMap
+genVarMap :: [Var] -> Gen (Map.Map Var SimplexNum)
 genVarMap vars = do
   varVals <- forM vars $ const arbitrary
   pure $ Map.fromList $ zip vars varVals

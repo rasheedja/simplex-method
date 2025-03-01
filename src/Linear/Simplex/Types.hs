@@ -18,8 +18,10 @@ import qualified Debug.Trace as T
 import GHC.Base (liftA2)
 import GHC.Generics (Generic)
 import Linear.Expr.Types (Expr)
-import Linear.Var.Types (SimplexNum, Var)
+import Linear.Var.Types (SimplexNum)
 import Test.QuickCheck (Arbitrary (..), genericShrink, oneof)
+
+type Var = Int
 
 data StandardFormRow = StandardFormRow
   { lhs :: Expr
