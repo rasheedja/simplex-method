@@ -1,9 +1,21 @@
-module TestFunctions where
+module Linear.Simplex.Solver.TwoPhaseSpec where
 
+import Prelude hiding (EQ)
+
+import Control.Monad
+import Control.Monad.IO.Class
+import Control.Monad.Logger
 import qualified Data.Map as M
 import Data.Ratio
+import Text.InterpolatedString.Perl6
+
+import Test.Hspec
+import Test.Hspec.Expectations.Contrib (annotate)
+
+import Linear.Simplex.Prettify
+import Linear.Simplex.Solver.TwoPhase
 import Linear.Simplex.Types
-import Prelude hiding (EQ)
+import Linear.Simplex.Util
 
 testsList :: [((ObjectiveFunction, [PolyConstraint]), Maybe Result)]
 testsList =
@@ -1046,3 +1058,35 @@ testQuickCheck3 =
     , GEQ (M.fromList [(1, -5), (2, -1), (2, 1)]) (-5)
     ]
   )
+
+spec :: Spec
+spec = describe "twoPhaseSimplex" $ do
+  it "Test functions give expected results" $ do
+    forM_ testsList $
+      \((obj, constraints), expectedResult) -> do
+        actualResult <-
+          runStdoutLoggingT $
+            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
+              twoPhaseSimplex obj constraints
+        let prettyObj = prettyShowObjectiveFunction obj
+            prettyConstraints = map prettyShowPolyConstraint constraints
+
+            expectedObjVal = extractObjectiveValue expectedResult
+            actualObjVal = extractObjectiveValue actualResult
+        annotate
+          [qc|
+             
+Objective Function (Non-prettified): {obj}
+Constraints        (Non-prettified): {constraints}
+====================================
+Objective Function     (Prettified): {prettyObj}
+Constraints            (Prettified): {prettyConstraints}
+====================================
+Expected Solution            (Full): {expectedResult}
+Actual Solution              (Full): {actualResult}
+Expected Solution       (Objective): {expectedObjVal}
+Actual Solution         (Objective): {actualObjVal}
+
+          |]
+          $ do
+            actualResult `shouldBe` expectedResult
