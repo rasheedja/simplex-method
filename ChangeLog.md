@@ -2,6 +2,9 @@
 
 ## Unreleased changes
 
+- Use Hspec for tests
+- Add nix flake
+
 ## [v0.2.0.0](https://github.com/rasheedja/LPPaver/tree/v0.2.0.0)
 
 - Setup CI
