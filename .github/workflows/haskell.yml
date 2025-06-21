@@ -3,18 +3,17 @@ name: Haskell CI
 on:
   push:
     branches:
-      - '*'
+      - "*"
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 permissions:
   contents: read
 
 jobs:
   fourmolu:
-
     runs-on: ubuntu-latest
-  
+
     steps:
       - uses: actions/checkout@v3
       - uses: haskell-actions/run-fourmolu@v9
@@ -27,7 +26,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
-        ghc-version: ['9.6', '9.4', '9.2', '9.0']
+        ghc-version: ["9.6", "9.4", "9.2", "9.0"]
 
     steps:
       - uses: actions/checkout@v3
@@ -51,80 +50,22 @@ jobs:
 
       - name: Configure the build
         run: |
-          # cabal configure --enable-tests --enable-benchmarks --disable-documentation
-          # cabal build --dry-run
-          stack build --test --bench --no-haddock --dry-run
+          cabal configure --enable-tests --enable-benchmarks --disable-documentation
+          cabal build --dry-run
+          # stack build --test --bench --no-haddock --dry-run
         # The last step generates dist-newstyle/cache/plan.json for the cache key.
 
-      - name: Restore .stack-work cache
-        uses: actions/cache/restore@v3
-        id: cache-restore-stack-work
-        with:
-          path: .stack-work
-          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-work-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}-${{ hashFiles('**/*.hs') }}
-          restore-keys: |
-            ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-work-
-      
-      - name: Restore ~/.stack cache (Unix)
-        uses: actions/cache/restore@v3
-        id: cache-restore-stack-global-unix
-        if: runner.os == 'Linux' || runner.os == 'macOS'
-        with:
-          path: ~/.stack
-          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-
-
-      - name: Restore %APPDATA%\stack, %LOCALAPPDATA%\Programs\stack cache (Windows)
-        uses: actions/cache/restore@v3
-        id: cache-restore-stack-global-windows
-        if: runner.os == 'Windows'
-        with:
-          path: |
-            ~\AppData\Roaming\stack
-            ~\AppData\Local\Programs\stack    
-          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-
-
       - name: Build dependencies
-        run: stack build --only-dependencies
+        run: cabal build --only-dependencies
 
       - name: Build the package
-        run: stack build
-
-      - name: Save .stack-work cache
-        uses: actions/cache/save@v3
-        id: cache-save-stack-work
-        if: steps.cache-restore-stack-work.outputs.cache-hit != 'true'
-        with:
-          path: .stack-work
-          key: ${{ steps.cache-restore-stack-work.outputs.cache-primary-key }}
-   
-      - name: Save %APPDATA%\stack, %LOCALAPPDATA%\Programs\stack cache (Windows)
-        uses: actions/cache/save@v3
-        if: runner.os == 'Windows'
-            && steps.cache-restore-stack-global-windows.outputs.cache-hit != 'true'
-        with:
-          path: |
-            ~\AppData\Roaming\stack
-            ~\AppData\Local\Programs\stack    
-          key: ${{ steps.cache-restore-stack-global-windows.outputs.cache-primary-key }}
-  
-      - name: Save ~/.stack cache (Unix)
-        uses: actions/cache/save@v3
-        id: cache-save-stack-global
-        if: (runner.os == 'Linux' || runner.os == 'macOS') 
-            && steps.cache-restore-stack-global-unix.outputs.cache-hit != 'true'
-        with:
-          path: ~/.stack
-          key: ${{ steps.cache-restore-stack-global-unix.outputs.cache-primary-key }}
+        run: cabal build
 
       - name: Run tests
-        run: stack test
+        run: cabal test
 
       - name: Check cabal file
         run: cabal check
 
       - name: Build documentation
-        run: stack haddock
+        run: cabal haddock
