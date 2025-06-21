@@ -32,29 +32,24 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Set up GHC ${{ matrix.ghc-version }}
-        uses: haskell/actions/setup@v2
+        uses: haskell-actions/setup@v2
         id: setup
         with:
           ghc-version: ${{ matrix.ghc-version }}
-          enable-stack: true
 
       - name: Installed minor versions of GHC, Cabal, and Stack
         shell: bash
         run: |
           GHC_VERSION=$(ghc --numeric-version)
           CABAL_VERSION=$(cabal --numeric-version)
-          STACK_VERSION=$(stack --numeric-version)
           echo "GHC_VERSION=${GHC_VERSION}"     >> "${GITHUB_ENV}"
           echo "CABAL_VERSION=${CABAL_VERSION}" >> "${GITHUB_ENV}"
-          echo "STACK_VERSION=${STACK_VERSION}" >> "${GITHUB_ENV}"
 
       - name: Configure the build
         run: |
           cabal update
           cabal configure --enable-tests --enable-benchmarks --disable-documentation
           cabal build --dry-run
-          # stack build --test --bench --no-haddock --dry-run
-        # The last step generates dist-newstyle/cache/plan.json for the cache key.
 
       - name: Build dependencies
         run: cabal build --only-dependencies
