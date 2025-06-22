@@ -52,12 +52,12 @@ library
       QuasiQuotes
   build-depends:
       base >=4.14 && <5
-    , containers >= 0.6.7 && < 0.8
-    , generic-lens >= 2.2.2 && < 2.3
+    , containers >= 0.6.5.1 && < 0.8
+    , generic-lens >= 2.2 && < 2.3
+    , lens >= 5.2.2 && < 5.4
     , text >= 2.0.2 && < 2.2
-    , lens >= 5.3.5 && < 5.4
     , time >= 1.12.2 && < 1.15
-    , monad-logger >= 0.3.42 && < 0.4
+    , monad-logger >= 0.3.40 && < 0.4
     , QuickCheck >= 2.16.0 && < 2.17
   default-language: Haskell2010
 
@@ -92,12 +92,12 @@ test-suite simplex-haskell-test
   build-depends:
       base >=4.14 && <5
     , simplex-method
-    , containers >= 0.6.7 && < 0.8
-    , generic-lens >= 2.2.2 && < 2.3
+    , containers >= 0.6.5.1 && < 0.8
+    , generic-lens >= 2.2 && < 2.3
+    , lens >= 5.2.2 && < 5.4
     , text >= 2.0.2 && < 2.2
-    , lens >= 5.3.5 && < 5.4
     , time >= 1.12.2 && < 1.15
-    , monad-logger >= 0.3.42 && < 0.4
+    , monad-logger >= 0.3.40 && < 0.4
     , QuickCheck >= 2.16.0 && < 2.17
     , hspec >= 2.11.12 && < 2.12
     , hspec-expectations >= 0.8.3 && < 0.9
