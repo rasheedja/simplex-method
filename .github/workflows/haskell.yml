@@ -15,8 +15,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: haskell-actions/run-fourmolu@v9
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: haskell-actions/run-fourmolu@3b7702b41516aa428dfe6e295dc73476ae58f69e # v11
         with:
           version: "0.14.0.0"
   build:
@@ -29,10 +29,10 @@ jobs:
         ghc-version: ["9.12", "9.10", "9.8", "9.6", "9.4", "9.2"]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up GHC ${{ matrix.ghc-version }}
-        uses: haskell-actions/setup@v2
+        uses: haskell-actions/setup@96f3dafd067155f32643c2a0757ab71d2910e2c2 # v2.8.0
         id: setup
         with:
           ghc-version: ${{ matrix.ghc-version }}
@@ -54,7 +54,7 @@ jobs:
           cabal build --dry-run
 
       - name: Restore cached dependencies
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         id: cache
         env:
           key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
@@ -67,7 +67,7 @@ jobs:
         run: cabal build --only-dependencies
 
       - name: Save cached dependencies
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         if: steps.cache.outputs.cache-hit != 'true'
         with:
           path: ${{ steps.setup.outputs.cabal-store }}
