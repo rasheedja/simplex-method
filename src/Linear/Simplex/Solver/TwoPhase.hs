@@ -6,11 +6,12 @@
 -- Maintainer  : jrasheed178@gmail.com
 -- Stability   : experimental
 --
--- Module implementing the two-phase simplex method.
+-- | Module implementing the two-phase simplex method.
 -- 'findFeasibleSolution' performs phase one of the two-phase simplex method.
 -- 'optimizeFeasibleSystem' performs phase two of the two-phase simplex method.
 -- 'twoPhaseSimplex' performs both phases of the two-phase simplex method.
-module Linear.Simplex.Solver.TwoPhase (findFeasibleSolution, optimizeFeasibleSystem, twoPhaseSimplex) where
+-- 'twoPhaseSimplex'' performs both phases with variable domain support.
+module Linear.Simplex.Solver.TwoPhase (findFeasibleSolution, optimizeFeasibleSystem, twoPhaseSimplex, twoPhaseSimplex') where
 
 import Prelude hiding (EQ)
 
@@ -24,6 +25,8 @@ import qualified Data.Map as M
 import Data.Maybe (fromJust, fromMaybe, mapMaybe)
 import Data.Ratio (denominator, numerator, (%))
 import qualified Data.Text as Text
+import Data.Set (Set)
+import qualified Data.Set as Set
 import GHC.Real (Ratio)
 import Linear.Simplex.Types
 import Linear.Simplex.Util
@@ -402,6 +405,218 @@ twoPhaseSimplex objFunction unsimplifiedSystem = do
     Nothing -> do
       logMsg LevelInfo $ "twoPhaseSimplex: Phase 1 gives infeasible result for " <> showT unsimplifiedSystem
       pure Nothing
+
+-- | Perform the two phase simplex method with variable domain information.
+-- Variables not in the VarDomainMap are assumed to be Unbounded (no lower bound).
+-- This function applies necessary transformations before solving and unapplies them after.
+twoPhaseSimplex' :: (MonadIO m, MonadLogger m) => VarDomainMap -> ObjectiveFunction -> [PolyConstraint] -> m (Maybe Result)
+twoPhaseSimplex' domainMap objFunction constraints = do
+  logMsg LevelInfo $
+    "twoPhaseSimplex': Solving system with domain map " <> showT domainMap
+  let (transformedObj, transformedConstraints, transforms) = preprocess objFunction domainMap constraints
+  logMsg LevelInfo $
+    "twoPhaseSimplex': Applied transforms " <> showT transforms
+      <> "; Transformed objective: " <> showT transformedObj
+      <> "; Transformed constraints: " <> showT transformedConstraints
+  mResult <- twoPhaseSimplex transformedObj transformedConstraints
+  case mResult of
+    Nothing -> do
+      logMsg LevelInfo "twoPhaseSimplex': No solution found"
+      pure Nothing
+    Just result -> do
+      let finalResult = unapplyTransforms transforms result
+      logMsg LevelInfo $
+        "twoPhaseSimplex': Unapplied transforms, final result: " <> showT finalResult
+      pure (Just finalResult)
+
+-- | Preprocess the system by applying variable transformations based on domain information.
+-- Returns the transformed objective, constraints, and the list of transforms applied.
+preprocess :: ObjectiveFunction 
+           -> VarDomainMap 
+           -> [PolyConstraint]
+           -> (ObjectiveFunction, [PolyConstraint], [VarTransform])
+preprocess objFunction (VarDomainMap domainMap) constraints =
+  let -- Collect all variables in the system
+      allVars = collectAllVars objFunction constraints
+      -- Find the maximum variable to generate fresh variables
+      maxVar = if Set.null allVars then 0 else Set.findMax allVars
+      -- Generate transforms for each variable based on its domain
+      -- Variables not in domainMap are treated as Unbounded
+      (transforms, _) = foldr (generateTransform domainMap) ([], maxVar) (Set.toList allVars)
+      -- Apply transforms to get the transformed system
+      (transformedObj, transformedConstraints) = applyTransforms transforms objFunction constraints
+  in (transformedObj, transformedConstraints, transforms)
+
+-- | Collect all variables appearing in the objective function and constraints
+collectAllVars :: ObjectiveFunction -> [PolyConstraint] -> Set Var
+collectAllVars objFunction constraints =
+  let objVars = case objFunction of
+        Max m -> M.keysSet m
+        Min m -> M.keysSet m
+      constraintVars = Set.unions $ map getConstraintVars constraints
+  in Set.union objVars constraintVars
+  where
+    getConstraintVars :: PolyConstraint -> Set Var
+    getConstraintVars (LEQ m _) = M.keysSet m
+    getConstraintVars (GEQ m _) = M.keysSet m
+    getConstraintVars (EQ m _) = M.keysSet m
+
+-- | Generate a transform for a variable based on its domain.
+-- Takes the domain map, the variable, and the current (transforms, nextFreshVar).
+-- Returns updated (transforms, nextFreshVar).
+generateTransform :: M.Map Var VarDomain -> Var -> ([VarTransform], Var) -> ([VarTransform], Var)
+generateTransform domainMap var (transforms, nextFreshVar) =
+  let domain = M.findWithDefault Unbounded var domainMap
+  in case getTransform nextFreshVar var domain of
+       Nothing -> (transforms, nextFreshVar)
+       Just t@(AddLowerBound {}) -> (t : transforms, nextFreshVar)
+       Just t@(Shift {}) -> (t : transforms, nextFreshVar + 1)
+       Just t@(Split {}) -> (t : transforms, nextFreshVar + 2)
+
+-- | Determine what transform (if any) is needed for a variable given its domain.
+getTransform :: Var -> Var -> VarDomain -> Maybe VarTransform
+getTransform nextFreshVar var domain =
+  case domain of
+    NonNegative -> Nothing
+    
+    LowerBound l 
+      | l == 0 -> Nothing
+      | l > 0  -> Just $ AddLowerBound var l
+      | otherwise -> Just $ Shift var nextFreshVar l  -- l < 0, need to shift
+    
+    Unbounded ->
+      Just $ Split var nextFreshVar (nextFreshVar + 1)
+
+-- | Apply all transforms to the objective function and constraints.
+applyTransforms :: [VarTransform] -> ObjectiveFunction -> [PolyConstraint] -> (ObjectiveFunction, [PolyConstraint])
+applyTransforms transforms objFunction constraints =
+  foldr applyTransform (objFunction, constraints) transforms
+
+-- | Apply a single transform to the objective function and constraints.
+applyTransform :: VarTransform -> (ObjectiveFunction, [PolyConstraint]) -> (ObjectiveFunction, [PolyConstraint])
+applyTransform transform (objFunction, constraints) =
+  case transform of
+    -- AddLowerBound: Add a GEQ constraint for the variable
+    AddLowerBound v bound ->
+      (objFunction, GEQ (M.singleton v 1) bound : constraints)
+    
+    -- Shift: originalVar = shiftedVar + shiftBy (where shiftBy < 0)
+    -- Substitute: wherever we see originalVar, replace with shiftedVar
+    -- and adjust the RHS by -coeff * shiftBy
+    Shift origVar shiftedVar shiftBy ->
+      ( applyShiftToObjective origVar shiftedVar shiftBy objFunction
+      , map (applyShiftToConstraint origVar shiftedVar shiftBy) constraints
+      )
+    
+    -- Split: originalVar = posVar - negVar
+    -- Substitute: wherever we see originalVar with coeff c, 
+    -- replace with posVar with coeff c and negVar with coeff -c
+    Split origVar posVar negVar ->
+      ( applySplitToObjective origVar posVar negVar objFunction
+      , map (applySplitToConstraint origVar posVar negVar) constraints
+      )
+
+-- | Apply shift transformation to objective function.
+-- originalVar = shiftedVar + shiftBy
+-- So coefficient of originalVar becomes coefficient of shiftedVar.
+-- The constant term changes but objectives don't have constants that affect optimization.
+applyShiftToObjective :: Var -> Var -> SimplexNum -> ObjectiveFunction -> ObjectiveFunction
+applyShiftToObjective origVar shiftedVar _shiftBy objFunction =
+  case objFunction of
+    Max m -> Max (substituteVar origVar shiftedVar m)
+    Min m -> Min (substituteVar origVar shiftedVar m)
+  where
+    substituteVar :: Var -> Var -> VarLitMapSum -> VarLitMapSum
+    substituteVar oldVar newVar m =
+      case M.lookup oldVar m of
+        Nothing -> m
+        Just coeff -> M.insert newVar coeff (M.delete oldVar m)
+
+-- | Apply shift transformation to a constraint.
+-- originalVar = shiftedVar + shiftBy
+-- For constraint: sum(c_i * x_i) REL rhs
+-- If x_j = originalVar with coeff c_j:
+--   c_j * originalVar = c_j * (shiftedVar + shiftBy) = c_j * shiftedVar + c_j * shiftBy
+-- So new constraint: (replace originalVar with shiftedVar) REL (rhs - c_j * shiftBy)
+applyShiftToConstraint :: Var -> Var -> SimplexNum -> PolyConstraint -> PolyConstraint
+applyShiftToConstraint origVar shiftedVar shiftBy constraint =
+  case constraint of
+    LEQ m rhs -> 
+      let (newMap, rhsAdjust) = substituteVarInMap origVar shiftedVar shiftBy m
+      in LEQ newMap (rhs - rhsAdjust)
+    GEQ m rhs -> 
+      let (newMap, rhsAdjust) = substituteVarInMap origVar shiftedVar shiftBy m
+      in GEQ newMap (rhs - rhsAdjust)
+    EQ m rhs -> 
+      let (newMap, rhsAdjust) = substituteVarInMap origVar shiftedVar shiftBy m
+      in EQ newMap (rhs - rhsAdjust)
+  where
+    substituteVarInMap :: Var -> Var -> SimplexNum -> VarLitMapSum -> (VarLitMapSum, SimplexNum)
+    substituteVarInMap oldVar newVar shift m =
+      case M.lookup oldVar m of
+        Nothing -> (m, 0)
+        Just coeff -> (M.insert newVar coeff (M.delete oldVar m), coeff * shift)
+
+-- | Apply split transformation to objective function.
+-- originalVar = posVar - negVar
+-- coefficient c of originalVar becomes c for posVar and -c for negVar
+applySplitToObjective :: Var -> Var -> Var -> ObjectiveFunction -> ObjectiveFunction
+applySplitToObjective origVar posVar negVar objFunction =
+  case objFunction of
+    Max m -> Max (splitVar origVar posVar negVar m)
+    Min m -> Min (splitVar origVar posVar negVar m)
+  where
+    splitVar :: Var -> Var -> Var -> VarLitMapSum -> VarLitMapSum
+    splitVar oldVar pVar nVar m =
+      case M.lookup oldVar m of
+        Nothing -> m
+        Just coeff -> M.insert pVar coeff (M.insert nVar (-coeff) (M.delete oldVar m))
+
+-- | Apply split transformation to a constraint.
+-- originalVar = posVar - negVar
+-- coefficient c of originalVar becomes c for posVar and -c for negVar
+applySplitToConstraint :: Var -> Var -> Var -> PolyConstraint -> PolyConstraint
+applySplitToConstraint origVar posVar negVar constraint =
+  case constraint of
+    LEQ m rhs -> LEQ (splitVarInMap origVar posVar negVar m) rhs
+    GEQ m rhs -> GEQ (splitVarInMap origVar posVar negVar m) rhs
+    EQ m rhs -> EQ (splitVarInMap origVar posVar negVar m) rhs
+  where
+    splitVarInMap :: Var -> Var -> Var -> VarLitMapSum -> VarLitMapSum
+    splitVarInMap oldVar pVar nVar m =
+      case M.lookup oldVar m of
+        Nothing -> m
+        Just coeff -> M.insert pVar coeff (M.insert nVar (-coeff) (M.delete oldVar m))
+
+-- | Unapply transforms to convert the result back to original variables.
+unapplyTransforms :: [VarTransform] -> Result -> Result
+unapplyTransforms transforms result =
+  -- Apply transforms in reverse order (since we applied them with foldr)
+  foldl (flip unapplyTransform) result transforms
+
+-- | Unapply a single transform to convert result back to original variable.
+unapplyTransform :: VarTransform -> Result -> Result
+unapplyTransform transform result@(Result {varValMap = valMap, ..}) =
+  case transform of
+    -- AddLowerBound: No variable substitution was done, nothing to unapply
+    AddLowerBound {} -> result
+    
+    -- Shift: originalVar = shiftedVar + shiftBy
+    -- So originalVar's value = shiftedVar's value + shiftBy
+    Shift origVar shiftedVar shiftBy ->
+      let shiftedVal = M.findWithDefault 0 shiftedVar valMap
+          origVal = shiftedVal + shiftBy
+          newMap = M.insert origVar origVal (M.delete shiftedVar valMap)
+      in result { varValMap = newMap }
+    
+    -- Split: originalVar = posVar - negVar
+    -- So originalVar's value = posVar's value - negVar's value
+    Split origVar posVar negVar ->
+      let posVal = M.findWithDefault 0 posVar valMap
+          negVal = M.findWithDefault 0 negVar valMap
+          origVal = posVal - negVal
+          newMap = M.insert origVar origVal (M.delete posVar (M.delete negVar valMap))
+      in result { varValMap = newMap }
 
 -- | Perform the simplex pivot algorithm on a system with basic vars, assume that the first row is the 'ObjectiveFunction'.
 simplexPivot :: (MonadIO m, MonadLogger m) => PivotObjective -> Dict -> m (Maybe Dict)

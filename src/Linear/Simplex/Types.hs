@@ -121,3 +121,38 @@ data PivotObjective = PivotObjective
   , constant :: SimplexNum
   }
   deriving (Show, Read, Eq, Generic)
+
+-- | Domain specification for a variable's lower bound.
+-- Note: This only concerns lower bounds. Upper bounds are handled via constraints.
+-- Variables not in the VarDomainMap are assumed to be Unbounded.
+data VarDomain 
+  = NonNegative           -- ^ var >= 0 (standard simplex assumption, no transformation needed)
+  | LowerBound SimplexNum -- ^ var >= L for some L (if L < 0: shift, if L > 0: add constraint)
+  | Unbounded             -- ^ No lower bound (split into difference of two non-negative vars)
+  deriving stock (Show, Read, Eq, Generic)
+
+-- | Map from variables to their domain specifications.
+-- Variables not in this map are assumed to be Unbounded.
+newtype VarDomainMap = VarDomainMap { unVarDomainMap :: M.Map Var VarDomain }
+  deriving stock (Show, Read, Eq, Generic)
+
+-- | Transformations applied to variables to ensure they satisfy the non-negativity requirement.
+data VarTransform 
+  = AddLowerBound 
+      { var :: !Var
+      , bound :: !SimplexNum 
+      } -- ^ var >= bound where bound > 0. Adds GEQ constraint to system.
+  | Shift 
+      { originalVar :: !Var
+      , shiftedVar :: !Var  
+      , shiftBy :: !SimplexNum 
+      } -- ^ originalVar = shiftedVar + shiftBy, where shiftBy < 0. After solving: originalVar = shiftedVar + shiftBy
+  | Split 
+      { originalVar :: !Var
+      , posVar :: !Var
+      , negVar :: !Var 
+      } -- ^ originalVar = posVar - negVar, both posVar and negVar >= 0
+  deriving stock (Show, Read, Eq, Generic)
+                  
+
+
