@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
 module Linear.Simplex.Solver.TwoPhaseSpec where
 
 import Prelude hiding (EQ)
@@ -14,11 +15,10 @@ import Text.InterpolatedString.Perl6
 import Test.Hspec
 import Test.Hspec.Expectations.Contrib (annotate)
 import Test.QuickCheck hiding (Result)
-import qualified Linear.Simplex.Types as T
 
 import Linear.Simplex.Prettify
 import Linear.Simplex.Solver.TwoPhase
-import Linear.Simplex.Types hiding (NonNegative)
+import Linear.Simplex.Types
 import Linear.Simplex.Util
 
 -- | Helper to run a test case for a system where all vars
@@ -29,7 +29,7 @@ runTest (obj, constraints) expectedResult = do
       prettyConstraints = map prettyShowPolyConstraint constraints
       expectedObjVal = extractObjectiveValue expectedResult
       allVars = collectAllVars obj constraints
-      domainMap = VarDomainMap $ M.fromSet (const T.NonNegative) allVars
+      domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
   actualResult <-
     runStdoutLoggingT $
     filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -624,7 +624,7 @@ spec = do
     it "Shift transformation with negative lower bound" $ do
       let obj = Max (M.fromList [(1, 1)])
           constraints = [ LEQ (M.fromList [(1, 1)]) 10 ]
-          domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-5))]
+          domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -636,7 +636,7 @@ spec = do
     it "Shift transformation finds minimum at negative bound" $ do
       let obj = Min (M.fromList [(1, 1)])
           constraints = [ LEQ (M.fromList [(1, 1)]) 0 ]
-          domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-5))]
+          domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -651,7 +651,7 @@ spec = do
             [ LEQ (M.fromList [(1, 1)]) 10
             , GEQ (M.fromList [(1, 1)]) (-10)
             ]
-          domainMap = VarDomainMap $ M.fromList [(1, Unbounded)]
+          domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -666,7 +666,7 @@ spec = do
             [ LEQ (M.fromList [(1, 1)]) 10
             , GEQ (M.fromList [(1, 1)]) (-10)
             ]
-          domainMap = VarDomainMap $ M.fromList [(1, Unbounded)]
+          domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -678,7 +678,7 @@ spec = do
     it "AddLowerBound with positive lower bound" $ do
       let obj = Max (M.fromList [(1, 1)])
           constraints = [ LEQ (M.fromList [(1, 1)]) 10 ]
-          domainMap = VarDomainMap $ M.fromList [(1, LowerBound 5)]
+          domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -690,7 +690,7 @@ spec = do
     it "AddLowerBound finds minimum at positive bound" $ do
       let obj = Min (M.fromList [(1, 1)])
           constraints = [ LEQ (M.fromList [(1, 1)]) 10 ]
-          domainMap = VarDomainMap $ M.fromList [(1, LowerBound 5)]
+          domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -705,7 +705,7 @@ spec = do
             [ LEQ (M.fromList [(1, 1), (2, 1)]) 5
             , GEQ (M.fromList [(2, 1)]) (-3)
             ]
-          domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-2)), (2, Unbounded)]
+          domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-2)), (2, unbounded)]
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -719,7 +719,7 @@ spec = do
           (xVal + yVal) `shouldBe` 5
           oVal `shouldBe` 5
 
-    it "LowerBound 0 is equivalent to NonNegative" $ do
+    it "lowerBoundOnly 0 is equivalent to NonNegative" $ do
       let obj = Max (M.fromList [(1, 3), (2, 5)])
           constraints = 
             [ LEQ (M.fromList [(1, 3), (2, 1)]) 15
@@ -727,8 +727,8 @@ spec = do
             , LEQ (M.fromList [(2, 1)]) 4
             , LEQ (M.fromList [(1, -1), (2, 2)]) 6
             ]
-          domainMap1 = VarDomainMap $ M.fromList [(1, LowerBound 0), (2, LowerBound 0)]
-          domainMap2 = VarDomainMap $ M.fromList [(1, T.NonNegative), (2, T.NonNegative)]
+          domainMap1 = VarDomainMap $ M.fromList [(1, lowerBoundOnly 0), (2, lowerBoundOnly 0)]
+          domainMap2 = VarDomainMap $ M.fromList [(1, nonNegative), (2, nonNegative)]
       actualResult1 <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -743,12 +743,125 @@ spec = do
     it "Infeasible system with domain constraint" $ do
       let obj = Max (M.fromList [(1, 1)])
           constraints = [ LEQ (M.fromList [(1, 1)]) 5 ]
-          domainMap = VarDomainMap $ M.fromList [(1, LowerBound 10)]
+          domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 10)]
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
             twoPhaseSimplex domainMap obj constraints
       actualResult `shouldBe` Nothing
+
+  describe "twoPhaseSimplex with upper bounds (AddUpperBound transformation)" $ do
+    describe "Simple single variable systems" $ do
+      it "Max x₁ with x₁ ≥ 0, x₁ ≤ 5 (using boundedRange): optimal at x₁=5" $ do
+        let obj = Max (M.fromList [(1, 1)])
+            constraints = []
+            domainMap = VarDomainMap $ M.fromList [(1, boundedRange 0 5)]
+        actualResult <-
+          runStdoutLoggingT $
+            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
+              twoPhaseSimplex domainMap obj constraints
+        case actualResult of
+          Nothing -> expectationFailure "Expected a solution but got Nothing"
+          Just result -> M.lookup 1 result.varValMap `shouldBe` Just 5
+
+      it "Min x₁ with x₁ ≥ 0, x₁ ≤ 10 (using boundedRange): optimal at x₁=0" $ do
+        let obj = Min (M.fromList [(1, 1)])
+            constraints = []
+            domainMap = VarDomainMap $ M.fromList [(1, boundedRange 0 10)]
+        actualResult <-
+          runStdoutLoggingT $
+            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
+              twoPhaseSimplex domainMap obj constraints
+        case actualResult of
+          Nothing -> expectationFailure "Expected a solution but got Nothing"
+          -- Note: non-basic variables with value 0 may not appear in varValMap
+          Just result -> M.findWithDefault 0 1 result.varValMap `shouldBe` 0
+
+      it "Max x₁ with -5 ≤ x₁ ≤ 10 (bounded range with negative lower): optimal at x₁=10" $ do
+        let obj = Max (M.fromList [(1, 1)])
+            constraints = []
+            domainMap = VarDomainMap $ M.fromList [(1, boundedRange (-5) 10)]
+        actualResult <-
+          runStdoutLoggingT $
+            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
+              twoPhaseSimplex domainMap obj constraints
+        case actualResult of
+          Nothing -> expectationFailure "Expected a solution but got Nothing"
+          Just result -> M.lookup 1 result.varValMap `shouldBe` Just 10
+
+      it "Min x₁ with -5 ≤ x₁ ≤ 10 (bounded range with negative lower): optimal at x₁=-5" $ do
+        let obj = Min (M.fromList [(1, 1)])
+            constraints = []
+            domainMap = VarDomainMap $ M.fromList [(1, boundedRange (-5) 10)]
+        actualResult <-
+          runStdoutLoggingT $
+            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
+              twoPhaseSimplex domainMap obj constraints
+        case actualResult of
+          Nothing -> expectationFailure "Expected a solution but got Nothing"
+          Just result -> M.lookup 1 result.varValMap `shouldBe` Just (-5)
+
+      it "Infeasible: lower bound > upper bound" $ do
+        let obj = Max (M.fromList [(1, 1)])
+            constraints = []
+            domainMap = VarDomainMap $ M.fromList [(1, boundedRange 10 5)]
+        actualResult <-
+          runStdoutLoggingT $
+            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
+              twoPhaseSimplex domainMap obj constraints
+        actualResult `shouldBe` Nothing
+
+    describe "Two variable systems with upper bounds" $ do
+      it "Max x₁ + x₂ with 0 ≤ x₁ ≤ 3, 0 ≤ x₂ ≤ 4: optimal at x₁=3, x₂=4" $ do
+        let obj = Max (M.fromList [(1, 1), (2, 1)])
+            constraints = []
+            domainMap = VarDomainMap $ M.fromList [(1, boundedRange 0 3), (2, boundedRange 0 4)]
+        actualResult <-
+          runStdoutLoggingT $
+            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
+              twoPhaseSimplex domainMap obj constraints
+        case actualResult of
+          Nothing -> expectationFailure "Expected a solution but got Nothing"
+          Just result -> do
+            M.lookup 1 result.varValMap `shouldBe` Just 3
+            M.lookup 2 result.varValMap `shouldBe` Just 4
+            M.lookup result.objectiveVar result.varValMap `shouldBe` Just 7
+
+      it "Max 2x₁ - x₂ with -2 ≤ x₁ ≤ 5, -3 ≤ x₂ ≤ 4" $ do
+        -- Maximize 2x₁ - x₂: want x₁ = 5 (max), x₂ = -3 (min)
+        -- Optimal: 2*5 - (-3) = 13
+        let obj = Max (M.fromList [(1, 2), (2, -1)])
+            constraints = []
+            domainMap = VarDomainMap $ M.fromList [(1, boundedRange (-2) 5), (2, boundedRange (-3) 4)]
+        actualResult <-
+          runStdoutLoggingT $
+            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
+              twoPhaseSimplex domainMap obj constraints
+        case actualResult of
+          Nothing -> expectationFailure "Expected a solution but got Nothing"
+          Just result -> do
+            M.lookup 1 result.varValMap `shouldBe` Just 5
+            M.lookup 2 result.varValMap `shouldBe` Just (-3)
+            M.lookup result.objectiveVar result.varValMap `shouldBe` Just 13
+
+      it "Mixed bounds: x₁ nonNegative, x₂ with upper bound only (unbounded below)" $ do
+        -- x₁ ≥ 0, x₂ ≤ 10 (no lower bound)
+        -- Max x₁ + x₂ with x₁ + x₂ ≤ 20
+        let obj = Max (M.fromList [(1, 1), (2, 1)])
+            constraints = [ LEQ (M.fromList [(1, 1), (2, 1)]) 20 ]
+            domainMap = VarDomainMap $ M.fromList [(1, nonNegative), (2, upperBoundOnly 10)]
+        actualResult <-
+          runStdoutLoggingT $
+            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
+              twoPhaseSimplex domainMap obj constraints
+        case actualResult of
+          Nothing -> expectationFailure "Expected a solution but got Nothing"
+          Just result -> do
+            let x1 = M.findWithDefault 0 1 result.varValMap
+                x2 = M.findWithDefault 0 2 result.varValMap
+            x1 `shouldSatisfy` (>= 0)
+            x2 `shouldSatisfy` (<= 10)
+            (x1 + x2) `shouldBe` 20
 
   describe "twoPhaseSimplex with negative lower bounds (Shift transformation)" $ do
     describe "Simple single variable systems" $ do
@@ -757,7 +870,7 @@ spec = do
         -- Optimal should be at x₁ = 5
         let obj = Max (M.fromList [(1, 1)])
             constraints = [ LEQ (M.fromList [(1, 1)]) 5 ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-3))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-3))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -771,7 +884,7 @@ spec = do
         -- Optimal should be at x₁ = -3
         let obj = Min (M.fromList [(1, 1)])
             constraints = [ LEQ (M.fromList [(1, 1)]) 5 ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-3))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-3))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -784,7 +897,7 @@ spec = do
         -- Both bounds are negative, maximize
         let obj = Max (M.fromList [(1, 1)])
             constraints = [ LEQ (M.fromList [(1, 1)]) (-2) ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-10))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-10))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -797,7 +910,7 @@ spec = do
         -- Both bounds are negative, minimize
         let obj = Min (M.fromList [(1, 1)])
             constraints = [ LEQ (M.fromList [(1, 1)]) (-2) ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-10))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-10))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -815,7 +928,7 @@ spec = do
         -- After unapply: x₁ + x₂ = 15 - 5 = 10
         let obj = Max (M.fromList [(1, 1), (2, 1)])
             constraints = [ LEQ (M.fromList [(1, 1), (2, 1)]) 10 ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-2)), (2, LowerBound (-3))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-2)), (2, lowerBoundOnly (-3))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -837,7 +950,7 @@ spec = do
         -- Optimal: x₁ = -2, x₂ = -3, sum = -5
         let obj = Min (M.fromList [(1, 1), (2, 1)])
             constraints = [ LEQ (M.fromList [(1, 1), (2, 1)]) 10 ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-2)), (2, LowerBound (-3))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-2)), (2, lowerBoundOnly (-3))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -859,7 +972,7 @@ spec = do
               [ LEQ (M.fromList [(1, 1)]) 3
               , LEQ (M.fromList [(2, 1)]) 6
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-5)), (2, LowerBound (-4))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5)), (2, lowerBoundOnly (-4))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -882,7 +995,7 @@ spec = do
               [ LEQ (M.fromList [(1, 1)]) 3
               , LEQ (M.fromList [(2, 1)]) 6
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-5)), (2, LowerBound (-4))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5)), (2, lowerBoundOnly (-4))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -907,7 +1020,7 @@ spec = do
               [ GEQ (M.fromList [(1, 1)]) 2
               , LEQ (M.fromList [(1, 1)]) 10
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-5))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -923,7 +1036,7 @@ spec = do
               [ GEQ (M.fromList [(1, 1)]) 2
               , LEQ (M.fromList [(1, 1)]) 10
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-5))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -941,7 +1054,7 @@ spec = do
               [ EQ (M.fromList [(1, 1), (2, -1)]) 0
               , LEQ (M.fromList [(1, 1)]) 10
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-5)), (2, LowerBound (-5))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5)), (2, lowerBoundOnly (-5))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -963,7 +1076,7 @@ spec = do
               [ EQ (M.fromList [(1, 1), (2, -1)]) 0
               , LEQ (M.fromList [(1, 1)]) 10
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-5)), (2, LowerBound (-5))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5)), (2, lowerBoundOnly (-5))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -981,7 +1094,7 @@ spec = do
       it "Max x₁ with x₁ ≥ -7/2, x₁ ≤ 5/2" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [ LEQ (M.fromList [(1, 1)]) (5 % 2) ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound ((-7) % 2))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly ((-7) % 2))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -993,7 +1106,7 @@ spec = do
       it "Min x₁ with x₁ ≥ -7/2, x₁ ≤ 5/2" $ do
         let obj = Min (M.fromList [(1, 1)])
             constraints = [ LEQ (M.fromList [(1, 1)]) (5 % 2) ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound ((-7) % 2))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly ((-7) % 2))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1011,7 +1124,7 @@ spec = do
               [ LEQ (M.fromList [(1, 1)]) 10
               , GEQ (M.fromList [(1, 1)]) (-10)
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, Unbounded)]
+            domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1026,7 +1139,7 @@ spec = do
               [ LEQ (M.fromList [(1, 1)]) 10
               , GEQ (M.fromList [(1, 1)]) (-10)
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, Unbounded)]
+            domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1035,12 +1148,12 @@ spec = do
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> M.lookup 1 result.varValMap `shouldBe` Just (-10)
 
-      it "Unbounded variable with only upper bound: Min finds negative value" $ do
+      it "unbounded variable with only upper bound: Min finds negative value" $ do
         -- x₁ unbounded, only x₁ ≤ 5, minimize x₁
         -- This should be unbounded (no solution) since x₁ can go to -∞
         let obj = Min (M.fromList [(1, 1)])
             constraints = [ LEQ (M.fromList [(1, 1)]) 5 ]
-            domainMap = VarDomainMap $ M.fromList [(1, Unbounded)]
+            domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1057,7 +1170,7 @@ spec = do
               , LEQ (M.fromList [(2, 1)]) 7
               , GEQ (M.fromList [(2, 1)]) (-3)
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, Unbounded), (2, Unbounded)]
+            domainMap = VarDomainMap $ M.fromList [(1, unbounded), (2, unbounded)]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1078,7 +1191,7 @@ spec = do
               , LEQ (M.fromList [(2, 1)]) 7
               , GEQ (M.fromList [(2, 1)]) (-3)
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, Unbounded), (2, Unbounded)]
+            domainMap = VarDomainMap $ M.fromList [(1, unbounded), (2, unbounded)]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1100,7 +1213,7 @@ spec = do
               , LEQ (M.fromList [(2, 1)]) 7
               , GEQ (M.fromList [(2, 1)]) (-3)
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, Unbounded), (2, Unbounded)]
+            domainMap = VarDomainMap $ M.fromList [(1, unbounded), (2, unbounded)]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1122,7 +1235,7 @@ spec = do
               [ EQ (M.fromList [(1, 1), (2, 1)]) 10
               , GEQ (M.fromList [(2, 1)]) (-5)
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, Unbounded), (2, Unbounded)]
+            domainMap = VarDomainMap $ M.fromList [(1, unbounded), (2, unbounded)]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1141,7 +1254,7 @@ spec = do
               [ EQ (M.fromList [(1, 1), (2, 1)]) 10
               , LEQ (M.fromList [(2, 1)]) 20
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, Unbounded), (2, Unbounded)]
+            domainMap = VarDomainMap $ M.fromList [(1, unbounded), (2, unbounded)]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1166,7 +1279,7 @@ spec = do
               , GEQ (M.fromList [(3, 1)]) (-10)
               ]
             domainMap = VarDomainMap $ M.fromList 
-              [(1, T.NonNegative), (2, LowerBound (-5)), (3, Unbounded)]
+              [(1, nonNegative), (2, lowerBoundOnly (-5)), (3, unbounded)]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1189,7 +1302,7 @@ spec = do
               , GEQ (M.fromList [(3, 1)]) (-20)
               ]
             domainMap = VarDomainMap $ M.fromList 
-              [(1, T.NonNegative), (2, LowerBound (-5)), (3, Unbounded)]
+              [(1, nonNegative), (2, lowerBoundOnly (-5)), (3, unbounded)]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1217,7 +1330,7 @@ spec = do
               [ LEQ (M.fromList [(1, 2), (2, 1)]) 20
               , LEQ (M.fromList [(2, 1)]) 10
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound 2), (2, LowerBound (-3))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 2), (2, lowerBoundOnly (-3))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1241,7 +1354,7 @@ spec = do
               , LEQ (M.fromList [(1, 1)]) 10
               , LEQ (M.fromList [(2, 1)]) 10
               ]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound 2), (2, LowerBound (-3))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 2), (2, lowerBoundOnly (-3))]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1263,7 +1376,7 @@ spec = do
             [ GEQ (M.fromList [(1, 1)]) 10
             , LEQ (M.fromList [(1, 1)]) 5
             ]
-          domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-5))]
+          domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1276,7 +1389,7 @@ spec = do
             [ GEQ (M.fromList [(1, 1)]) 10
             , LEQ (M.fromList [(1, 1)]) 5
             ]
-          domainMap = VarDomainMap $ M.fromList [(1, Unbounded)]
+          domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1287,7 +1400,7 @@ spec = do
       -- x₁ ≥ -5, constraint x₁ = 0
       let obj = Max (M.fromList [(1, 1)])
           constraints = [ EQ (M.fromList [(1, 1)]) 0 ]
-          domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-5))]
+          domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1296,10 +1409,10 @@ spec = do
         Nothing -> expectationFailure "Expected a solution but got Nothing"
         Just result -> M.lookup 1 result.varValMap `shouldBe` Just 0
 
-    it "Unbounded variable constrained to zero" $ do
+    it "unbounded variable constrained to zero" $ do
       let obj = Max (M.fromList [(1, 1)])
           constraints = [ EQ (M.fromList [(1, 1)]) 0 ]
-          domainMap = VarDomainMap $ M.fromList [(1, Unbounded)]
+          domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1314,7 +1427,7 @@ spec = do
       let obj = Max (M.fromList [(1, 1), (2, 1), (3, 1)])
           constraints = [ LEQ (M.fromList [(1, 1), (2, 1), (3, 1)]) 15 ]
           domainMap = VarDomainMap $ M.fromList 
-            [(1, T.NonNegative), (2, LowerBound (-10)), (3, T.NonNegative)]
+            [(1, nonNegative), (2, lowerBoundOnly (-10)), (3, nonNegative)]
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1386,53 +1499,66 @@ spec = do
 
   describe "getTransform" $ do
     describe "Unit tests" $ do
-      it "returns Nothing for NonNegative domain" $ do
-        getTransform 10 1 T.NonNegative `shouldBe` Nothing
+      it "returns empty list for NonNegative domain" $ do
+        getTransform 10 1 nonNegative `shouldBe` ([], 0)
 
-      it "returns Nothing for LowerBound 0" $ do
-        getTransform 10 1 (LowerBound 0) `shouldBe` Nothing
+      it "returns empty list for lowerBoundOnly 0" $ do
+        getTransform 10 1 (lowerBoundOnly 0) `shouldBe` ([], 0)
 
       it "returns AddLowerBound for positive lower bound" $ do
-        getTransform 10 1 (LowerBound 5) `shouldBe` Just (AddLowerBound 1 5)
+        getTransform 10 1 (lowerBoundOnly 5) `shouldBe` ([AddLowerBound 1 5], 0)
 
       it "returns AddLowerBound for fractional positive lower bound" $ do
-        getTransform 10 1 (LowerBound (3 % 2)) `shouldBe` Just (AddLowerBound 1 (3 % 2))
+        getTransform 10 1 (lowerBoundOnly (3 % 2)) `shouldBe` ([AddLowerBound 1 (3 % 2)], 0)
 
       it "returns Shift for negative lower bound" $ do
-        getTransform 10 1 (LowerBound (-5)) `shouldBe` Just (Shift 1 10 (-5))
+        getTransform 10 1 (lowerBoundOnly (-5)) `shouldBe` ([Shift 1 10 (-5)], 1)
 
       it "returns Shift for fractional negative lower bound" $ do
-        getTransform 10 1 (LowerBound ((-7) % 3)) `shouldBe` Just (Shift 1 10 ((-7) % 3))
+        getTransform 10 1 (lowerBoundOnly ((-7) % 3)) `shouldBe` ([Shift 1 10 ((-7) % 3)], 1)
 
-      it "returns Split for Unbounded domain" $ do
-        getTransform 10 1 Unbounded `shouldBe` Just (Split 1 10 11)
+      it "returns Split for unbounded domain" $ do
+        getTransform 10 1 unbounded `shouldBe` ([Split 1 10 11], 2)
+
+      it "returns AddUpperBound for upper bound only" $ do
+        getTransform 10 1 (upperBoundOnly 5) `shouldBe` ([Split 1 10 11, AddUpperBound 1 5], 2)
+
+      it "returns AddLowerBound and AddUpperBound for bounded range" $ do
+        getTransform 10 1 (boundedRange 2 10) `shouldBe` ([AddLowerBound 1 2, AddUpperBound 1 10], 0)
+
+      it "returns Shift and AddUpperBound for negative lower bound with upper bound" $ do
+        getTransform 10 1 (boundedRange (-5) 10) `shouldBe` ([Shift 1 10 (-5), AddUpperBound 1 10], 1)
 
   describe "generateTransform" $ do
     describe "Unit tests" $ do
       it "generates no transform for NonNegative in domain map" $ do
-        let domainMap = M.fromList [(1, T.NonNegative)]
+        let domainMap = M.fromList [(1, nonNegative)]
         generateTransform domainMap 1 ([], 10) `shouldBe` ([], 10)
 
       it "generates AddLowerBound for positive bound in domain map" $ do
-        let domainMap = M.fromList [(1, LowerBound 5)]
+        let domainMap = M.fromList [(1, lowerBoundOnly 5)]
         generateTransform domainMap 1 ([], 10) `shouldBe` ([AddLowerBound 1 5], 10)
 
       it "generates Shift for negative bound and increments fresh var" $ do
-        let domainMap = M.fromList [(1, LowerBound (-5))]
+        let domainMap = M.fromList [(1, lowerBoundOnly (-5))]
         generateTransform domainMap 1 ([], 10) `shouldBe` ([Shift 1 10 (-5)], 11)
 
-      it "generates Split for Unbounded and increments fresh var by 2" $ do
-        let domainMap = M.fromList [(1, Unbounded)]
+      it "generates Split for unbounded and increments fresh var by 2" $ do
+        let domainMap = M.fromList [(1, unbounded)]
         generateTransform domainMap 1 ([], 10) `shouldBe` ([Split 1 10 11], 12)
 
-      it "treats variable not in domain map as Unbounded" $ do
+      it "treats variable not in domain map as unbounded" $ do
         let domainMap = M.empty
         generateTransform domainMap 1 ([], 10) `shouldBe` ([Split 1 10 11], 12)
 
       it "accumulates transforms" $ do
-        let domainMap = M.fromList [(1, LowerBound 5)]
+        let domainMap = M.fromList [(1, lowerBoundOnly 5)]
             existing = [AddLowerBound 2 3]
-        generateTransform domainMap 1 (existing, 10) `shouldBe` ([AddLowerBound 1 5, AddLowerBound 2 3], 10)
+        generateTransform domainMap 1 (existing, 10) `shouldBe` ([AddLowerBound 1 5] ++ existing, 10)
+
+      it "generates AddUpperBound for upper bound" $ do
+        let domainMap = M.fromList [(1, boundedRange 0 10)]
+        generateTransform domainMap 1 ([], 10) `shouldBe` ([AddUpperBound 1 10], 10)
 
   describe "applyShiftToObjective" $ do
     describe "Unit tests" $ do
@@ -1608,7 +1734,7 @@ spec = do
       it "returns empty transforms for all NonNegative domains" $ do
         let obj = Max (M.fromList [(1, 1), (2, 1)])
             constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 10]
-            domainMap = VarDomainMap $ M.fromList [(1, T.NonNegative), (2, T.NonNegative)]
+            domainMap = VarDomainMap $ M.fromList [(1, nonNegative), (2, nonNegative)]
         let (newObj, newConstraints, transforms) = preprocess obj domainMap constraints
         transforms `shouldBe` []
         newObj `shouldBe` obj
@@ -1617,7 +1743,7 @@ spec = do
       it "generates AddLowerBound for positive lower bounds" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 10]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound 5)]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
         let (_, newConstraints, transforms) = preprocess obj domainMap constraints
         transforms `shouldBe` [AddLowerBound 1 5]
         length newConstraints `shouldBe` 2  -- original + GEQ
@@ -1625,7 +1751,7 @@ spec = do
       it "generates Shift for negative lower bounds" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 10]
-            domainMap = VarDomainMap $ M.fromList [(1, LowerBound (-5))]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
         let (newObj, newConstraints, transforms) = preprocess obj domainMap constraints
         length transforms `shouldBe` 1
         case head transforms of
@@ -1634,10 +1760,10 @@ spec = do
             shiftBy `shouldBe` (-5)
           _ -> expectationFailure "Expected Shift transform"
 
-      it "generates Split for Unbounded domains" $ do
+      it "generates Split for unbounded domains" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 10]
-            domainMap = VarDomainMap $ M.fromList [(1, Unbounded)]
+            domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
         let (_, _, transforms) = preprocess obj domainMap constraints
         length transforms `shouldBe` 1
         case head transforms of
@@ -1648,7 +1774,7 @@ spec = do
         let obj = Max (M.fromList [(1, 1), (2, 1), (3, 1)])
             constraints = [LEQ (M.fromList [(1, 1), (2, 1), (3, 1)]) 10]
             domainMap = VarDomainMap $ M.fromList 
-              [(1, T.NonNegative), (2, LowerBound 5), (3, LowerBound (-3))]
+              [(1, nonNegative), (2, lowerBoundOnly 5), (3, lowerBoundOnly (-3))]
         let (_, _, transforms) = preprocess obj domainMap constraints
         -- Should have AddLowerBound for var 2, Shift for var 3
         length transforms `shouldBe` 2
@@ -1671,32 +1797,39 @@ spec = do
           in all (`Set.member` collectAllVars obj []) (M.keys $ case obj of Max m -> m; Min m -> m)
 
     describe "getTransform properties" $ do
-      it "NonNegative always produces Nothing" $ property $
+      it "NonNegative always produces empty list" $ property $
         \(nextVar :: Int) (v :: Int) ->
-          getTransform (abs nextVar + 1) (abs v + 1) T.NonNegative == Nothing
+          getTransform (abs nextVar + 1) (abs v + 1) nonNegative == ([], 0)
 
-      it "LowerBound 0 produces Nothing" $ property $
+      it "lowerBoundOnly 0 produces empty list" $ property $
         \(nextVar :: Int) (v :: Int) ->
-          getTransform (abs nextVar + 1) (abs v + 1) (LowerBound 0) == Nothing
+          getTransform (abs nextVar + 1) (abs v + 1) (lowerBoundOnly 0) == ([], 0)
 
-      it "positive LowerBound produces AddLowerBound" $ property $
+      it "positive lowerBoundOnly produces AddLowerBound" $ property $
         \(Positive bound :: Positive Rational) (nextVar :: Int) (v :: Int) ->
-          case getTransform (abs nextVar + 1) (abs v + 1) (LowerBound bound) of
-            Just (AddLowerBound var b) -> var == abs v + 1 && b == bound
+          case getTransform (abs nextVar + 1) (abs v + 1) (lowerBoundOnly bound) of
+            ([AddLowerBound var b], 0) -> var == abs v + 1 && b == bound
             _ -> False
 
-      it "negative LowerBound produces Shift" $ property $
+      it "negative lowerBoundOnly produces Shift" $ property $
         \(Positive bound :: Positive Rational) (nextVar :: Int) (v :: Int) ->
           let negBound = negate bound
-          in case getTransform (abs nextVar + 1) (abs v + 1) (LowerBound negBound) of
-            Just (Shift origVar _ shiftBy) -> origVar == abs v + 1 && shiftBy == negBound
+          in case getTransform (abs nextVar + 1) (abs v + 1) (lowerBoundOnly negBound) of
+            ([Shift origVar _ shiftBy], 1) -> origVar == abs v + 1 && shiftBy == negBound
             _ -> False
 
-      it "Unbounded produces Split" $ property $
+      it "unbounded produces Split" $ property $
         \(nextVar :: Int) (v :: Int) ->
-          case getTransform (abs nextVar + 1) (abs v + 1) Unbounded of
-            Just (Split origVar _ _) -> origVar == abs v + 1
+          case getTransform (abs nextVar + 1) (abs v + 1) unbounded of
+            ([Split origVar _ _], 2) -> origVar == abs v + 1
             _ -> False
+
+      it "boundedRange produces both lower and upper bound transforms" $ property $
+        \(lower :: Rational) (Positive delta :: Positive Rational) (nextVar :: Int) (v :: Int) ->
+          let upper = lower + delta  -- ensure upper > lower
+          in case getTransform (abs nextVar + 1) (abs v + 1) (boundedRange lower upper) of
+            (transforms, _) -> 
+              any (\case AddUpperBound var u -> var == abs v + 1 && u == upper; _ -> False) transforms
 
     describe "applyShiftToConstraint properties" $ do
       it "RHS adjustment follows formula: newRHS = oldRHS - coeff * shiftBy" $ property $

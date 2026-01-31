@@ -49,6 +49,7 @@ import qualified Data.Set as Set
 import GHC.Real (Ratio)
 import Linear.Simplex.Types
 import Linear.Simplex.Util
+import qualified Control.Applicative as LPPaver
 
 -- | Find a feasible solution for the given system of 'PolyConstraint's by performing the first phase of the two-phase simplex method
 --  All variables in the 'PolyConstraint' must be positive.
@@ -402,7 +403,9 @@ optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..})
 -- Variables not in the VarDomainMap are assumed to be Unbounded (no lower bound).
 -- This function applies necessary transformations before solving and unapplies them after.
 -- The returned Result contains variable values and objective value in the original space.
--- TODO: use this as twoPhaseSimplex, add instructions in CHANGELOG for old users
+-- TODO: we need to be able to support multiple objective functions for the LPPaver.
+-- one way to do this is to have a list of objective functions and optimize them one by one.
+-- think about cases where the opitmal result is infinity
 twoPhaseSimplex :: (MonadIO m, MonadLogger m) => VarDomainMap -> ObjectiveFunction -> [PolyConstraint] -> m (Maybe Result)
 twoPhaseSimplex domainMap objFunction constraints = do
   logMsg LevelInfo $
@@ -489,26 +492,40 @@ collectAllVars objFunction constraints =
 -- Returns updated (transforms, nextFreshVar).
 generateTransform :: M.Map Var VarDomain -> Var -> ([VarTransform], Var) -> ([VarTransform], Var)
 generateTransform domainMap var (transforms, nextFreshVar) =
-  let domain = M.findWithDefault Unbounded var domainMap
-  in case getTransform nextFreshVar var domain of
-       Nothing -> (transforms, nextFreshVar)
-       Just t@(AddLowerBound {}) -> (t : transforms, nextFreshVar)
-       Just t@(Shift {}) -> (t : transforms, nextFreshVar + 1)
-       Just t@(Split {}) -> (t : transforms, nextFreshVar + 2)
+  let domain = M.findWithDefault unbounded var domainMap
+      (newTransforms, varOffset) = getTransform nextFreshVar var domain
+  in (newTransforms ++ transforms, nextFreshVar + varOffset)
 
--- | Determine what transform (if any) is needed for a variable given its domain.
-getTransform :: Var -> Var -> VarDomain -> Maybe VarTransform
-getTransform nextFreshVar var domain =
-  case domain of
-    NonNegative -> Nothing
-    
-    LowerBound l 
-      | l == 0 -> Nothing
-      | l > 0  -> Just $ AddLowerBound var l
-      | otherwise -> Just $ Shift var nextFreshVar l  -- l < 0, need to shift
-    
-    Unbounded ->
-      Just $ Split var nextFreshVar (nextFreshVar + 1)
+-- | Determine what transforms are needed for a variable given its domain.
+-- Returns a list of transforms and the number of fresh variables consumed.
+getTransform :: Var -> Var -> VarDomain -> ([VarTransform], Var)
+getTransform nextFreshVar var (Bounded mLower mUpper) =
+  let -- Handle lower bound
+      (lowerTransforms, varOffset) = case mLower of
+        Nothing -> ([], 0)  -- No lower bound: will need Split
+        Just l
+          | l == 0    -> ([], 0)  -- NonNegative: no transform needed
+          | l > 0     -> ([AddLowerBound var l], 0)  -- Positive lower bound: add constraint
+          | otherwise -> ([Shift var nextFreshVar l], 1)  -- Negative lower bound: shift
+      
+      -- Handle upper bound (if present)
+      upperTransforms = case mUpper of
+        Nothing -> []
+        Just u  -> [AddUpperBound var u]
+      
+      -- If no lower bound (Nothing), we need Split transformation
+      -- Split replaces the variable, so upper bound would apply to the original var
+      -- which gets expressed as posVar - negVar
+      (finalTransforms, finalOffset) = case mLower of
+        Nothing -> 
+          -- Unbounded: split the variable
+          -- Note: upperTransforms will still be added and will apply to the original variable
+          -- expression (posVar - negVar) via the constraint system
+          (Split var nextFreshVar (nextFreshVar + 1) : upperTransforms, 2)
+        Just _ ->
+          (lowerTransforms ++ upperTransforms, varOffset)
+  
+  in (finalTransforms, finalOffset)
 
 -- | Apply all transforms to the objective function and constraints.
 applyTransforms :: [VarTransform] -> ObjectiveFunction -> [PolyConstraint] -> (ObjectiveFunction, [PolyConstraint])
@@ -522,6 +539,10 @@ applyTransform transform (objFunction, constraints) =
     -- AddLowerBound: Add a GEQ constraint for the variable
     AddLowerBound v bound ->
       (objFunction, GEQ (M.singleton v 1) bound : constraints)
+    
+    -- AddUpperBound: Add a LEQ constraint for the variable
+    AddUpperBound v bound ->
+      (objFunction, LEQ (M.singleton v 1) bound : constraints)
     
     -- Shift: originalVar = shiftedVar + shiftBy (where shiftBy < 0)
     -- Substitute: wherever we see originalVar, replace with shiftedVar
@@ -623,6 +644,9 @@ unapplyTransform transform result@(Result {varValMap = valMap, ..}) =
   case transform of
     -- AddLowerBound: No variable substitution was done, nothing to unapply
     AddLowerBound {} -> result
+    
+    -- AddUpperBound: No variable substitution was done, nothing to unapply
+    AddUpperBound {} -> result
     
     -- Shift: originalVar = shiftedVar + shiftBy
     -- So originalVar's value = shiftedVar's value + shiftBy

@@ -122,15 +122,44 @@ data PivotObjective = PivotObjective
   }
   deriving (Show, Read, Eq, Generic)
 
--- | Domain specification for a variable's lower bound.
--- Note: This only concerns lower bounds. Upper bounds are handled via constraints.
--- Variables not in the VarDomainMap are assumed to be Unbounded.
-data VarDomain 
-  = NonNegative           -- ^ var >= 0 (standard simplex assumption, no transformation needed)
-  | LowerBound SimplexNum -- ^ var >= L for some L (if L < 0: shift, if L > 0: add constraint)
-  | Unbounded             -- ^ No lower bound (split into difference of two non-negative vars)
-  -- TODO: Upperbound can still be useful, can negate it to get a loewr bound, can add it to the constraints
+-- | Domain specification for a variable's bounds.
+-- Variables not in the VarDomainMap are assumed to be Unbounded (both bounds Nothing).
+-- 
+-- Bounds semantics:
+--   * @lowerBound = Just L@ means var >= L
+--   * @lowerBound = Nothing@ means no lower bound (var can be arbitrarily negative)
+--   * @upperBound = Just U@ means var <= U  
+--   * @upperBound = Nothing@ means no upper bound (var can be arbitrarily positive)
+--
+-- Note: @Bounded Nothing Nothing@ is equivalent to unbounded. Use the smart constructors
+-- ('unbounded', 'nonNegative', etc.) for clarity.
+data VarDomain = Bounded 
+  { lowerBound :: Maybe SimplexNum  -- ^ Lower bound (Nothing = -∞)
+  , upperBound :: Maybe SimplexNum  -- ^ Upper bound (Nothing = +∞)
+  }
   deriving stock (Show, Read, Eq, Generic)
+
+-- | Smart constructor for an unbounded variable (no lower or upper bound).
+-- The variable can take any real value.
+unbounded :: VarDomain
+unbounded = Bounded Nothing Nothing
+
+-- | Smart constructor for a non-negative variable (var >= 0).
+-- This is the standard simplex assumption.
+nonNegative :: VarDomain
+nonNegative = Bounded (Just 0) Nothing
+
+-- | Smart constructor for a variable with only a lower bound (var >= L).
+lowerBoundOnly :: SimplexNum -> VarDomain
+lowerBoundOnly l = Bounded (Just l) Nothing
+
+-- | Smart constructor for a variable with only an upper bound (var <= U).
+upperBoundOnly :: SimplexNum -> VarDomain
+upperBoundOnly u = Bounded Nothing (Just u)
+
+-- | Smart constructor for a variable with both lower and upper bounds (L <= var <= U).
+boundedRange :: SimplexNum -> SimplexNum -> VarDomain
+boundedRange l u = Bounded (Just l) (Just u)
 
 -- | Map from variables to their domain specifications.
 -- Variables not in this map are assumed to be Unbounded.
@@ -143,6 +172,10 @@ data VarTransform
       { var :: !Var
       , bound :: !SimplexNum 
       } -- ^ var >= bound where bound > 0. Adds GEQ constraint to system.
+  | AddUpperBound
+      { var :: !Var
+      , bound :: !SimplexNum
+      } -- ^ var <= bound. Adds LEQ constraint to system.
   | Shift 
       { originalVar :: !Var
       , shiftedVar :: !Var  
