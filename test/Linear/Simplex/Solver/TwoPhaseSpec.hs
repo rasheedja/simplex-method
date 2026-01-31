@@ -21,25 +21,20 @@ import Linear.Simplex.Solver.TwoPhase
 import Linear.Simplex.Types hiding (NonNegative)
 import Linear.Simplex.Util
 
--- | Helper to run a test case and check result
+-- | Helper to run a test case for a system where all vars
+-- are non-negative and verify we get the expected  result
 runTest :: (ObjectiveFunction, [PolyConstraint]) -> Maybe Result -> IO ()
 runTest (obj, constraints) expectedResult = do
-  actualResult <-
-    runStdoutLoggingT $
-      filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-        twoPhaseSimplex obj constraints
   let prettyObj = prettyShowObjectiveFunction obj
       prettyConstraints = map prettyShowPolyConstraint constraints
       expectedObjVal = extractObjectiveValue expectedResult
-      actualObjVal = extractObjectiveValue actualResult
-      -- HACK: Verify NonNegative twoPhaseSimplex' NonNegative == twoPhaseSimplex
       allVars = collectAllVars obj constraints
       domainMap = VarDomainMap $ M.fromSet (const T.NonNegative) allVars
-  actualResult' <-
+  actualResult <-
     runStdoutLoggingT $
     filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-      twoPhaseSimplex' domainMap obj constraints
-  let actualObjVal' = extractObjectiveValue actualResult'
+      twoPhaseSimplex domainMap obj constraints
+  let actualObjVal = extractObjectiveValue actualResult
   annotate
     [qc|
 
@@ -53,15 +48,9 @@ Expected Solution            (Full): {expectedResult}
 Actual Solution              (Full): {actualResult}
 Expected Solution       (Objective): {expectedObjVal}
 Actual Solution         (Objective): {actualObjVal}
-====================================
-Actual Solution'             (Full): {actualResult'}
-Actual Solution'        (Objective): {actualObjVal'}
     |]
     $ do
       actualResult `shouldBe` expectedResult
-      -- TODO: worth removing twoPhaseSimplex?
-      actualResult' `shouldBe` expectedResult
-
 
 spec :: Spec
 spec = do
@@ -631,23 +620,7 @@ spec = do
               )
         runTest testCase (Just (Result 7 (M.fromList [(7, (-8)), (2, 2)])))
 
-  describe "twoPhaseSimplex' (with VarDomainMap)" $ do
-    it "NonNegative domain gives same result as twoPhaseSimplex" $ do
-      -- TODO: redundant if we keep the runTest hack
-      let obj = Max (M.fromList [(1, 3), (2, 5)])
-          constraints = 
-            [ LEQ (M.fromList [(1, 3), (2, 1)]) 15
-            , LEQ (M.fromList [(1, 1), (2, 1)]) 7
-            , LEQ (M.fromList [(2, 1)]) 4
-            , LEQ (M.fromList [(1, -1), (2, 2)]) 6
-            ]
-          domainMap = VarDomainMap $ M.fromList [(1, T.NonNegative), (2, T.NonNegative)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap obj constraints
-      actualResult `shouldBe` Just (Result 7 (M.fromList [(7, 29), (1, 3), (2, 4)]))
-
+  describe "twoPhaseSimplex (with VarDomainMap)" $ do
     it "Shift transformation with negative lower bound" $ do
       let obj = Max (M.fromList [(1, 1)])
           constraints = [ LEQ (M.fromList [(1, 1)]) 10 ]
@@ -655,7 +628,7 @@ spec = do
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap obj constraints
+            twoPhaseSimplex domainMap obj constraints
       case actualResult of
         Nothing -> expectationFailure "Expected a solution but got Nothing"
         Just result -> M.lookup 1 result.varValMap `shouldBe` Just 10
@@ -667,7 +640,7 @@ spec = do
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap obj constraints
+            twoPhaseSimplex domainMap obj constraints
       case actualResult of
         Nothing -> expectationFailure "Expected a solution but got Nothing"
         Just result -> M.lookup 1 result.varValMap `shouldBe` Just (-5)
@@ -682,7 +655,7 @@ spec = do
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap obj constraints
+            twoPhaseSimplex domainMap obj constraints
       case actualResult of
         Nothing -> expectationFailure "Expected a solution but got Nothing"
         Just result -> M.lookup 1 result.varValMap `shouldBe` Just 10
@@ -697,7 +670,7 @@ spec = do
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap obj constraints
+            twoPhaseSimplex domainMap obj constraints
       case actualResult of
         Nothing -> expectationFailure "Expected a solution but got Nothing"
         Just result -> M.lookup 1 result.varValMap `shouldBe` Just (-10)
@@ -709,7 +682,7 @@ spec = do
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap obj constraints
+            twoPhaseSimplex domainMap obj constraints
       case actualResult of
         Nothing -> expectationFailure "Expected a solution but got Nothing"
         Just result -> M.lookup 1 result.varValMap `shouldBe` Just 10
@@ -721,7 +694,7 @@ spec = do
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap obj constraints
+            twoPhaseSimplex domainMap obj constraints
       case actualResult of
         Nothing -> expectationFailure "Expected a solution but got Nothing"
         Just result -> M.lookup 1 result.varValMap `shouldBe` Just 5
@@ -736,7 +709,7 @@ spec = do
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap obj constraints
+            twoPhaseSimplex domainMap obj constraints
       case actualResult of
         Nothing -> expectationFailure "Expected a solution but got Nothing"
         Just result -> do
@@ -759,11 +732,11 @@ spec = do
       actualResult1 <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap1 obj constraints
+            twoPhaseSimplex domainMap1 obj constraints
       actualResult2 <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap2 obj constraints
+            twoPhaseSimplex domainMap2 obj constraints
       actualResult1 `shouldBe` Just (Result 7 (M.fromList [(7, 29), (1, 3), (2, 4)]))
       actualResult1 `shouldBe` actualResult2
 
@@ -774,10 +747,10 @@ spec = do
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap obj constraints
+            twoPhaseSimplex domainMap obj constraints
       actualResult `shouldBe` Nothing
 
-  describe "twoPhaseSimplex' with negative lower bound s (Shift transformation)" $ do
+  describe "twoPhaseSimplex with negative lower bounds (Shift transformation)" $ do
     describe "Simple single variable systems" $ do
       it "Max x₁ with x₁ ≤ 5, x₁ ≥ -3: optimal at upper bound x₁=5" $ do
         -- Simple case: maximize x with upper bound 5 and lower bound -3
@@ -788,7 +761,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> M.lookup 1 result.varValMap `shouldBe` Just 5
@@ -802,7 +775,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> M.lookup 1 result.varValMap `shouldBe` Just (-3)
@@ -815,7 +788,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> M.lookup 1 result.varValMap `shouldBe` Just (-2)
@@ -828,7 +801,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> M.lookup 1 result.varValMap `shouldBe` Just (-10)
@@ -846,7 +819,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
@@ -868,7 +841,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
@@ -890,7 +863,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
@@ -913,7 +886,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
@@ -938,7 +911,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> M.lookup 1 result.varValMap `shouldBe` Just 10
@@ -954,13 +927,13 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> M.lookup 1 result.varValMap `shouldBe` Just 2
 
     describe "Systems with EQ constraints and negative bounds" $ do
-      it "Max x₁ + x₂ with x₁ - x₂ = 0, x₁ ≥ -5, x₂ ≥ -5, x₁ ≤ 10" $ do
+      it "Max x₁ + x₂ with x₁ - x₂ = 0, x₁ ≥ -5, x₂ ≥ -5, x₁ ≤ 10" $ do 
         -- x₁ = x₂, maximize x₁ + x₂ = 2x₁
         -- With x₁ ≤ 10, optimal is x₁ = x₂ = 10, obj = 20
         let obj = Max (M.fromList [(1, 1), (2, 1)])
@@ -972,7 +945,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
@@ -994,7 +967,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
@@ -1012,7 +985,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> M.lookup 1 result.varValMap `shouldBe` Just (5 % 2)
@@ -1024,12 +997,12 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> M.lookup 1 result.varValMap `shouldBe` Just ((-7) % 2)
 
-  describe "twoPhaseSimplex' with unbounded variables (Split transformation)" $ do
+  describe "twoPhaseSimplex with unbounded variables (Split transformation)" $ do
     describe "Simple single variable systems" $ do
       it "Max x₁ with -10 ≤ x₁ ≤ 10 (unbounded var with box constraints)" $ do
         -- x₁ is unbounded but constrained by -10 ≤ x₁ ≤ 10
@@ -1042,7 +1015,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> M.lookup 1 result.varValMap `shouldBe` Just 10
@@ -1057,7 +1030,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> M.lookup 1 result.varValMap `shouldBe` Just (-10)
@@ -1071,7 +1044,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         -- This should be unbounded (infeasible for optimization)
         actualResult `shouldBe` Nothing
 
@@ -1088,7 +1061,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
@@ -1109,7 +1082,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
@@ -1131,7 +1104,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
@@ -1153,7 +1126,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
@@ -1172,14 +1145,14 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
             M.lookup 1 result.varValMap `shouldBe` Just (-10)
             M.lookup 2 result.varValMap `shouldBe` Just 20
 
-  describe "twoPhaseSimplex' with mixed domain types" $ do
+  describe "twoPhaseSimplex with mixed domain types" $ do
     describe "NonNegative, negative lower bound, and unbounded in same system" $ do
       it "Max x₁ + x₂ + x₃ with x₁ ≥ 0, x₂ ≥ -5, x₃ unbounded, sum ≤ 20" $ do
         -- x₁ non-negative, x₂ has lower bound -5, x₃ unbounded
@@ -1197,7 +1170,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
@@ -1220,7 +1193,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
@@ -1248,7 +1221,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
@@ -1272,7 +1245,7 @@ spec = do
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex' domainMap obj constraints
+              twoPhaseSimplex domainMap obj constraints
         case actualResult of
           Nothing -> expectationFailure "Expected a solution but got Nothing"
           Just result -> do
@@ -1282,7 +1255,7 @@ spec = do
             x2 `shouldSatisfy` (>= (-3))
             (x1 + x2) `shouldSatisfy` (>= 0)
 
-  describe "twoPhaseSimplex' edge cases and infeasibility" $ do
+  describe "twoPhaseSimplex edge cases and infeasibility" $ do
     it "Infeasible: negative lower bound conflicts with GEQ constraint" $ do
       -- x₁ ≥ -5 (domain), but x₁ ≥ 10 and x₁ ≤ 5 (constraints conflict)
       let obj = Max (M.fromList [(1, 1)])
@@ -1294,7 +1267,7 @@ spec = do
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap obj constraints
+            twoPhaseSimplex domainMap obj constraints
       actualResult `shouldBe` Nothing
 
     it "Infeasible: unbounded variable with conflicting constraints" $ do
@@ -1307,7 +1280,7 @@ spec = do
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap obj constraints
+            twoPhaseSimplex domainMap obj constraints
       actualResult `shouldBe` Nothing
 
     it "Variable at exactly zero with negative lower bound" $ do
@@ -1318,7 +1291,7 @@ spec = do
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap obj constraints
+            twoPhaseSimplex domainMap obj constraints
       case actualResult of
         Nothing -> expectationFailure "Expected a solution but got Nothing"
         Just result -> M.lookup 1 result.varValMap `shouldBe` Just 0
@@ -1330,7 +1303,7 @@ spec = do
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap obj constraints
+            twoPhaseSimplex domainMap obj constraints
       case actualResult of
         Nothing -> expectationFailure "Expected a solution but got Nothing"
         Just result -> M.lookup 1 result.varValMap `shouldBe` Just 0
@@ -1345,7 +1318,7 @@ spec = do
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex' domainMap obj constraints
+            twoPhaseSimplex domainMap obj constraints
       case actualResult of
         Nothing -> expectationFailure "Expected a solution but got Nothing"
         Just result -> do

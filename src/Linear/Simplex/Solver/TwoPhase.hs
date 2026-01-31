@@ -15,7 +15,6 @@ module Linear.Simplex.Solver.TwoPhase
   ( findFeasibleSolution
   , optimizeFeasibleSystem
   , twoPhaseSimplex
-  , twoPhaseSimplex'
   -- Internal functions exported for testing
   , preprocess
   , postprocess
@@ -399,57 +398,39 @@ optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..})
               )
               (M.toList objFunction.objective)
 
--- | Perform the two phase simplex method with a given 'ObjectiveFunction' a system of 'PolyConstraint's.
---  Assumes the 'ObjectiveFunction' and 'PolyConstraint' is not empty.
---  Returns a pair with the first item being the 'Integer' variable equal to the 'ObjectiveFunction'
---  and the second item being a map of the values of all 'Integer' variables appearing in the system, including the 'ObjectiveFunction'.
-twoPhaseSimplex :: (MonadIO m, MonadLogger m) => ObjectiveFunction -> [PolyConstraint] -> m (Maybe Result)
-twoPhaseSimplex objFunction unsimplifiedSystem = do
-  logMsg LevelInfo $
-    "twoPhaseSimplex: Solving system " <> showT unsimplifiedSystem <> " with objective " <> showT objFunction
-  phase1Result <- findFeasibleSolution unsimplifiedSystem
-  case phase1Result of
-    Just feasibleSystem -> do
-      logMsg LevelInfo $
-        "twoPhaseSimplex: Feasible system found for "
-          <> showT unsimplifiedSystem
-          <> "; Feasible system: "
-          <> showT feasibleSystem
-      optimizedSystem <- optimizeFeasibleSystem objFunction feasibleSystem
-      logMsg LevelInfo $
-        "twoPhaseSimplex: Optimized system found for "
-          <> showT unsimplifiedSystem
-          <> "; Optimized system: "
-          <> showT optimizedSystem
-      pure optimizedSystem
-    Nothing -> do
-      logMsg LevelInfo $ "twoPhaseSimplex: Phase 1 gives infeasible result for " <> showT unsimplifiedSystem
-      pure Nothing
-
 -- | Perform the two phase simplex method with variable domain information.
 -- Variables not in the VarDomainMap are assumed to be Unbounded (no lower bound).
 -- This function applies necessary transformations before solving and unapplies them after.
 -- The returned Result contains variable values and objective value in the original space.
 -- TODO: use this as twoPhaseSimplex, add instructions in CHANGELOG for old users
-twoPhaseSimplex' :: (MonadIO m, MonadLogger m) => VarDomainMap -> ObjectiveFunction -> [PolyConstraint] -> m (Maybe Result)
-twoPhaseSimplex' domainMap objFunction constraints = do
+twoPhaseSimplex :: (MonadIO m, MonadLogger m) => VarDomainMap -> ObjectiveFunction -> [PolyConstraint] -> m (Maybe Result)
+twoPhaseSimplex domainMap objFunction constraints = do
   logMsg LevelInfo $
-    "twoPhaseSimplex': Solving system with domain map " <> showT domainMap
+    "twoPhaseSimplex: Solving system with domain map " <> showT domainMap
   let (transformedObj, transformedConstraints, transforms) = preprocess objFunction domainMap constraints 
   logMsg LevelInfo $
-    "twoPhaseSimplex': Applied transforms " <> showT transforms
+    "twoPhaseSimplex: Applied transforms " <> showT transforms
       <> "; Transformed objective: " <> showT transformedObj
       <> "; Transformed constraints: " <> showT transformedConstraints
-  mResult <- twoPhaseSimplex transformedObj transformedConstraints
-  case mResult of
+  phase1Result <- findFeasibleSolution transformedConstraints
+  case phase1Result of
     Nothing -> do
-      logMsg LevelInfo "twoPhaseSimplex': No solution found"
+      logMsg LevelInfo "twoPhaseSimplex: No feasible solution found in phase 1"
       pure Nothing
-    Just result -> do
-      let finalResult = postprocess objFunction transforms result
+    Just feasibleSystem -> do
       logMsg LevelInfo $
-        "twoPhaseSimplex': Postprocessed result: " <> showT finalResult
-      pure (Just finalResult)
+        "twoPhaseSimplex: Feasible system found for transformed system; Feasible system: "
+          <> showT feasibleSystem
+      mOptimizedSystem <- optimizeFeasibleSystem transformedObj feasibleSystem
+      case mOptimizedSystem of
+        Nothing -> do
+          logMsg LevelInfo "twoPhaseSimplex: No optimized solution found in phase 2"
+          pure Nothing
+        Just result -> do
+          let finalResult = postprocess objFunction transforms result
+          logMsg LevelInfo $
+            "twoPhaseSimplex: Postprocessed result: " <> showT finalResult
+          pure (Just finalResult)
 
 -- | Postprocess the result by unapplying variable transformations and computing
 -- the objective value in the original space.
