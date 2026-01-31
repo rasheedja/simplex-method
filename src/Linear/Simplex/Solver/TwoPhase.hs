@@ -11,7 +11,7 @@
 -- 'optimizeFeasibleSystem' performs phase two of the two-phase simplex method.
 -- 'twoPhaseSimplex' performs both phases of the two-phase simplex method.
 -- 'twoPhaseSimplex'' performs both phases with variable domain support.
-module Linear.Simplex.Solver.TwoPhase 
+module Linear.Simplex.Solver.TwoPhase
   ( findFeasibleSolution
   , optimizeFeasibleSystem
   , twoPhaseSimplex
@@ -410,30 +410,22 @@ twoPhaseSimplex :: (MonadIO m, MonadLogger m) => VarDomainMap -> ObjectiveFuncti
 twoPhaseSimplex domainMap objFunction constraints = do
   logMsg LevelInfo $
     "twoPhaseSimplex: Solving system with domain map " <> showT domainMap
-  let (transformedObj, transformedConstraints, transforms) = preprocess objFunction domainMap constraints 
+  let (transformedObj, transformedConstraints, transforms) = preprocess objFunction domainMap constraints
   logMsg LevelInfo $
     "twoPhaseSimplex: Applied transforms " <> showT transforms
       <> "; Transformed objective: " <> showT transformedObj
       <> "; Transformed constraints: " <> showT transformedConstraints
-  phase1Result <- findFeasibleSolution transformedConstraints
-  case phase1Result of
-    Nothing -> do
-      logMsg LevelInfo "twoPhaseSimplex: No feasible solution found in phase 1"
-      pure Nothing
-    Just feasibleSystem -> do
-      logMsg LevelInfo $
-        "twoPhaseSimplex: Feasible system found for transformed system; Feasible system: "
-          <> showT feasibleSystem
-      mOptimizedSystem <- optimizeFeasibleSystem transformedObj feasibleSystem
-      case mOptimizedSystem of
-        Nothing -> do
-          logMsg LevelInfo "twoPhaseSimplex: No optimized solution found in phase 2"
-          pure Nothing
-        Just result -> do
-          let finalResult = postprocess objFunction transforms result
-          logMsg LevelInfo $
-            "twoPhaseSimplex: Postprocessed result: " <> showT finalResult
-          pure (Just finalResult)
+  mFeasibleSystem <- findFeasibleSolution transformedConstraints
+  let phase1FailureLog = logMsg LevelInfo "twoPhaseSimplex: No feasible solution found in phase 1"
+  let runPhase2 feasibleSystem = do
+        logMsg LevelInfo $
+          "twoPhaseSimplex: Feasible system found for transformed system; Feasible system: "
+            <> showT feasibleSystem
+        mOptimizedSystem <- optimizeFeasibleSystem transformedObj feasibleSystem
+        let mFinalResult = postprocess objFunction transforms <$> mOptimizedSystem
+        logMsg LevelInfo $ maybe "twoPhaseSimplex: No optimized solution found in phase 2" (("twoPhaseSimplex: Postprocessed result: " <>) . showT) mFinalResult
+        pure mFinalResult
+  maybe (phase1FailureLog >> pure Nothing) runPhase2 mFeasibleSystem
 
 -- | Postprocess the result by unapplying variable transformations and computing
 -- the objective value in the original space.
@@ -457,8 +449,8 @@ computeObjective objFunction varVals =
 
 -- | Preprocess the system by applying variable transformations based on domain information.
 -- Returns the transformed objective, constraints, and the list of transforms applied.
-preprocess :: ObjectiveFunction 
-           -> VarDomainMap 
+preprocess :: ObjectiveFunction
+           -> VarDomainMap
            -> [PolyConstraint]
            -> (ObjectiveFunction, [PolyConstraint], [VarTransform])
 preprocess objFunction (VarDomainMap domainMap) constraints =
@@ -507,24 +499,24 @@ getTransform nextFreshVar var (Bounded mLower mUpper) =
           | l == 0    -> ([], 0)  -- NonNegative: no transform needed
           | l > 0     -> ([AddLowerBound var l], 0)  -- Positive lower bound: add constraint
           | otherwise -> ([Shift var nextFreshVar l], 1)  -- Negative lower bound: shift
-      
+
       -- Handle upper bound (if present)
       upperTransforms = case mUpper of
         Nothing -> []
         Just u  -> [AddUpperBound var u]
-      
+
       -- If no lower bound (Nothing), we need Split transformation
       -- Split replaces the variable, so upper bound would apply to the original var
       -- which gets expressed as posVar - negVar
       (finalTransforms, finalOffset) = case mLower of
-        Nothing -> 
+        Nothing ->
           -- Unbounded: split the variable
           -- Note: upperTransforms will still be added and will apply to the original variable
           -- expression (posVar - negVar) via the constraint system
           (Split var nextFreshVar (nextFreshVar + 1) : upperTransforms, 2)
         Just _ ->
           (lowerTransforms ++ upperTransforms, varOffset)
-  
+
   in (finalTransforms, finalOffset)
 
 -- | Apply all transforms to the objective function and constraints.
@@ -539,11 +531,11 @@ applyTransform transform (objFunction, constraints) =
     -- AddLowerBound: Add a GEQ constraint for the variable
     AddLowerBound v bound ->
       (objFunction, GEQ (M.singleton v 1) bound : constraints)
-    
+
     -- AddUpperBound: Add a LEQ constraint for the variable
     AddUpperBound v bound ->
       (objFunction, LEQ (M.singleton v 1) bound : constraints)
-    
+
     -- Shift: originalVar = shiftedVar + shiftBy (where shiftBy < 0)
     -- Substitute: wherever we see originalVar, replace with shiftedVar
     -- and adjust the RHS by -coeff * shiftBy
@@ -551,7 +543,7 @@ applyTransform transform (objFunction, constraints) =
       ( applyShiftToObjective origVar shiftedVar shiftBy objFunction
       , map (applyShiftToConstraint origVar shiftedVar shiftBy) constraints
       )
-    
+
     -- Split: originalVar = posVar - negVar
     -- Substitute: wherever we see originalVar with coeff c, 
     -- replace with posVar with coeff c and negVar with coeff -c
@@ -585,13 +577,13 @@ applyShiftToObjective origVar shiftedVar _shiftBy objFunction =
 applyShiftToConstraint :: Var -> Var -> SimplexNum -> PolyConstraint -> PolyConstraint
 applyShiftToConstraint origVar shiftedVar shiftBy constraint =
   case constraint of
-    LEQ m rhs -> 
+    LEQ m rhs ->
       let (newMap, rhsAdjust) = substituteVarInMap origVar shiftedVar shiftBy m
       in LEQ newMap (rhs - rhsAdjust)
-    GEQ m rhs -> 
+    GEQ m rhs ->
       let (newMap, rhsAdjust) = substituteVarInMap origVar shiftedVar shiftBy m
       in GEQ newMap (rhs - rhsAdjust)
-    EQ m rhs -> 
+    EQ m rhs ->
       let (newMap, rhsAdjust) = substituteVarInMap origVar shiftedVar shiftBy m
       in EQ newMap (rhs - rhsAdjust)
   where
@@ -644,10 +636,10 @@ unapplyTransform transform result@(Result {varValMap = valMap, ..}) =
   case transform of
     -- AddLowerBound: No variable substitution was done, nothing to unapply
     AddLowerBound {} -> result
-    
+
     -- AddUpperBound: No variable substitution was done, nothing to unapply
     AddUpperBound {} -> result
-    
+
     -- Shift: originalVar = shiftedVar + shiftBy
     -- So originalVar's value = shiftedVar's value + shiftBy
     Shift origVar shiftedVar shiftBy ->
@@ -655,7 +647,7 @@ unapplyTransform transform result@(Result {varValMap = valMap, ..}) =
           origVal = shiftedVal + shiftBy
           newMap = M.insert origVar origVal (M.delete shiftedVar valMap)
       in result { varValMap = newMap }
-    
+
     -- Split: originalVar = posVar - negVar
     -- So originalVar's value = posVar's value - negVar's value
     Split origVar posVar negVar ->
