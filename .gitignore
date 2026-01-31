@@ -2,3 +2,5 @@
 *~
 dist-*/
 .vscode/*
+.direnv/*
+.envrc

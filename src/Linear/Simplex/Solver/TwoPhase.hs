@@ -11,7 +11,27 @@
 -- 'optimizeFeasibleSystem' performs phase two of the two-phase simplex method.
 -- 'twoPhaseSimplex' performs both phases of the two-phase simplex method.
 -- 'twoPhaseSimplex'' performs both phases with variable domain support.
-module Linear.Simplex.Solver.TwoPhase (findFeasibleSolution, optimizeFeasibleSystem, twoPhaseSimplex, twoPhaseSimplex') where
+module Linear.Simplex.Solver.TwoPhase 
+  ( findFeasibleSolution
+  , optimizeFeasibleSystem
+  , twoPhaseSimplex
+  , twoPhaseSimplex'
+  -- Internal functions exported for testing
+  , preprocess
+  , postprocess
+  , computeObjective
+  , collectAllVars
+  , generateTransform
+  , getTransform
+  , applyTransforms
+  , applyTransform
+  , applyShiftToObjective
+  , applyShiftToConstraint
+  , applySplitToObjective
+  , applySplitToConstraint
+  , unapplyTransforms
+  , unapplyTransform
+  ) where
 
 import Prelude hiding (EQ)
 
@@ -409,11 +429,13 @@ twoPhaseSimplex objFunction unsimplifiedSystem = do
 -- | Perform the two phase simplex method with variable domain information.
 -- Variables not in the VarDomainMap are assumed to be Unbounded (no lower bound).
 -- This function applies necessary transformations before solving and unapplies them after.
+-- The returned Result contains variable values and objective value in the original space.
+-- TODO: use this as twoPhaseSimplex, add instructions in CHANGELOG for old users
 twoPhaseSimplex' :: (MonadIO m, MonadLogger m) => VarDomainMap -> ObjectiveFunction -> [PolyConstraint] -> m (Maybe Result)
 twoPhaseSimplex' domainMap objFunction constraints = do
   logMsg LevelInfo $
     "twoPhaseSimplex': Solving system with domain map " <> showT domainMap
-  let (transformedObj, transformedConstraints, transforms) = preprocess objFunction domainMap constraints
+  let (transformedObj, transformedConstraints, transforms) = preprocess objFunction domainMap constraints 
   logMsg LevelInfo $
     "twoPhaseSimplex': Applied transforms " <> showT transforms
       <> "; Transformed objective: " <> showT transformedObj
@@ -424,10 +446,30 @@ twoPhaseSimplex' domainMap objFunction constraints = do
       logMsg LevelInfo "twoPhaseSimplex': No solution found"
       pure Nothing
     Just result -> do
-      let finalResult = unapplyTransforms transforms result
+      let finalResult = postprocess objFunction transforms result
       logMsg LevelInfo $
-        "twoPhaseSimplex': Unapplied transforms, final result: " <> showT finalResult
+        "twoPhaseSimplex': Postprocessed result: " <> showT finalResult
       pure (Just finalResult)
+
+-- | Postprocess the result by unapplying variable transformations and computing
+-- the objective value in the original space.
+postprocess :: ObjectiveFunction -> [VarTransform] -> Result -> Result
+postprocess objFunction transforms result =
+  let -- First unapply transforms to get variable values in original space
+      unappliedResult = unapplyTransforms transforms result
+      -- Then compute the objective value using the original objective function
+      objVal = computeObjective objFunction unappliedResult.varValMap
+      -- Update the objective value in the result
+      finalVarValMap = M.insert unappliedResult.objectiveVar objVal unappliedResult.varValMap
+  in unappliedResult { varValMap = finalVarValMap }
+
+-- | Compute the value of an objective function given variable values.
+computeObjective :: ObjectiveFunction -> M.Map Var SimplexNum -> SimplexNum
+computeObjective objFunction varVals =
+  let coeffs = case objFunction of
+        Max m -> m
+        Min m -> m
+  in sum $ map (\(var, coeff) -> coeff * M.findWithDefault 0 var varVals) (M.toList coeffs)
 
 -- | Preprocess the system by applying variable transformations based on domain information.
 -- Returns the transformed objective, constraints, and the list of transforms applied.

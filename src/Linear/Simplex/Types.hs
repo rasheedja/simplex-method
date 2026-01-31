@@ -129,6 +129,7 @@ data VarDomain
   = NonNegative           -- ^ var >= 0 (standard simplex assumption, no transformation needed)
   | LowerBound SimplexNum -- ^ var >= L for some L (if L < 0: shift, if L > 0: add constraint)
   | Unbounded             -- ^ No lower bound (split into difference of two non-negative vars)
+  -- TODO: Upperbound can still be useful, can negate it to get a loewr bound, can add it to the constraints
   deriving stock (Show, Read, Eq, Generic)
 
 -- | Map from variables to their domain specifications.
