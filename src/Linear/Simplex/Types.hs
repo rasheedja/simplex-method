@@ -39,21 +39,26 @@ data FeasibleSystem = FeasibleSystem
   }
   deriving (Show, Read, Eq, Generic)
 
-data Result = Result
-  { objectiveVar :: Var
-  , varValMap :: VarLitMap
-  -- TODO:
-  -- Maybe VarLitMap
-  -- , feasible :: Bool
-  -- , optimisable :: Bool
+-- | The outcome of optimizing a single objective function.
+data OptimisationOutcome
+  = Optimal { varValMap :: VarLitMap }  -- ^ An optimal solution was found
+  | Unbounded                            -- ^ The objective is unbounded
+  deriving (Show, Read, Eq, Generic)
+
+-- | Result for a single objective function optimization.
+data ObjectiveResult = ObjectiveResult
+  { objectiveFunction :: ObjectiveFunction  -- ^ The objective that was optimized
+  , outcome :: OptimisationOutcome           -- ^ The optimization outcome
   }
   deriving (Show, Read, Eq, Generic)
 
-data SimplexMeta = SimplexMeta
-  { objective :: ObjectiveFunction
-  , feasibleSystem :: Maybe FeasibleSystem
-  , optimisedResult :: Maybe Result
+-- | Complete result of the two-phase simplex method.
+-- Contains feasibility information and results for all requested objectives.
+data SimplexResult = SimplexResult
+  { feasibleSystem :: Maybe FeasibleSystem  -- ^ The feasible system (Nothing if infeasible)
+  , objectiveResults :: [ObjectiveResult]   -- ^ Results for each objective (empty if infeasible)
   }
+  deriving (Show, Read, Eq, Generic)
 
 type VarLitMap = M.Map Var SimplexNum
 
