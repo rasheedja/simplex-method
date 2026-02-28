@@ -14,6 +14,10 @@ format-check:
 cabal-check:
 	cabal check
 
+.PHONY: cabal-update
+cabal-update:
+	cabal update
+
 .PHONY: configure
 configure:
 	cabal configure --enable-tests --enable-benchmarks --disable-documentation
@@ -36,4 +40,4 @@ docs:
 	cabal haddock all --disable-documentation
 
 .PHONY: ci
-ci: format-check cabal-check configure deps build test docs
+ci: format-check cabal-check cabal-update configure deps build test docs

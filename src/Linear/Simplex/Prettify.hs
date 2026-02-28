@@ -18,7 +18,7 @@ import Data.Map qualified as M
 import Data.Ratio
 import Linear.Simplex.Types
 
--- | Convert a 'VarConstMap' into a human-readable 'String'
+-- | Convert a 'VarLitMapSum' into a human-readable 'String'
 prettyShowVarConstMap :: VarLitMapSum -> String
 prettyShowVarConstMap = aux . M.toList
   where

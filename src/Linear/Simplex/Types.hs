@@ -13,24 +13,14 @@ import Data.List (sort)
 import qualified Data.Map as M
 import GHC.Generics (Generic)
 
+-- | Variable identifier used in maps and constraints.
+-- Conventionally this maps to x1, x2, ... in examples.
 type Var = Int
 
+-- | Numeric type used throughout simplex computations.
 type SimplexNum = Rational
 
-type SystemRow = PolyConstraint
-
-type System = [SystemRow]
-
--- A 'Tableau' where the basic variable may be empty.
--- All non-empty basic vars are slack vars
-data SystemWithSlackVarRow = SystemInStandardFormRow
-  { mSlackVar :: Maybe Var
-  -- ^ This is Nothing iff the row does not have a slack variable
-  , row :: TableauRow
-  }
-
-type SystemWithSlackVars = [SystemWithSlackVarRow]
-
+-- | A feasible system produced by phase one, ready for phase two optimization.
 data FeasibleSystem = FeasibleSystem
   { dict :: Dict
   , slackVars :: [Var]
@@ -66,6 +56,7 @@ data SimplexResult = SimplexResult
   }
   deriving (Show, Read, Eq, Generic)
 
+-- | Mapping from variable id to its numeric value/coefficient.
 type VarLitMap = M.Map Var SimplexNum
 
 -- | List of variables with their 'SimplexNum' coefficients.
@@ -75,7 +66,7 @@ type VarLitMap = M.Map Var SimplexNum
 type VarLitMapSum = VarLitMap
 
 -- | For specifying constraints in a system.
---   The LHS is a 'Vars', and the RHS, is a 'SimplexNum' number.
+--   The LHS is a 'VarLitMapSum', and the RHS, is a 'SimplexNum' number.
 --   LEQ [(1, 2), (2, 1)] 3.5 is equivalent to 2x1 + x2 <= 3.5.
 --   Users must only provide positive integer variables.
 --
@@ -87,16 +78,9 @@ data PolyConstraint
   deriving (Show, Read, Eq, Generic)
 
 -- | Create an objective function.
---   We can either 'Max'imize or 'Min'imize a 'VarTermSum'.
+--   We can either 'Max'imize or 'Min'imize a 'VarLitMapSum'.
 data ObjectiveFunction = Max {objective :: VarLitMapSum} | Min {objective :: VarLitMapSum}
   deriving (Show, Read, Eq, Generic)
-
--- | TODO: Maybe we want this type
--- TODO: A better/alternative name
-data Equation = Equation
-  { lhs :: VarLitMapSum
-  , rhs :: SimplexNum
-  }
 
 -- | Value for 'Tableau'. lhs = rhs.
 data TableauRow = TableauRow
@@ -105,7 +89,7 @@ data TableauRow = TableauRow
   }
   deriving (Show, Read, Eq, Generic)
 
--- | A simplex 'Tableu' of equations.
+-- | A simplex 'Tableau' of equations.
 --   Each entry in the map is a row.
 type Tableau = M.Map Var TableauRow
 
@@ -126,6 +110,9 @@ data DictValue = DictValue
 --   deriving (Show, Read, Eq, Generic)
 type Dict = M.Map Var DictValue
 
+-- | Objective row representation used during pivoting.
+-- 'variable' is the objective basic variable and 'function'/'constant' encode
+-- the objective in dictionary form.
 data PivotObjective = PivotObjective
   { variable :: Var
   , function :: VarLitMapSum

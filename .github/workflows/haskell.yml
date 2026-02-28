@@ -39,6 +39,9 @@ jobs:
       - name: Check cabal file
         run: nix develop --command make cabal-check
 
+      - name: Update cabal package index
+        run: nix develop --command make cabal-update
+
       - name: Configure the build
         run: nix develop --command make configure
 

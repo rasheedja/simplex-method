@@ -10,7 +10,7 @@
 -- 'findFeasibleSolution' performs phase one of the two-phase simplex method.
 -- 'optimizeFeasibleSystem' performs phase two of the two-phase simplex method.
 -- 'twoPhaseSimplex' performs both phases of the two-phase simplex method.
--- 'twoPhaseSimplex'' performs both phases with variable domain support.
+-- 'twoPhaseSimplex' supports variable domains via its 'VarDomainMap' argument.
 module Linear.Simplex.Solver.TwoPhase
   ( findFeasibleSolution
   , optimizeFeasibleSystem
@@ -272,7 +272,7 @@ findFeasibleSolution unsimplifiedSystem = do
 
 -- | Optimize a feasible system by performing the second phase of the two-phase simplex method.
 --  We first pass an 'ObjectiveFunction'.
---  Then, the feasible system in 'DictionaryForm' as well as a list of slack variables, a list artificial variables, and the objective variable.
+--  Then, the feasible system in 'Dict' form as well as a list of slack variables, a list artificial variables, and the objective variable.
 --  Returns 'Optimal' with variable values if an optimal solution is found, or 'Unbounded' if the objective is unbounded.
 optimizeFeasibleSystem :: (MonadIO m, MonadLogger m) => ObjectiveFunction -> FeasibleSystem -> m OptimisationOutcome
 optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..}) = do
