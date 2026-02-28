@@ -1,0 +1,59 @@
+name: Haskell CI with Nix
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nix-ci:
+    runs-on: ubuntu-latest
+    env:
+      NIX_CONFIG: accept-flake-config = true
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check Nix flake inputs
+        uses: DeterminateSystems/flake-checker-action@3164002371bc90729c68af0e24d5aacf20d7c9f6 # v12
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+
+      - name: Show toolchain versions from nix shell
+        shell: bash
+        run: |
+          nix develop --command bash -lc 'ghc --numeric-version'
+          nix develop --command bash -lc 'cabal --numeric-version'
+          nix develop --command bash -lc 'stack --numeric-version || true'
+          nix develop --command bash -lc 'fourmolu --version'
+
+      - name: Check formatting
+        run: nix develop --command make format-check
+
+      - name: Check cabal file
+        run: nix develop --command make cabal-check
+
+      - name: Update cabal package index
+        run: nix develop --command make cabal-update
+
+      - name: Configure the build
+        run: nix develop --command make configure
+
+      - name: Build dependencies
+        run: nix develop --command make deps
+
+      - name: Build the package
+        run: nix develop --command make build
+
+      - name: Run tests
+        run: nix develop --command make test
+
+      - name: Build documentation
+        run: nix develop --command make docs

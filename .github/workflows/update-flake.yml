@@ -1,0 +1,43 @@
+name: Update Nix Flake
+
+on:
+  schedule:
+    # Every 2 weeks on Monday at 06:00 UTC
+    - cron: "0 6 1,15 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-flake:
+    runs-on: ubuntu-latest
+    env:
+      NIX_CONFIG: accept-flake-config = true
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+
+      - name: Update flake lockfile
+        run: nix flake update
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
+        with:
+          commit-message: "chore(nix): update flake lockfile"
+          title: "chore(nix): update flake lockfile"
+          body: |
+            Automated flake lockfile update via `nix flake update`.
+
+            This PR was created by the scheduled update-flake workflow.
+            Please review CI results before merging.
+          branch: automation/update-flake-lock
+          delete-branch: true
+          labels: dependencies, automated
