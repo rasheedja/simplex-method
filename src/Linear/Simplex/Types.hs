@@ -41,22 +41,28 @@ data FeasibleSystem = FeasibleSystem
 
 -- | The outcome of optimizing a single objective function.
 data OptimisationOutcome
-  = Optimal { varValMap :: VarLitMap }  -- ^ An optimal solution was found
-  | Unbounded                            -- ^ The objective is unbounded
+  = -- | An optimal solution was found
+    Optimal {varValMap :: VarLitMap}
+  | -- | The objective is unbounded
+    Unbounded
   deriving (Show, Read, Eq, Generic)
 
 -- | Result for a single objective function optimization.
 data ObjectiveResult = ObjectiveResult
-  { objectiveFunction :: ObjectiveFunction  -- ^ The objective that was optimized
-  , outcome :: OptimisationOutcome           -- ^ The optimization outcome
+  { objectiveFunction :: ObjectiveFunction
+  -- ^ The objective that was optimized
+  , outcome :: OptimisationOutcome
+  -- ^ The optimization outcome
   }
   deriving (Show, Read, Eq, Generic)
 
 -- | Complete result of the two-phase simplex method.
 -- Contains feasibility information and results for all requested objectives.
 data SimplexResult = SimplexResult
-  { feasibleSystem :: Maybe FeasibleSystem  -- ^ The feasible system (Nothing if infeasible)
-  , objectiveResults :: [ObjectiveResult]   -- ^ Results for each objective (empty if infeasible)
+  { feasibleSystem :: Maybe FeasibleSystem
+  -- ^ The feasible system (Nothing if infeasible)
+  , objectiveResults :: [ObjectiveResult]
+  -- ^ Results for each objective (empty if infeasible)
   }
   deriving (Show, Read, Eq, Generic)
 
@@ -129,18 +135,20 @@ data PivotObjective = PivotObjective
 
 -- | Domain specification for a variable's bounds.
 -- Variables not in the VarDomainMap are assumed to be Unbounded (both bounds Nothing).
--- 
+--
 -- Bounds semantics:
 --   * @lowerBound = Just L@ means var >= L
 --   * @lowerBound = Nothing@ means no lower bound (var can be arbitrarily negative)
---   * @upperBound = Just U@ means var <= U  
+--   * @upperBound = Just U@ means var <= U
 --   * @upperBound = Nothing@ means no upper bound (var can be arbitrarily positive)
 --
 -- Note: @Bounded Nothing Nothing@ is equivalent to unbounded. Use the smart constructors
 -- ('unbounded', 'nonNegative', etc.) for clarity.
-data VarDomain = Bounded 
-  { lowerBound :: Maybe SimplexNum  -- ^ Lower bound (Nothing = -∞)
-  , upperBound :: Maybe SimplexNum  -- ^ Upper bound (Nothing = +∞)
+data VarDomain = Bounded
+  { lowerBound :: Maybe SimplexNum
+  -- ^ Lower bound (Nothing = -∞)
+  , upperBound :: Maybe SimplexNum
+  -- ^ Upper bound (Nothing = +∞)
   }
   deriving stock (Show, Read, Eq, Generic)
 
@@ -168,30 +176,31 @@ boundedRange l u = Bounded (Just l) (Just u)
 
 -- | Map from variables to their domain specifications.
 -- Variables not in this map are assumed to be Unbounded.
-newtype VarDomainMap = VarDomainMap { unVarDomainMap :: M.Map Var VarDomain }
+newtype VarDomainMap = VarDomainMap {unVarDomainMap :: M.Map Var VarDomain}
   deriving stock (Show, Read, Eq, Generic)
 
 -- | Transformations applied to variables to ensure they satisfy the non-negativity requirement.
-data VarTransform 
-  = AddLowerBound 
-      { var :: !Var
-      , bound :: !SimplexNum 
-      } -- ^ var >= bound where bound > 0. Adds GEQ constraint to system.
-  | AddUpperBound
+data VarTransform
+  = -- | var >= bound where bound > 0. Adds GEQ constraint to system.
+    AddLowerBound
       { var :: !Var
       , bound :: !SimplexNum
-      } -- ^ var <= bound. Adds LEQ constraint to system.
-  | Shift 
+      }
+  | -- | var <= bound. Adds LEQ constraint to system.
+    AddUpperBound
+      { var :: !Var
+      , bound :: !SimplexNum
+      }
+  | -- | originalVar = shiftedVar + shiftBy, where shiftBy < 0. After solving: originalVar = shiftedVar + shiftBy
+    Shift
       { originalVar :: !Var
-      , shiftedVar :: !Var  
-      , shiftBy :: !SimplexNum 
-      } -- ^ originalVar = shiftedVar + shiftBy, where shiftBy < 0. After solving: originalVar = shiftedVar + shiftBy
-  | Split 
+      , shiftedVar :: !Var
+      , shiftBy :: !SimplexNum
+      }
+  | -- | originalVar = posVar - negVar, both posVar and negVar >= 0
+    Split
       { originalVar :: !Var
       , posVar :: !Var
-      , negVar :: !Var 
-      } -- ^ originalVar = posVar - negVar, both posVar and negVar >= 0
+      , negVar :: !Var
+      }
   deriving stock (Show, Read, Eq, Generic)
-                  
-
-

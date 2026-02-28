@@ -1,15 +1,16 @@
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Linear.Simplex.Solver.TwoPhaseSpec where
 
 import Prelude hiding (EQ)
 
 import Control.Monad.IO.Class
 import Control.Monad.Logger
-import Data.Maybe (isJust)
 import qualified Data.Map as M
-import qualified Data.Set as Set
+import Data.Maybe (isJust)
 import Data.Ratio
+import qualified Data.Set as Set
 
 import Text.InterpolatedString.Perl6
 
@@ -30,13 +31,13 @@ computeObjValue (Max coeffs) varMap = sum [c * M.findWithDefault 0 v varMap | (v
 computeObjValue (Min coeffs) varMap = sum [c * M.findWithDefault 0 v varMap | (v, c) <- M.toList coeffs]
 
 -- | Expected result for a single objective optimization
-data ExpectedResult 
-  = ExpectInfeasible
-  -- ^ System has no feasible solution
-  | ExpectUnbounded
-  -- ^ System is feasible but unbounded (no finite optimum)
-  | ExpectOptimal (Maybe SimplexNum) VarLitMap
-  -- ^ Optimal solution found with optional expected objective value and variable values
+data ExpectedResult
+  = -- | System has no feasible solution
+    ExpectInfeasible
+  | -- | System is feasible but unbounded (no finite optimum)
+    ExpectUnbounded
+  | -- | Optimal solution found with optional expected objective value and variable values
+    ExpectOptimal (Maybe SimplexNum) VarLitMap
   deriving (Show, Eq)
 
 -- | Helper to run a test case for a system where all vars
@@ -49,11 +50,11 @@ runTest (obj, constraints) expectedResult = do
       domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
   SimplexResult mFeasibleSystem objResults <-
     runStdoutLoggingT $
-    filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-      twoPhaseSimplex domainMap [obj] constraints
+      filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
+        twoPhaseSimplex domainMap [obj] constraints
   let actualResult = case (mFeasibleSystem, objResults) of
         (Nothing, _) -> ExpectInfeasible
-        (Just _, []) -> ExpectInfeasible  -- Should not happen with one objective
+        (Just _, []) -> ExpectInfeasible -- Should not happen with one objective
         (Just _, [ObjectiveResult _ Unbounded]) -> ExpectUnbounded
         (Just _, [ObjectiveResult _ (Optimal varVals)]) -> ExpectOptimal Nothing varVals
         (Just _, _) -> error "Unexpected: multiple results for single objective"
@@ -96,7 +97,8 @@ spec = do
       it "Max 3x₁ + 5x₂ with LEQ constraints: obj=29, x₁=3, x₂=4" $ do
         let testCase =
               ( Max (M.fromList [(1, 3), (2, 5)])
-              , [ LEQ (M.fromList [(1, 3), (2, 1)]) 15
+              ,
+                [ LEQ (M.fromList [(1, 3), (2, 1)]) 15
                 , LEQ (M.fromList [(1, 1), (2, 1)]) 7
                 , LEQ (M.fromList [(2, 1)]) 4
                 , LEQ (M.fromList [(1, -1), (2, 2)]) 6
@@ -107,7 +109,8 @@ spec = do
       it "Min 3x₁ + 5x₂ with LEQ constraints: obj=0" $ do
         let testCase =
               ( Min (M.fromList [(1, 3), (2, 5)])
-              , [ LEQ (M.fromList [(1, 3), (2, 1)]) 15
+              ,
+                [ LEQ (M.fromList [(1, 3), (2, 1)]) 15
                 , LEQ (M.fromList [(1, 1), (2, 1)]) 7
                 , LEQ (M.fromList [(2, 1)]) 4
                 , LEQ (M.fromList [(1, -1), (2, 2)]) 6
@@ -118,7 +121,8 @@ spec = do
       it "Max 3x₁ + 5x₂ with GEQ constraints: unbounded" $ do
         let testCase =
               ( Max (M.fromList [(1, 3), (2, 5)])
-              , [ GEQ (M.fromList [(1, 3), (2, 1)]) 15
+              ,
+                [ GEQ (M.fromList [(1, 3), (2, 1)]) 15
                 , GEQ (M.fromList [(1, 1), (2, 1)]) 7
                 , GEQ (M.fromList [(2, 1)]) 4
                 , GEQ (M.fromList [(1, -1), (2, 2)]) 6
@@ -129,7 +133,8 @@ spec = do
       it "Min 3x₁ + 5x₂ with GEQ constraints: obj=237/7, x₁=24/7, x₂=33/7" $ do
         let testCase =
               ( Min (M.fromList [(1, 3), (2, 5)])
-              , [ GEQ (M.fromList [(1, 3), (2, 1)]) 15
+              ,
+                [ GEQ (M.fromList [(1, 3), (2, 1)]) 15
                 , GEQ (M.fromList [(1, 1), (2, 1)]) 7
                 , GEQ (M.fromList [(2, 1)]) 4
                 , GEQ (M.fromList [(1, -1), (2, 2)]) 6
@@ -142,7 +147,8 @@ spec = do
       it "Max x₁ - x₂ + x₃ with LEQ constraints: obj=3/5, x₂=14/5, x₃=17/5" $ do
         let testCase =
               ( Max (M.fromList [(1, 1), (2, -1), (3, 1)])
-              , [ LEQ (M.fromList [(1, 2), (2, -1), (3, 2)]) 4
+              ,
+                [ LEQ (M.fromList [(1, 2), (2, -1), (3, 2)]) 4
                 , LEQ (M.fromList [(1, 2), (2, -3), (3, 1)]) (-5)
                 , LEQ (M.fromList [(1, -1), (2, 1), (3, -2)]) (-1)
                 ]
@@ -152,7 +158,8 @@ spec = do
       it "Min x₁ - x₂ + x₃ with LEQ constraints: unbounded" $ do
         let testCase =
               ( Min (M.fromList [(1, 1), (2, -1), (3, 1)])
-              , [ LEQ (M.fromList [(1, 2), (2, -1), (3, 2)]) 4
+              ,
+                [ LEQ (M.fromList [(1, 2), (2, -1), (3, 2)]) 4
                 , LEQ (M.fromList [(1, 2), (2, -3), (3, 1)]) (-5)
                 , LEQ (M.fromList [(1, -1), (2, 1), (3, -2)]) (-1)
                 ]
@@ -162,7 +169,8 @@ spec = do
       it "Max x₁ - x₂ + x₃ with GEQ constraints: obj=1, x₁=3, x₂=2" $ do
         let testCase =
               ( Max (M.fromList [(1, 1), (2, -1), (3, 1)])
-              , [ GEQ (M.fromList [(1, 2), (2, -1), (3, 2)]) 4
+              ,
+                [ GEQ (M.fromList [(1, 2), (2, -1), (3, 2)]) 4
                 , GEQ (M.fromList [(1, 2), (2, -3), (3, 1)]) (-5)
                 , GEQ (M.fromList [(1, -1), (2, 1), (3, -2)]) (-1)
                 ]
@@ -172,7 +180,8 @@ spec = do
       it "Min x₁ - x₂ + x₃ with GEQ constraints: obj=-1/4, x₁=17/4, x₂=9/2" $ do
         let testCase =
               ( Min (M.fromList [(1, 1), (2, -1), (3, 1)])
-              , [ GEQ (M.fromList [(1, 2), (2, -1), (3, 2)]) 4
+              ,
+                [ GEQ (M.fromList [(1, 2), (2, -1), (3, 2)]) 4
                 , GEQ (M.fromList [(1, 2), (2, -3), (3, 1)]) (-5)
                 , GEQ (M.fromList [(1, -1), (2, 1), (3, -2)]) (-1)
                 ]
@@ -184,7 +193,8 @@ spec = do
       it "Min x₁ + x₂ + 2x₃ + x₄ with EQ constraints: obj=5, x₃=2, x₄=1" $ do
         let testCase =
               ( Min (M.fromList [(1, 1), (2, 1), (3, 2), (4, 1)])
-              , [ EQ (M.fromList [(1, 1), (3, 2), (4, -2)]) 2
+              ,
+                [ EQ (M.fromList [(1, 1), (3, 2), (4, -2)]) 2
                 , EQ (M.fromList [(2, 1), (3, 1), (4, 4)]) 6
                 ]
               )
@@ -193,7 +203,8 @@ spec = do
       it "Max x₁ + x₂ + 2x₃ + x₄ with EQ constraints: obj=8, x₁=2, x₂=6" $ do
         let testCase =
               ( Max (M.fromList [(1, 1), (2, 1), (3, 2), (4, 1)])
-              , [ EQ (M.fromList [(1, 1), (3, 2), (4, -2)]) 2
+              ,
+                [ EQ (M.fromList [(1, 1), (3, 2), (4, -2)]) 2
                 , EQ (M.fromList [(2, 1), (3, 1), (4, 4)]) 6
                 ]
               )
@@ -204,7 +215,8 @@ spec = do
       it "Max -2x₃ + 2x₄ + x₅ with EQ constraints: obj=20, x₃=6, x₄=16" $ do
         let testCase =
               ( Max (M.fromList [(3, -2), (4, 2), (5, 1)])
-              , [ EQ (M.fromList [(3, -2), (4, 1), (5, 1)]) 4
+              ,
+                [ EQ (M.fromList [(3, -2), (4, 1), (5, 1)]) 4
                 , EQ (M.fromList [(3, 3), (4, -1), (5, 2)]) 2
                 ]
               )
@@ -213,7 +225,8 @@ spec = do
       it "Min -2x₃ + 2x₄ + x₅ with EQ constraints: obj=6, x₄=2, x₅=2" $ do
         let testCase =
               ( Min (M.fromList [(3, -2), (4, 2), (5, 1)])
-              , [ EQ (M.fromList [(3, -2), (4, 1), (5, 1)]) 4
+              ,
+                [ EQ (M.fromList [(3, -2), (4, 1), (5, 1)]) 4
                 , EQ (M.fromList [(3, 3), (4, -1), (5, 2)]) 2
                 ]
               )
@@ -224,7 +237,8 @@ spec = do
       it "Max 2x₁ + x₂: obj=150, x₂=150" $ do
         let testCase =
               ( Max (M.fromList [(1, 2), (2, 1)])
-              , [ LEQ (M.fromList [(1, 4), (2, 1)]) 150
+              ,
+                [ LEQ (M.fromList [(1, 4), (2, 1)]) 150
                 , LEQ (M.fromList [(1, 2), (2, -3)]) (-40)
                 ]
               )
@@ -233,7 +247,8 @@ spec = do
       it "Min 2x₁ + x₂: obj=40/3, x₂=40/3" $ do
         let testCase =
               ( Min (M.fromList [(1, 2), (2, 1)])
-              , [ LEQ (M.fromList [(1, 4), (2, 1)]) 150
+              ,
+                [ LEQ (M.fromList [(1, 4), (2, 1)]) 150
                 , LEQ (M.fromList [(1, 2), (2, -3)]) (-40)
                 ]
               )
@@ -242,7 +257,8 @@ spec = do
       it "Max 2x₁ + x₂ with GEQ constraints: unbounded" $ do
         let testCase =
               ( Max (M.fromList [(1, 2), (2, 1)])
-              , [ GEQ (M.fromList [(1, 4), (2, 1)]) 150
+              ,
+                [ GEQ (M.fromList [(1, 4), (2, 1)]) 150
                 , GEQ (M.fromList [(1, 2), (2, -3)]) (-40)
                 ]
               )
@@ -251,7 +267,8 @@ spec = do
       it "Min 2x₁ + x₂ with GEQ constraints: obj=75, x₁=75/2" $ do
         let testCase =
               ( Min (M.fromList [(1, 2), (2, 1)])
-              , [ GEQ (M.fromList [(1, 4), (2, 1)]) 150
+              ,
+                [ GEQ (M.fromList [(1, 4), (2, 1)]) 150
                 , GEQ (M.fromList [(1, 2), (2, -3)]) (-40)
                 ]
               )
@@ -262,7 +279,8 @@ spec = do
       it "Min -6x₁ - 4x₂ + 2x₃: obj=-120, x₁=20" $ do
         let testCase =
               ( Min (M.fromList [(1, -6), (2, -4), (3, 2)])
-              , [ LEQ (M.fromList [(1, 1), (2, 1), (3, 4)]) 20
+              ,
+                [ LEQ (M.fromList [(1, 1), (2, 1), (3, 4)]) 20
                 , LEQ (M.fromList [(2, -5), (3, 5)]) 100
                 , LEQ (M.fromList [(1, 1), (3, 1), (1, 1)]) 400
                 ]
@@ -272,7 +290,8 @@ spec = do
       it "Max -6x₁ - 4x₂ + 2x₃: obj=10, x₃=5" $ do
         let testCase =
               ( Max (M.fromList [(1, -6), (2, -4), (3, 2)])
-              , [ LEQ (M.fromList [(1, 1), (2, 1), (3, 4)]) 20
+              ,
+                [ LEQ (M.fromList [(1, 1), (2, 1), (3, 4)]) 20
                 , LEQ (M.fromList [(2, -5), (3, 5)]) 100
                 , LEQ (M.fromList [(1, 1), (3, 1), (1, 1)]) 400
                 ]
@@ -282,7 +301,8 @@ spec = do
       it "Min -6x₁ - 4x₂ + 2x₃ with GEQ constraints: unbounded" $ do
         let testCase =
               ( Min (M.fromList [(1, -6), (2, -4), (3, 2)])
-              , [ GEQ (M.fromList [(1, 1), (2, 1), (3, 4)]) 20
+              ,
+                [ GEQ (M.fromList [(1, 1), (2, 1), (3, 4)]) 20
                 , GEQ (M.fromList [(2, -5), (3, 5)]) 100
                 , GEQ (M.fromList [(1, 1), (3, 1), (1, 1)]) 400
                 ]
@@ -292,7 +312,8 @@ spec = do
       it "Max -6x₁ - 4x₂ + 2x₃ with GEQ constraints: unbounded" $ do
         let testCase =
               ( Max (M.fromList [(1, -6), (2, -4), (3, 2)])
-              , [ GEQ (M.fromList [(1, 1), (2, 1), (3, 4)]) 20
+              ,
+                [ GEQ (M.fromList [(1, 1), (2, 1), (3, 4)]) 20
                 , GEQ (M.fromList [(2, -5), (3, 5)]) 100
                 , GEQ (M.fromList [(1, 1), (3, 1), (1, 1)]) 400
                 ]
@@ -304,7 +325,8 @@ spec = do
       it "Max 3x₁ + 5x₂ + 2x₃: obj=250, x₂=50" $ do
         let testCase =
               ( Max (M.fromList [(1, 3), (2, 5), (3, 2)])
-              , [ LEQ (M.fromList [(1, 5), (2, 1), (3, 4)]) 50
+              ,
+                [ LEQ (M.fromList [(1, 5), (2, 1), (3, 4)]) 50
                 , LEQ (M.fromList [(1, 1), (2, -1), (3, 1)]) 150
                 , LEQ (M.fromList [(1, 2), (2, 1), (3, 2)]) 100
                 ]
@@ -314,7 +336,8 @@ spec = do
       it "Min 3x₁ + 5x₂ + 2x₃: obj=0" $ do
         let testCase =
               ( Min (M.fromList [(1, 3), (2, 5), (3, 2)])
-              , [ LEQ (M.fromList [(1, 5), (2, 1), (3, 4)]) 50
+              ,
+                [ LEQ (M.fromList [(1, 5), (2, 1), (3, 4)]) 50
                 , LEQ (M.fromList [(1, 1), (2, -1), (3, 1)]) 150
                 , LEQ (M.fromList [(1, 2), (2, 1), (3, 2)]) 100
                 ]
@@ -324,7 +347,8 @@ spec = do
       it "Max 3x₁ + 5x₂ + 2x₃ with GEQ constraints: unbounded" $ do
         let testCase =
               ( Max (M.fromList [(1, 3), (2, 5), (3, 2)])
-              , [ GEQ (M.fromList [(1, 5), (2, 1), (3, 4)]) 50
+              ,
+                [ GEQ (M.fromList [(1, 5), (2, 1), (3, 4)]) 50
                 , GEQ (M.fromList [(1, 1), (2, -1), (3, 1)]) 150
                 , GEQ (M.fromList [(1, 2), (2, 1), (3, 2)]) 100
                 ]
@@ -334,7 +358,8 @@ spec = do
       it "Min 3x₁ + 5x₂ + 2x₃ with GEQ constraints: obj=300, x₃=150" $ do
         let testCase =
               ( Min (M.fromList [(1, 3), (2, 5), (3, 2)])
-              , [ GEQ (M.fromList [(1, 5), (2, 1), (3, 4)]) 50
+              ,
+                [ GEQ (M.fromList [(1, 5), (2, 1), (3, 4)]) 50
                 , GEQ (M.fromList [(1, 1), (2, -1), (3, 1)]) 150
                 , GEQ (M.fromList [(1, 2), (2, 1), (3, 2)]) 100
                 ]
@@ -345,7 +370,8 @@ spec = do
       it "Max x₁ with x₁ <= 15: obj=15, x₁=15" $ do
         let testCase =
               ( Max (M.fromList [(1, 1)])
-              , [ LEQ (M.fromList [(1, 1)]) 15
+              ,
+                [ LEQ (M.fromList [(1, 1)]) 15
                 ]
               )
         runTest testCase (ExpectOptimal (Just 15) (M.fromList [(1, 15)]))
@@ -353,7 +379,8 @@ spec = do
       it "Max 2x₁ with mixed constraints: obj=20, x₁=10, x₂=10" $ do
         let testCase =
               ( Max (M.fromList [(1, 2)])
-              , [ LEQ (M.fromList [(1, 2)]) 20
+              ,
+                [ LEQ (M.fromList [(1, 2)]) 20
                 , GEQ (M.fromList [(2, 1)]) 10
                 ]
               )
@@ -362,7 +389,8 @@ spec = do
       it "Min x₁ with x₁ <= 15: obj=0" $ do
         let testCase =
               ( Min (M.fromList [(1, 1)])
-              , [ LEQ (M.fromList [(1, 1)]) 15
+              ,
+                [ LEQ (M.fromList [(1, 1)]) 15
                 ]
               )
         runTest testCase (ExpectOptimal (Just 0) M.empty)
@@ -370,7 +398,8 @@ spec = do
       it "Min 2x₁ with mixed constraints: obj=0, x₂=10" $ do
         let testCase =
               ( Min (M.fromList [(1, 2)])
-              , [ LEQ (M.fromList [(1, 2)]) 20
+              ,
+                [ LEQ (M.fromList [(1, 2)]) 20
                 , GEQ (M.fromList [(2, 1)]) 10
                 ]
               )
@@ -380,7 +409,8 @@ spec = do
       it "Conflicting bounds x₁ <= 15 and x₁ >= 15.01: infeasible" $ do
         let testCase =
               ( Max (M.fromList [(1, 1)])
-              , [ LEQ (M.fromList [(1, 1)]) 15
+              ,
+                [ LEQ (M.fromList [(1, 1)]) 15
                 , GEQ (M.fromList [(1, 1)]) 15.01
                 ]
               )
@@ -389,7 +419,8 @@ spec = do
       it "Conflicting bounds with additional constraint: infeasible" $ do
         let testCase =
               ( Max (M.fromList [(1, 1)])
-              , [ LEQ (M.fromList [(1, 1)]) 15
+              ,
+                [ LEQ (M.fromList [(1, 1)]) 15
                 , GEQ (M.fromList [(1, 1)]) 15.01
                 , GEQ (M.fromList [(2, 1)]) 10
                 ]
@@ -399,7 +430,8 @@ spec = do
       it "Min x₁ with duplicate GEQ constraints: obj=0, x₂=1" $ do
         let testCase =
               ( Min (M.fromList [(1, 1)])
-              , [ GEQ (M.fromList [(1, 1), (2, 1)]) 1
+              ,
+                [ GEQ (M.fromList [(1, 1), (2, 1)]) 1
                 , GEQ (M.fromList [(1, 1), (2, 1)]) 1
                 ]
               )
@@ -408,7 +440,8 @@ spec = do
       it "Conflicting x₁+x₂ >= 2 and x₁+x₂ <= 1: infeasible" $ do
         let testCase =
               ( Min (M.fromList [(1, 1)])
-              , [ GEQ (M.fromList [(1, 1), (2, 1)]) 2
+              ,
+                [ GEQ (M.fromList [(1, 1), (2, 1)]) 2
                 , LEQ (M.fromList [(1, 1), (2, 1)]) 1
                 ]
               )
@@ -418,7 +451,8 @@ spec = do
       it "testLeqGeqBugMin1: obj=3, x₁=3, x₂=3" $ do
         let testCase =
               ( Min (M.fromList [(1, 1)])
-              , [ GEQ (M.fromList [(1, 1)]) 3
+              ,
+                [ GEQ (M.fromList [(1, 1)]) 3
                 , LEQ (M.fromList [(1, 1)]) 3
                 , GEQ (M.fromList [(2, 1)]) 3
                 , LEQ (M.fromList [(2, 1)]) 3
@@ -429,7 +463,8 @@ spec = do
       it "testLeqGeqBugMax1: obj=3, x₁=3, x₂=3" $ do
         let testCase =
               ( Min (M.fromList [(1, 1)])
-              , [ GEQ (M.fromList [(1, 1)]) 3
+              ,
+                [ GEQ (M.fromList [(1, 1)]) 3
                 , LEQ (M.fromList [(1, 1)]) 3
                 , GEQ (M.fromList [(2, 1)]) 3
                 , LEQ (M.fromList [(2, 1)]) 3
@@ -440,7 +475,8 @@ spec = do
       it "testLeqGeqBugMin2: obj=3, x₁=3, x₂=3" $ do
         let testCase =
               ( Min (M.fromList [(1, 1)])
-              , [ GEQ (M.fromList [(1, 1)]) 3
+              ,
+                [ GEQ (M.fromList [(1, 1)]) 3
                 , LEQ (M.fromList [(1, 1)]) 3
                 , GEQ (M.fromList [(2, 1)]) 3
                 , LEQ (M.fromList [(2, 1)]) 3
@@ -451,7 +487,8 @@ spec = do
       it "testLeqGeqBugMax2: obj=3, x₁=3, x₂=3" $ do
         let testCase =
               ( Min (M.fromList [(1, 1)])
-              , [ GEQ (M.fromList [(1, 1)]) 3
+              ,
+                [ GEQ (M.fromList [(1, 1)]) 3
                 , LEQ (M.fromList [(1, 1)]) 3
                 , GEQ (M.fromList [(2, 1)]) 3
                 , LEQ (M.fromList [(2, 1)]) 3
@@ -461,12 +498,20 @@ spec = do
 
     -- PolyPaver-style tests with shared parameters
     describe "PolyPaver-style tests (feasible region [0,2.5]²)" $ do
-      let x1l = 0.0; x1r = 2.5; x2l = 0.0; x2r = 2.5
-          dx1l = -1; dx1r = -0.9; dx2l = -0.9; dx2r = -0.8
-          yl = 4; yr = 5
+      let x1l = 0.0
+          x1r = 2.5
+          x2l = 0.0
+          x2r = 2.5
+          dx1l = -1
+          dx1r = -0.9
+          dx2l = -0.9
+          dx2r = -0.8
+          yl = 4
+          yr = 5
           mkConstraints obj =
             ( obj
-            , [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+            ,
+              [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
               , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
               , GEQ (M.fromList [(1, 1)]) x1l
               , LEQ (M.fromList [(1, 1)]) x1r
@@ -477,28 +522,40 @@ spec = do
             )
 
       it "Min x₁: x₁=7/4, x₂=5/2" $ do
-        runTest (mkConstraints (Min (M.fromList [(1, 1)]))) 
-                (ExpectOptimal (Just (7 % 4)) (M.fromList [(1, 7 % 4), (2, 5 % 2), (3, 0)]))
+        runTest
+          (mkConstraints (Min (M.fromList [(1, 1)])))
+          (ExpectOptimal (Just (7 % 4)) (M.fromList [(1, 7 % 4), (2, 5 % 2), (3, 0)]))
 
       it "Max x₁: x₁=5/2, x₂=5/3" $ do
-        runTest (mkConstraints (Max (M.fromList [(1, 1)]))) 
-                (ExpectOptimal (Just (5 % 2)) (M.fromList [(1, 5 % 2), (2, 5 % 3), (3, 0)]))
+        runTest
+          (mkConstraints (Max (M.fromList [(1, 1)])))
+          (ExpectOptimal (Just (5 % 2)) (M.fromList [(1, 5 % 2), (2, 5 % 3), (3, 0)]))
 
       it "Min x₂: x₂=5/3" $ do
-        runTest (mkConstraints (Min (M.fromList [(2, 1)]))) 
-                (ExpectOptimal (Just (5 % 3)) (M.fromList [(2, 5 % 3), (1, 5 % 2), (3, 0)]))
+        runTest
+          (mkConstraints (Min (M.fromList [(2, 1)])))
+          (ExpectOptimal (Just (5 % 3)) (M.fromList [(2, 5 % 3), (1, 5 % 2), (3, 0)]))
 
       it "Max x₂: x₂=5/2" $ do
-        runTest (mkConstraints (Max (M.fromList [(2, 1)]))) 
-                (ExpectOptimal (Just (5 % 2)) (M.fromList [(2, 5 % 2), (1, 5 % 2), (3, 0)]))
+        runTest
+          (mkConstraints (Max (M.fromList [(2, 1)])))
+          (ExpectOptimal (Just (5 % 2)) (M.fromList [(2, 5 % 2), (1, 5 % 2), (3, 0)]))
 
     describe "PolyPaver-style tests (infeasible region [0,1.5]²)" $ do
-      let x1l = 0.0; x1r = 1.5; x2l = 0.0; x2r = 1.5
-          dx1l = -1; dx1r = -0.9; dx2l = -0.9; dx2r = -0.8
-          yl = 4; yr = 5
+      let x1l = 0.0
+          x1r = 1.5
+          x2l = 0.0
+          x2r = 1.5
+          dx1l = -1
+          dx1r = -0.9
+          dx2l = -0.9
+          dx2r = -0.8
+          yl = 4
+          yr = 5
           mkConstraints obj =
             ( obj
-            , [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+            ,
+              [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
               , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
               , GEQ (M.fromList [(1, 1)]) x1l
               , LEQ (M.fromList [(1, 1)]) x1r
@@ -521,12 +578,20 @@ spec = do
         runTest (mkConstraints (Min (M.fromList [(2, 1)]))) ExpectInfeasible
 
     describe "PolyPaver-style tests (feasible region [0,3.5]²)" $ do
-      let x1l = 0.0; x1r = 3.5; x2l = 0.0; x2r = 3.5
-          dx1l = -1; dx1r = -0.9; dx2l = -0.9; dx2r = -0.8
-          yl = 4; yr = 5
+      let x1l = 0.0
+          x1r = 3.5
+          x2l = 0.0
+          x2r = 3.5
+          dx1l = -1
+          dx1r = -0.9
+          dx2l = -0.9
+          dx2r = -0.8
+          yl = 4
+          yr = 5
           mkConstraints obj =
             ( obj
-            , [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
+            ,
+              [ LEQ (M.fromList [(1, dx1l), (2, dx2l), (3, (-1))]) (-yl + dx1l * x1l + dx2l * x2l)
               , GEQ (M.fromList [(1, dx1r), (2, dx2r), (3, (-1))]) (-yr + dx1r * x1l + dx2r * x2l)
               , GEQ (M.fromList [(1, 1)]) x1l
               , LEQ (M.fromList [(1, 1)]) x1r
@@ -537,30 +602,46 @@ spec = do
             )
 
       it "Max x₁: x₁=7/2" $ do
-        runTest (mkConstraints (Max (M.fromList [(1, 1)]))) 
-                (ExpectOptimal (Just (7 % 2)) (M.fromList [(2, 5 % 9), (1, 7 % 2), (3, 0)]))
+        runTest
+          (mkConstraints (Max (M.fromList [(1, 1)])))
+          (ExpectOptimal (Just (7 % 2)) (M.fromList [(2, 5 % 9), (1, 7 % 2), (3, 0)]))
 
       it "Min x₁: x₁=17/20" $ do
-        runTest (mkConstraints (Min (M.fromList [(1, 1)]))) 
-                (ExpectOptimal (Just (17 % 20)) (M.fromList [(1, 17 % 20), (2, 7 % 2), (3, 0)]))
+        runTest
+          (mkConstraints (Min (M.fromList [(1, 1)])))
+          (ExpectOptimal (Just (17 % 20)) (M.fromList [(1, 17 % 20), (2, 7 % 2), (3, 0)]))
 
       it "Max x₂: x₂=7/2" $ do
-        runTest (mkConstraints (Max (M.fromList [(2, 1)]))) 
-                (ExpectOptimal (Just (7 % 2)) (M.fromList [(2, 7 % 2), (1, 22 % 9)]))
+        runTest
+          (mkConstraints (Max (M.fromList [(2, 1)])))
+          (ExpectOptimal (Just (7 % 2)) (M.fromList [(2, 7 % 2), (1, 22 % 9)]))
 
       it "Min x₂: x₂=5/9" $ do
-        runTest (mkConstraints (Min (M.fromList [(2, 1)]))) 
-                (ExpectOptimal (Just (5 % 9)) (M.fromList [(2, 5 % 9), (1, 7 % 2), (3, 0)]))
+        runTest
+          (mkConstraints (Min (M.fromList [(2, 1)])))
+          (ExpectOptimal (Just (5 % 9)) (M.fromList [(2, 5 % 9), (1, 7 % 2), (3, 0)]))
 
     describe "PolyPaver two-function tests (infeasible)" $ do
-      let x1l = 0.0; x1r = 2.5; x2l = 0.0; x2r = 2.5
-          f1dx1l = -1; f1dx1r = -0.9; f1dx2l = -0.9; f1dx2r = -0.8
-          f1yl = 4; f1yr = 5
-          f2dx1l = -1; f2dx1r = -0.9; f2dx2l = -0.9; f2dx2r = -0.8
-          f2yl = 1; f2yr = 2
+      let x1l = 0.0
+          x1r = 2.5
+          x2l = 0.0
+          x2r = 2.5
+          f1dx1l = -1
+          f1dx1r = -0.9
+          f1dx2l = -0.9
+          f1dx2r = -0.8
+          f1yl = 4
+          f1yr = 5
+          f2dx1l = -1
+          f2dx1r = -0.9
+          f2dx2l = -0.9
+          f2dx2r = -0.8
+          f2yl = 1
+          f2yr = 2
           mkConstraints obj =
             ( obj
-            , [ LEQ (M.fromList [(1, f1dx1l), (2, f1dx2l), (3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
+            ,
+              [ LEQ (M.fromList [(1, f1dx1l), (2, f1dx2l), (3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
               , GEQ (M.fromList [(1, f1dx1r), (2, f1dx2r), (3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
               , LEQ (M.fromList [(1, f2dx1l), (2, f2dx2l), (4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
               , GEQ (M.fromList [(1, f2dx1r), (2, f2dx2r), (4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
@@ -586,14 +667,26 @@ spec = do
         runTest (mkConstraints (Min (M.fromList [(2, 1)]))) ExpectInfeasible
 
     describe "PolyPaver two-function tests (feasible)" $ do
-      let x1l = 0.0; x1r = 2.5; x2l = 0.0; x2r = 2.5
-          f1dx1l = -1; f1dx1r = -0.9; f1dx2l = -0.9; f1dx2r = -0.8
-          f1yl = 4; f1yr = 5
-          f2dx1l = -0.66; f2dx1r = -0.66; f2dx2l = -0.66; f2dx2r = -0.66
-          f2yl = 3; f2yr = 4
+      let x1l = 0.0
+          x1r = 2.5
+          x2l = 0.0
+          x2r = 2.5
+          f1dx1l = -1
+          f1dx1r = -0.9
+          f1dx2l = -0.9
+          f1dx2r = -0.8
+          f1yl = 4
+          f1yr = 5
+          f2dx1l = -0.66
+          f2dx1r = -0.66
+          f2dx2l = -0.66
+          f2dx2r = -0.66
+          f2yl = 3
+          f2yr = 4
           mkConstraints obj =
             ( obj
-            , [ LEQ (M.fromList [(1, f1dx1l), (2, f1dx2l), (3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
+            ,
+              [ LEQ (M.fromList [(1, f1dx1l), (2, f1dx2l), (3, (-1))]) (-f1yl + f1dx1l * x1l + f1dx2l * x2l)
               , GEQ (M.fromList [(1, f1dx1r), (2, f1dx2r), (3, (-1))]) (-f1yr + f1dx1r * x1l + f1dx2r * x2l)
               , LEQ (M.fromList [(1, f2dx1l), (2, f2dx2l), (4, (-1))]) (-f2yl + f2dx1l * x1l + f2dx2l * x2l)
               , GEQ (M.fromList [(1, f2dx1r), (2, f2dx2r), (4, (-1))]) (-f2yr + f2dx1r * x1l + f2dx2r * x2l)
@@ -607,26 +700,31 @@ spec = do
             )
 
       it "Max x₁: x₁=5/2" $ do
-        runTest (mkConstraints (Max (M.fromList [(1, 1)]))) 
-                (ExpectOptimal (Just (5 % 2)) (M.fromList [(1, 5 % 2), (2, 45 % 22), (4, 0)]))
+        runTest
+          (mkConstraints (Max (M.fromList [(1, 1)])))
+          (ExpectOptimal (Just (5 % 2)) (M.fromList [(1, 5 % 2), (2, 45 % 22), (4, 0)]))
 
       it "Min x₁: x₁=45/22" $ do
-        runTest (mkConstraints (Min (M.fromList [(1, 1)]))) 
-                (ExpectOptimal (Just (45 % 22)) (M.fromList [(1, 45 % 22), (2, 5 % 2), (4, 0)]))
+        runTest
+          (mkConstraints (Min (M.fromList [(1, 1)])))
+          (ExpectOptimal (Just (45 % 22)) (M.fromList [(1, 45 % 22), (2, 5 % 2), (4, 0)]))
 
       it "Max x₂: x₂=5/2" $ do
-        runTest (mkConstraints (Max (M.fromList [(2, 1)]))) 
-                (ExpectOptimal (Just (5 % 2)) (M.fromList [(2, 5 % 2), (1, 5 % 2), (4, 0)]))
+        runTest
+          (mkConstraints (Max (M.fromList [(2, 1)])))
+          (ExpectOptimal (Just (5 % 2)) (M.fromList [(2, 5 % 2), (1, 5 % 2), (4, 0)]))
 
       it "Min x₂: x₂=45/22" $ do
-        runTest (mkConstraints (Min (M.fromList [(2, 1)]))) 
-                (ExpectOptimal (Just (45 % 22)) (M.fromList [(2, 45 % 22), (1, 5 % 2), (4, 0)]))
+        runTest
+          (mkConstraints (Min (M.fromList [(2, 1)])))
+          (ExpectOptimal (Just (45 % 22)) (M.fromList [(2, 45 % 22), (1, 5 % 2), (4, 0)]))
 
     describe "QuickCheck-generated regression tests" $ do
       it "testQuickCheck1: obj=-370, x₁=5/3, x₂=26" $ do
         let testCase =
               ( Max (M.fromList [(1, 12), (2, -15)])
-              , [ EQ (M.fromList [(1, 24), (2, -2)]) (-12)
+              ,
+                [ EQ (M.fromList [(1, 24), (2, -2)]) (-12)
                 , GEQ (M.fromList [(1, -20), (2, 11)]) (-7)
                 , GEQ (M.fromList [(1, -28), (2, 5)]) (-8)
                 , GEQ (M.fromList [(1, 3), (2, 0)]) 5
@@ -638,7 +736,8 @@ spec = do
       it "testQuickCheck2: obj=-2/9, x₁=14/9, x₂=8/9" $ do
         let testCase =
               ( Max (M.fromList [(1, -3), (2, 5)])
-              , [ LEQ (M.fromList [(1, -6), (2, 6)]) 4
+              ,
+                [ LEQ (M.fromList [(1, -6), (2, 6)]) 4
                 , LEQ (M.fromList [(1, 1), (2, -4), (3, 3)]) (-2)
                 , LEQ (M.fromList [(2, 7), (1, -4)]) 0
                 ]
@@ -648,7 +747,8 @@ spec = do
       it "testQuickCheck3 (tests objective simplification): obj=-8, x₂=2" $ do
         let testCase =
               ( Min (M.fromList [(2, 0), (2, -4)])
-              , [ GEQ (M.fromList [(1, 5), (2, 4)]) (-4)
+              ,
+                [ GEQ (M.fromList [(1, 5), (2, 4)]) (-4)
                 , LEQ (M.fromList [(1, -1), (2, -1)]) 2
                 , LEQ (M.fromList [(2, 1)]) 2
                 , GEQ (M.fromList [(1, -5), (2, -1), (2, 1)]) (-5)
@@ -659,7 +759,7 @@ spec = do
   describe "twoPhaseSimplex (with VarDomainMap)" $ do
     it "Shift transformation with negative lower bound" $ do
       let obj = Max (M.fromList [(1, 1)])
-          constraints = [ LEQ (M.fromList [(1, 1)]) 10 ]
+          constraints = [LEQ (M.fromList [(1, 1)]) 10]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
       actualResult <-
         runStdoutLoggingT $
@@ -672,7 +772,7 @@ spec = do
 
     it "Shift transformation finds minimum at negative bound" $ do
       let obj = Min (M.fromList [(1, 1)])
-          constraints = [ LEQ (M.fromList [(1, 1)]) 0 ]
+          constraints = [LEQ (M.fromList [(1, 1)]) 0]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
       actualResult <-
         runStdoutLoggingT $
@@ -685,7 +785,7 @@ spec = do
 
     it "Split transformation for unbounded variable (max)" $ do
       let obj = Max (M.fromList [(1, 1)])
-          constraints = 
+          constraints =
             [ LEQ (M.fromList [(1, 1)]) 10
             , GEQ (M.fromList [(1, 1)]) (-10)
             ]
@@ -701,7 +801,7 @@ spec = do
 
     it "Split transformation for unbounded variable (min)" $ do
       let obj = Min (M.fromList [(1, 1)])
-          constraints = 
+          constraints =
             [ LEQ (M.fromList [(1, 1)]) 10
             , GEQ (M.fromList [(1, 1)]) (-10)
             ]
@@ -717,7 +817,7 @@ spec = do
 
     it "AddLowerBound with positive lower bound" $ do
       let obj = Max (M.fromList [(1, 1)])
-          constraints = [ LEQ (M.fromList [(1, 1)]) 10 ]
+          constraints = [LEQ (M.fromList [(1, 1)]) 10]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
       actualResult <-
         runStdoutLoggingT $
@@ -730,7 +830,7 @@ spec = do
 
     it "AddLowerBound finds minimum at positive bound" $ do
       let obj = Min (M.fromList [(1, 1)])
-          constraints = [ LEQ (M.fromList [(1, 1)]) 10 ]
+          constraints = [LEQ (M.fromList [(1, 1)]) 10]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
       actualResult <-
         runStdoutLoggingT $
@@ -743,7 +843,7 @@ spec = do
 
     it "Mixed domain types" $ do
       let obj = Max (M.fromList [(1, 1), (2, 1)])
-          constraints = 
+          constraints =
             [ LEQ (M.fromList [(1, 1), (2, 1)]) 5
             , GEQ (M.fromList [(2, 1)]) (-3)
             ]
@@ -764,7 +864,7 @@ spec = do
 
     it "lowerBoundOnly 0 is equivalent to NonNegative" $ do
       let obj = Max (M.fromList [(1, 3), (2, 5)])
-          constraints = 
+          constraints =
             [ LEQ (M.fromList [(1, 3), (2, 1)]) 15
             , LEQ (M.fromList [(1, 1), (2, 1)]) 7
             , LEQ (M.fromList [(2, 1)]) 4
@@ -782,14 +882,16 @@ spec = do
             twoPhaseSimplex domainMap2 [obj] constraints
       -- Both should produce the same optimal solution with x₁=3, x₂=4
       case (actualResult1, actualResult2) of
-        (SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap1)], SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap2)]) -> do
-          varMap1 `shouldBe` M.fromList [(1, 3), (2, 4)]
-          varMap1 `shouldBe` varMap2
+        ( SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap1)]
+          , SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap2)]
+          ) -> do
+            varMap1 `shouldBe` M.fromList [(1, 3), (2, 4)]
+            varMap1 `shouldBe` varMap2
         _ -> expectationFailure "Expected optimal results"
 
     it "Infeasible system with domain constraint" $ do
       let obj = Max (M.fromList [(1, 1)])
-          constraints = [ LEQ (M.fromList [(1, 1)]) 5 ]
+          constraints = [LEQ (M.fromList [(1, 1)]) 5]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 10)]
       actualResult <-
         runStdoutLoggingT $
@@ -824,7 +926,7 @@ spec = do
               twoPhaseSimplex domainMap [obj] constraints
         case actualResult of
           SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> 
+          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] ->
             -- Note: non-basic variables with value 0 may not appear in varValMap
             M.findWithDefault 0 1 varMap `shouldBe` 0
           _ -> expectationFailure "Unexpected result format"
@@ -906,7 +1008,7 @@ spec = do
         -- x₁ ≥ 0, x₂ ≤ 10 (no lower bound)
         -- Max x₁ + x₂ with x₁ + x₂ ≤ 20
         let obj = Max (M.fromList [(1, 1), (2, 1)])
-            constraints = [ LEQ (M.fromList [(1, 1), (2, 1)]) 20 ]
+            constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 20]
             domainMap = VarDomainMap $ M.fromList [(1, nonNegative), (2, upperBoundOnly 10)]
         actualResult <-
           runStdoutLoggingT $
@@ -928,7 +1030,7 @@ spec = do
         -- Simple case: maximize x with upper bound 5 and lower bound -3
         -- Optimal should be at x₁ = 5
         let obj = Max (M.fromList [(1, 1)])
-            constraints = [ LEQ (M.fromList [(1, 1)]) 5 ]
+            constraints = [LEQ (M.fromList [(1, 1)]) 5]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-3))]
         actualResult <-
           runStdoutLoggingT $
@@ -943,7 +1045,7 @@ spec = do
         -- Minimize x with upper bound 5 and lower bound -3
         -- Optimal should be at x₁ = -3
         let obj = Min (M.fromList [(1, 1)])
-            constraints = [ LEQ (M.fromList [(1, 1)]) 5 ]
+            constraints = [LEQ (M.fromList [(1, 1)]) 5]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-3))]
         actualResult <-
           runStdoutLoggingT $
@@ -957,7 +1059,7 @@ spec = do
       it "Max x₁ with x₁ ≥ -10, x₁ ≤ -2: optimal at x₁=-2" $ do
         -- Both bounds are negative, maximize
         let obj = Max (M.fromList [(1, 1)])
-            constraints = [ LEQ (M.fromList [(1, 1)]) (-2) ]
+            constraints = [LEQ (M.fromList [(1, 1)]) (-2)]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-10))]
         actualResult <-
           runStdoutLoggingT $
@@ -971,7 +1073,7 @@ spec = do
       it "Min x₁ with x₁ ≥ -10, x₁ ≤ -2: optimal at x₁=-10" $ do
         -- Both bounds are negative, minimize
         let obj = Min (M.fromList [(1, 1)])
-            constraints = [ LEQ (M.fromList [(1, 1)]) (-2) ]
+            constraints = [LEQ (M.fromList [(1, 1)]) (-2)]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-10))]
         actualResult <-
           runStdoutLoggingT $
@@ -990,7 +1092,7 @@ spec = do
         -- Optimal in transformed space: x₁' + x₂' = 15
         -- After unapply: x₁ + x₂ = 15 - 5 = 10
         let obj = Max (M.fromList [(1, 1), (2, 1)])
-            constraints = [ LEQ (M.fromList [(1, 1), (2, 1)]) 10 ]
+            constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 10]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-2)), (2, lowerBoundOnly (-3))]
         actualResult <-
           runStdoutLoggingT $
@@ -1013,7 +1115,7 @@ spec = do
         -- Minimize sum with lower bounds -2 and -3
         -- Optimal: x₁ = -2, x₂ = -3, sum = -5
         let obj = Min (M.fromList [(1, 1), (2, 1)])
-            constraints = [ LEQ (M.fromList [(1, 1), (2, 1)]) 10 ]
+            constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 10]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-2)), (2, lowerBoundOnly (-3))]
         actualResult <-
           runStdoutLoggingT $
@@ -1033,7 +1135,7 @@ spec = do
         -- Maximize 2x₁ - x₂: want x₁ large (up to 3) and x₂ small (down to -4)
         -- Optimal: x₁ = 3, x₂ = -4, obj = 2*3 - (-4) = 10
         let obj = Max (M.fromList [(1, 2), (2, -1)])
-            constraints = 
+            constraints =
               [ LEQ (M.fromList [(1, 1)]) 3
               , LEQ (M.fromList [(2, 1)]) 6
               ]
@@ -1057,7 +1159,7 @@ spec = do
         -- Minimize 2x₁ - x₂: want x₁ small (down to -5) and x₂ large (up to 6)
         -- Optimal: x₁ = -5, x₂ = 6, obj = 2*(-5) - 6 = -16
         let obj = Min (M.fromList [(1, 2), (2, -1)])
-            constraints = 
+            constraints =
               [ LEQ (M.fromList [(1, 1)]) 3
               , LEQ (M.fromList [(2, 1)]) 6
               ]
@@ -1083,7 +1185,7 @@ spec = do
         -- Without upper bound, this is unbounded for Max
         -- Add an upper bound via another constraint
         let obj = Max (M.fromList [(1, 1)])
-            constraints = 
+            constraints =
               [ GEQ (M.fromList [(1, 1)]) 2
               , LEQ (M.fromList [(1, 1)]) 10
               ]
@@ -1100,7 +1202,7 @@ spec = do
       it "Min x₁ with x₁ ≥ -5, x₁ ≥ 2 (GEQ tightens bound)" $ do
         -- Minimize with GEQ 2, so minimum is at x₁ = 2
         let obj = Min (M.fromList [(1, 1)])
-            constraints = 
+            constraints =
               [ GEQ (M.fromList [(1, 1)]) 2
               , LEQ (M.fromList [(1, 1)]) 10
               ]
@@ -1115,11 +1217,11 @@ spec = do
           _ -> expectationFailure "Unexpected result format"
 
     describe "Systems with EQ constraints and negative bounds" $ do
-      it "Max x₁ + x₂ with x₁ - x₂ = 0, x₁ ≥ -5, x₂ ≥ -5, x₁ ≤ 10" $ do 
+      it "Max x₁ + x₂ with x₁ - x₂ = 0, x₁ ≥ -5, x₂ ≥ -5, x₁ ≤ 10" $ do
         -- x₁ = x₂, maximize x₁ + x₂ = 2x₁
         -- With x₁ ≤ 10, optimal is x₁ = x₂ = 10, obj = 20
         let obj = Max (M.fromList [(1, 1), (2, 1)])
-            constraints = 
+            constraints =
               [ EQ (M.fromList [(1, 1), (2, -1)]) 0
               , LEQ (M.fromList [(1, 1)]) 10
               ]
@@ -1142,7 +1244,7 @@ spec = do
         -- x₁ = x₂, minimize x₁ + x₂ = 2x₁
         -- Lower bound is -5, so optimal is x₁ = x₂ = -5, obj = -10
         let obj = Min (M.fromList [(1, 1), (2, 1)])
-            constraints = 
+            constraints =
               [ EQ (M.fromList [(1, 1), (2, -1)]) 0
               , LEQ (M.fromList [(1, 1)]) 10
               ]
@@ -1164,7 +1266,7 @@ spec = do
     describe "Fractional negative bounds" $ do
       it "Max x₁ with x₁ ≥ -7/2, x₁ ≤ 5/2" $ do
         let obj = Max (M.fromList [(1, 1)])
-            constraints = [ LEQ (M.fromList [(1, 1)]) (5 % 2) ]
+            constraints = [LEQ (M.fromList [(1, 1)]) (5 % 2)]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly ((-7) % 2))]
         actualResult <-
           runStdoutLoggingT $
@@ -1177,7 +1279,7 @@ spec = do
 
       it "Min x₁ with x₁ ≥ -7/2, x₁ ≤ 5/2" $ do
         let obj = Min (M.fromList [(1, 1)])
-            constraints = [ LEQ (M.fromList [(1, 1)]) (5 % 2) ]
+            constraints = [LEQ (M.fromList [(1, 1)]) (5 % 2)]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly ((-7) % 2))]
         actualResult <-
           runStdoutLoggingT $
@@ -1193,7 +1295,7 @@ spec = do
       it "Max x₁ with -10 ≤ x₁ ≤ 10 (unbounded var with box constraints)" $ do
         -- x₁ is unbounded but constrained by -10 ≤ x₁ ≤ 10
         let obj = Max (M.fromList [(1, 1)])
-            constraints = 
+            constraints =
               [ LEQ (M.fromList [(1, 1)]) 10
               , GEQ (M.fromList [(1, 1)]) (-10)
               ]
@@ -1209,7 +1311,7 @@ spec = do
 
       it "Min x₁ with -10 ≤ x₁ ≤ 10 (unbounded var with box constraints)" $ do
         let obj = Min (M.fromList [(1, 1)])
-            constraints = 
+            constraints =
               [ LEQ (M.fromList [(1, 1)]) 10
               , GEQ (M.fromList [(1, 1)]) (-10)
               ]
@@ -1227,7 +1329,7 @@ spec = do
         -- x₁ unbounded, only x₁ ≤ 5, minimize x₁
         -- This should be unbounded (no finite solution) since x₁ can go to -∞
         let obj = Min (M.fromList [(1, 1)])
-            constraints = [ LEQ (M.fromList [(1, 1)]) 5 ]
+            constraints = [LEQ (M.fromList [(1, 1)]) 5]
             domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
         actualResult <-
           runStdoutLoggingT $
@@ -1241,7 +1343,7 @@ spec = do
     describe "Two variable systems with unbounded variables" $ do
       it "Max x₁ + x₂ with unbounded vars, -5 ≤ x₁ ≤ 5, -3 ≤ x₂ ≤ 7" $ do
         let obj = Max (M.fromList [(1, 1), (2, 1)])
-            constraints = 
+            constraints =
               [ LEQ (M.fromList [(1, 1)]) 5
               , GEQ (M.fromList [(1, 1)]) (-5)
               , LEQ (M.fromList [(2, 1)]) 7
@@ -1263,7 +1365,7 @@ spec = do
 
       it "Min x₁ + x₂ with unbounded vars, -5 ≤ x₁ ≤ 5, -3 ≤ x₂ ≤ 7" $ do
         let obj = Min (M.fromList [(1, 1), (2, 1)])
-            constraints = 
+            constraints =
               [ LEQ (M.fromList [(1, 1)]) 5
               , GEQ (M.fromList [(1, 1)]) (-5)
               , LEQ (M.fromList [(2, 1)]) 7
@@ -1286,7 +1388,7 @@ spec = do
       it "Max x₁ - x₂ with unbounded vars: x₁ up, x₂ down" $ do
         -- Maximize x₁ - x₂: want x₁ large (5) and x₂ small (-3)
         let obj = Max (M.fromList [(1, 1), (2, -1)])
-            constraints = 
+            constraints =
               [ LEQ (M.fromList [(1, 1)]) 5
               , GEQ (M.fromList [(1, 1)]) (-5)
               , LEQ (M.fromList [(2, 1)]) 7
@@ -1311,7 +1413,7 @@ spec = do
         -- x₁ + x₂ = 10, x₂ ≥ -5, unbounded x₁
         -- Maximize x₁: make x₂ as small as possible (-5), so x₁ = 15
         let obj = Max (M.fromList [(1, 1)])
-            constraints = 
+            constraints =
               [ EQ (M.fromList [(1, 1), (2, 1)]) 10
               , GEQ (M.fromList [(2, 1)]) (-5)
               ]
@@ -1331,7 +1433,7 @@ spec = do
         -- x₁ + x₂ = 10, x₂ ≤ 20, unbounded x₁
         -- Minimize x₁: make x₂ as large as possible (20), so x₁ = -10
         let obj = Min (M.fromList [(1, 1)])
-            constraints = 
+            constraints =
               [ EQ (M.fromList [(1, 1), (2, 1)]) 10
               , LEQ (M.fromList [(2, 1)]) 20
               ]
@@ -1353,15 +1455,17 @@ spec = do
         -- x₁ non-negative, x₂ has lower bound -5, x₃ unbounded
         -- All constrained by sum ≤ 20 and individual bounds
         let obj = Max (M.fromList [(1, 1), (2, 1), (3, 1)])
-            constraints = 
+            constraints =
               [ LEQ (M.fromList [(1, 1), (2, 1), (3, 1)]) 20
               , LEQ (M.fromList [(1, 1)]) 10
               , LEQ (M.fromList [(2, 1)]) 8
               , LEQ (M.fromList [(3, 1)]) 15
               , GEQ (M.fromList [(3, 1)]) (-10)
               ]
-            domainMap = VarDomainMap $ M.fromList 
-              [(1, nonNegative), (2, lowerBoundOnly (-5)), (3, unbounded)]
+            domainMap =
+              VarDomainMap $
+                M.fromList
+                  [(1, nonNegative), (2, lowerBoundOnly (-5)), (3, unbounded)]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1377,15 +1481,17 @@ spec = do
       it "Min x₁ + x₂ + x₃ with x₁ ≥ 0, x₂ ≥ -5, x₃ unbounded, sum ≥ -10" $ do
         -- Minimize sum with lower bound constraint
         let obj = Min (M.fromList [(1, 1), (2, 1), (3, 1)])
-            constraints = 
+            constraints =
               [ GEQ (M.fromList [(1, 1), (2, 1), (3, 1)]) (-10)
               , LEQ (M.fromList [(1, 1)]) 10
               , LEQ (M.fromList [(2, 1)]) 8
               , LEQ (M.fromList [(3, 1)]) 15
               , GEQ (M.fromList [(3, 1)]) (-20)
               ]
-            domainMap = VarDomainMap $ M.fromList 
-              [(1, nonNegative), (2, lowerBoundOnly (-5)), (3, unbounded)]
+            domainMap =
+              VarDomainMap $
+                M.fromList
+                  [(1, nonNegative), (2, lowerBoundOnly (-5)), (3, unbounded)]
         actualResult <-
           runStdoutLoggingT $
             filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1410,7 +1516,7 @@ spec = do
         -- x₁ has positive lower bound (uses AddLowerBound)
         -- x₂ has negative lower bound (uses Shift)
         let obj = Max (M.fromList [(1, 2), (2, 3)])
-            constraints = 
+            constraints =
               [ LEQ (M.fromList [(1, 2), (2, 1)]) 20
               , LEQ (M.fromList [(2, 1)]) 10
               ]
@@ -1434,7 +1540,7 @@ spec = do
         -- Minimize with lower bounds
         -- x₁ = 2 (minimum), x₂ = -2 (to satisfy x₁ + x₂ ≥ 0)
         let obj = Min (M.fromList [(1, 2), (2, 3)])
-            constraints = 
+            constraints =
               [ GEQ (M.fromList [(1, 1), (2, 1)]) 0
               , LEQ (M.fromList [(1, 1)]) 10
               , LEQ (M.fromList [(2, 1)]) 10
@@ -1458,7 +1564,7 @@ spec = do
     it "Infeasible: negative lower bound conflicts with GEQ constraint" $ do
       -- x₁ ≥ -5 (domain), but x₁ ≥ 10 and x₁ ≤ 5 (constraints conflict)
       let obj = Max (M.fromList [(1, 1)])
-          constraints = 
+          constraints =
             [ GEQ (M.fromList [(1, 1)]) 10
             , LEQ (M.fromList [(1, 1)]) 5
             ]
@@ -1473,7 +1579,7 @@ spec = do
 
     it "Infeasible: unbounded variable with conflicting constraints" $ do
       let obj = Max (M.fromList [(1, 1)])
-          constraints = 
+          constraints =
             [ GEQ (M.fromList [(1, 1)]) 10
             , LEQ (M.fromList [(1, 1)]) 5
             ]
@@ -1489,7 +1595,7 @@ spec = do
     it "Variable at exactly zero with negative lower bound" $ do
       -- x₁ ≥ -5, constraint x₁ = 0
       let obj = Max (M.fromList [(1, 1)])
-          constraints = [ EQ (M.fromList [(1, 1)]) 0 ]
+          constraints = [EQ (M.fromList [(1, 1)]) 0]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
       actualResult <-
         runStdoutLoggingT $
@@ -1502,7 +1608,7 @@ spec = do
 
     it "unbounded variable constrained to zero" $ do
       let obj = Max (M.fromList [(1, 1)])
-          constraints = [ EQ (M.fromList [(1, 1)]) 0 ]
+          constraints = [EQ (M.fromList [(1, 1)]) 0]
           domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
       actualResult <-
         runStdoutLoggingT $
@@ -1517,9 +1623,11 @@ spec = do
       -- x₁ ≥ 0 (non-negative), x₂ ≥ -10, x₃ ≥ 0
       -- Max x₁ + x₂ + x₃ with x₁ + x₂ + x₃ ≤ 15
       let obj = Max (M.fromList [(1, 1), (2, 1), (3, 1)])
-          constraints = [ LEQ (M.fromList [(1, 1), (2, 1), (3, 1)]) 15 ]
-          domainMap = VarDomainMap $ M.fromList 
-            [(1, nonNegative), (2, lowerBoundOnly (-10)), (3, nonNegative)]
+          constraints = [LEQ (M.fromList [(1, 1), (2, 1), (3, 1)]) 15]
+          domainMap =
+            VarDomainMap $
+              M.fromList
+                [(1, nonNegative), (2, lowerBoundOnly (-10)), (3, nonNegative)]
       actualResult <-
         runStdoutLoggingT $
           filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
@@ -1565,7 +1673,7 @@ spec = do
 
       it "collects variables from mixed constraints" $ do
         let obj = Max (M.fromList [(1, 1)])
-            constraints = 
+            constraints =
               [ LEQ (M.fromList [(2, 1)]) 10
               , GEQ (M.fromList [(3, 1)]) 5
               , EQ (M.fromList [(4, 1)]) 7
@@ -1584,7 +1692,7 @@ spec = do
 
       it "deduplicates variables appearing in multiple places" $ do
         let obj = Max (M.fromList [(1, 1), (2, 2)])
-            constraints = 
+            constraints =
               [ LEQ (M.fromList [(1, 3), (3, 4)]) 10
               , GEQ (M.fromList [(2, 5), (3, 6)]) 5
               ]
@@ -1752,8 +1860,8 @@ spec = do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 10]
             transform = AddLowerBound 1 5
-        applyTransform transform (obj, constraints) `shouldBe` 
-          (obj, [GEQ (M.singleton 1 1) 5, LEQ (M.fromList [(1, 1)]) 10])
+        applyTransform transform (obj, constraints)
+          `shouldBe` (obj, [GEQ (M.singleton 1 1) 5, LEQ (M.fromList [(1, 1)]) 10])
 
       it "applyTransform Shift transforms objective and constraints" $ do
         let obj = Max (M.fromList [(1, 2)])
@@ -1839,8 +1947,7 @@ spec = do
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
         let (_, newConstraints, transforms) = preprocess [obj] domainMap constraints
         transforms `shouldBe` [AddLowerBound 1 5]
-        length newConstraints `shouldBe` 2  -- original + GEQ
-
+        length newConstraints `shouldBe` 2 -- original + GEQ
       it "generates Shift for negative lower bounds" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 10]
@@ -1866,8 +1973,10 @@ spec = do
       it "handles mixed domain types" $ do
         let obj = Max (M.fromList [(1, 1), (2, 1), (3, 1)])
             constraints = [LEQ (M.fromList [(1, 1), (2, 1), (3, 1)]) 10]
-            domainMap = VarDomainMap $ M.fromList 
-              [(1, nonNegative), (2, lowerBoundOnly 5), (3, lowerBoundOnly (-3))]
+            domainMap =
+              VarDomainMap $
+                M.fromList
+                  [(1, nonNegative), (2, lowerBoundOnly 5), (3, lowerBoundOnly (-3))]
         let (_, _, transforms) = preprocess [obj] domainMap constraints
         -- Should have AddLowerBound for var 2, Shift for var 3
         length transforms `shouldBe` 2
@@ -1878,158 +1987,177 @@ spec = do
 
   describe "Property-based tests" $ do
     describe "collectAllVars properties" $ do
-      it "result is non-empty when objective is non-empty" $ property $
-        \(NonEmpty coeffs :: NonEmptyList (Int, Rational)) ->
-          let obj = Max (M.fromList [(abs k `mod` 100 + 1, v) | (k, v) <- coeffs])
-          in not (Set.null (collectAllVars [obj] []))
+      it "result is non-empty when objective is non-empty" $
+        property $
+          \(NonEmpty coeffs :: NonEmptyList (Int, Rational)) ->
+            let obj = Max (M.fromList [(abs k `mod` 100 + 1, v) | (k, v) <- coeffs])
+            in  not (Set.null (collectAllVars [obj] []))
 
-      it "result contains all objective variables" $ property $
-        \(vars :: [Int]) ->
-          let posVars = filter (> 0) (map abs vars)
-              obj = Max (M.fromList [(v, 1) | v <- take 5 posVars])
-          in all (`Set.member` collectAllVars [obj] []) (M.keys $ case obj of Max m -> m; Min m -> m)
+      it "result contains all objective variables" $
+        property $
+          \(vars :: [Int]) ->
+            let posVars = filter (> 0) (map abs vars)
+                obj = Max (M.fromList [(v, 1) | v <- take 5 posVars])
+            in  all (`Set.member` collectAllVars [obj] []) (M.keys $ case obj of Max m -> m; Min m -> m)
 
     describe "getTransform properties" $ do
-      it "NonNegative always produces empty list" $ property $
-        \(nextVar :: Int) (v :: Int) ->
-          getTransform (abs nextVar + 1) (abs v + 1) nonNegative == ([], 0)
+      it "NonNegative always produces empty list" $
+        property $
+          \(nextVar :: Int) (v :: Int) ->
+            getTransform (abs nextVar + 1) (abs v + 1) nonNegative == ([], 0)
 
-      it "lowerBoundOnly 0 produces empty list" $ property $
-        \(nextVar :: Int) (v :: Int) ->
-          getTransform (abs nextVar + 1) (abs v + 1) (lowerBoundOnly 0) == ([], 0)
+      it "lowerBoundOnly 0 produces empty list" $
+        property $
+          \(nextVar :: Int) (v :: Int) ->
+            getTransform (abs nextVar + 1) (abs v + 1) (lowerBoundOnly 0) == ([], 0)
 
-      it "positive lowerBoundOnly produces AddLowerBound" $ property $
-        \(Positive bound :: Positive Rational) (nextVar :: Int) (v :: Int) ->
-          case getTransform (abs nextVar + 1) (abs v + 1) (lowerBoundOnly bound) of
-            ([AddLowerBound var b], 0) -> var == abs v + 1 && b == bound
-            _ -> False
+      it "positive lowerBoundOnly produces AddLowerBound" $
+        property $
+          \(Positive bound :: Positive Rational) (nextVar :: Int) (v :: Int) ->
+            case getTransform (abs nextVar + 1) (abs v + 1) (lowerBoundOnly bound) of
+              ([AddLowerBound var b], 0) -> var == abs v + 1 && b == bound
+              _ -> False
 
-      it "negative lowerBoundOnly produces Shift" $ property $
-        \(Positive bound :: Positive Rational) (nextVar :: Int) (v :: Int) ->
-          let negBound = negate bound
-          in case getTransform (abs nextVar + 1) (abs v + 1) (lowerBoundOnly negBound) of
-            ([Shift origVar _ shiftBy], 1) -> origVar == abs v + 1 && shiftBy == negBound
-            _ -> False
+      it "negative lowerBoundOnly produces Shift" $
+        property $
+          \(Positive bound :: Positive Rational) (nextVar :: Int) (v :: Int) ->
+            let negBound = negate bound
+            in  case getTransform (abs nextVar + 1) (abs v + 1) (lowerBoundOnly negBound) of
+                  ([Shift origVar _ shiftBy], 1) -> origVar == abs v + 1 && shiftBy == negBound
+                  _ -> False
 
-      it "unbounded produces Split" $ property $
-        \(nextVar :: Int) (v :: Int) ->
-          case getTransform (abs nextVar + 1) (abs v + 1) unbounded of
-            ([Split origVar _ _], 2) -> origVar == abs v + 1
-            _ -> False
+      it "unbounded produces Split" $
+        property $
+          \(nextVar :: Int) (v :: Int) ->
+            case getTransform (abs nextVar + 1) (abs v + 1) unbounded of
+              ([Split origVar _ _], 2) -> origVar == abs v + 1
+              _ -> False
 
-      it "boundedRange produces both lower and upper bound transforms" $ property $
-        \(lower :: Rational) (Positive delta :: Positive Rational) (nextVar :: Int) (v :: Int) ->
-          let upper = lower + delta  -- ensure upper > lower
-          in case getTransform (abs nextVar + 1) (abs v + 1) (boundedRange lower upper) of
-            (transforms, _) -> 
-              any (\case AddUpperBound var u -> var == abs v + 1 && u == upper; _ -> False) transforms
+      it "boundedRange produces both lower and upper bound transforms" $
+        property $
+          \(lower :: Rational) (Positive delta :: Positive Rational) (nextVar :: Int) (v :: Int) ->
+            let upper = lower + delta -- ensure upper > lower
+            in  case getTransform (abs nextVar + 1) (abs v + 1) (boundedRange lower upper) of
+                  (transforms, _) ->
+                    any (\case AddUpperBound var u -> var == abs v + 1 && u == upper; _ -> False) transforms
 
     describe "applyShiftToConstraint properties" $ do
-      it "RHS adjustment follows formula: newRHS = oldRHS - coeff * shiftBy" $ property $
-        \(coeff :: Rational) (oldRHS :: Rational) (shiftBy :: Rational) ->
-          coeff /= 0 ==>
-            let constraint = LEQ (M.fromList [(1, coeff)]) oldRHS
-                LEQ _ newRHS = applyShiftToConstraint 1 10 shiftBy constraint
-            in newRHS == oldRHS - coeff * shiftBy
+      it "RHS adjustment follows formula: newRHS = oldRHS - coeff * shiftBy" $
+        property $
+          \(coeff :: Rational) (oldRHS :: Rational) (shiftBy :: Rational) ->
+            coeff /= 0 ==>
+              let constraint = LEQ (M.fromList [(1, coeff)]) oldRHS
+                  LEQ _ newRHS = applyShiftToConstraint 1 10 shiftBy constraint
+              in  newRHS == oldRHS - coeff * shiftBy
 
-      it "preserves constraint type (LEQ stays LEQ)" $ property $
-        \(coeff :: Rational) (rhs :: Rational) (shiftBy :: Rational) ->
-          coeff /= 0 ==>
-            let constraint = LEQ (M.fromList [(1, coeff)]) rhs
-            in case applyShiftToConstraint 1 10 shiftBy constraint of
-                 LEQ {} -> True
-                 _ -> False
+      it "preserves constraint type (LEQ stays LEQ)" $
+        property $
+          \(coeff :: Rational) (rhs :: Rational) (shiftBy :: Rational) ->
+            coeff /= 0 ==>
+              let constraint = LEQ (M.fromList [(1, coeff)]) rhs
+              in  case applyShiftToConstraint 1 10 shiftBy constraint of
+                    LEQ {} -> True
+                    _ -> False
 
-      it "preserves constraint type (GEQ stays GEQ)" $ property $
-        \(coeff :: Rational) (rhs :: Rational) (shiftBy :: Rational) ->
-          coeff /= 0 ==>
-            let constraint = GEQ (M.fromList [(1, coeff)]) rhs
-            in case applyShiftToConstraint 1 10 shiftBy constraint of
-                 GEQ {} -> True
-                 _ -> False
+      it "preserves constraint type (GEQ stays GEQ)" $
+        property $
+          \(coeff :: Rational) (rhs :: Rational) (shiftBy :: Rational) ->
+            coeff /= 0 ==>
+              let constraint = GEQ (M.fromList [(1, coeff)]) rhs
+              in  case applyShiftToConstraint 1 10 shiftBy constraint of
+                    GEQ {} -> True
+                    _ -> False
 
     describe "applySplitToConstraint properties" $ do
-      it "preserves RHS value" $ property $
-        \(coeff :: Rational) (rhs :: Rational) ->
-          coeff /= 0 ==>
-            let constraint = LEQ (M.fromList [(1, coeff)]) rhs
-                LEQ _ newRHS = applySplitToConstraint 1 10 11 constraint
-            in newRHS == rhs
+      it "preserves RHS value" $
+        property $
+          \(coeff :: Rational) (rhs :: Rational) ->
+            coeff /= 0 ==>
+              let constraint = LEQ (M.fromList [(1, coeff)]) rhs
+                  LEQ _ newRHS = applySplitToConstraint 1 10 11 constraint
+              in  newRHS == rhs
 
-      it "negVar coefficient is negation of posVar coefficient" $ property $
-        \(coeff :: Rational) (rhs :: Rational) ->
-          coeff /= 0 ==>
-            let constraint = LEQ (M.fromList [(1, coeff)]) rhs
-                LEQ m _ = applySplitToConstraint 1 10 11 constraint
-                posCoeff = M.findWithDefault 0 10 m
-                negCoeff = M.findWithDefault 0 11 m
-            in negCoeff == negate posCoeff
+      it "negVar coefficient is negation of posVar coefficient" $
+        property $
+          \(coeff :: Rational) (rhs :: Rational) ->
+            coeff /= 0 ==>
+              let constraint = LEQ (M.fromList [(1, coeff)]) rhs
+                  LEQ m _ = applySplitToConstraint 1 10 11 constraint
+                  posCoeff = M.findWithDefault 0 10 m
+                  negCoeff = M.findWithDefault 0 11 m
+              in  negCoeff == negate posCoeff
 
     describe "unapplyTransformToVarMap Shift properties" $ do
-      it "recovers originalVar = shiftedVar + shiftBy" $ property $
-        \(shiftedVal :: Rational) (shiftBy :: Rational) ->
-          let varMap = M.fromList [(5, 100), (10, shiftedVal)]
-              transform = Shift 1 10 shiftBy
-              newVarMap = unapplyTransformToVarMap transform varMap
-          in M.lookup 1 newVarMap == Just (shiftedVal + shiftBy)
-
-      it "removes shifted variable from result" $ property $
-        \(shiftedVal :: Rational) (shiftBy :: Rational) ->
-          let varMap = M.fromList [(5, 100), (10, shiftedVal)]
-              transform = Shift 1 10 shiftBy
-              newVarMap = unapplyTransformToVarMap transform varMap
-          in M.lookup 10 newVarMap == Nothing
-
-    describe "unapplyTransformToVarMap Split properties" $ do
-      it "recovers originalVar = posVar - negVar" $ property $
-        \(posVal :: Rational) (negVal :: Rational) ->
-          let varMap = M.fromList [(5, 100), (10, posVal), (11, negVal)]
-              transform = Split 1 10 11
-              newVarMap = unapplyTransformToVarMap transform varMap
-          in M.lookup 1 newVarMap == Just (posVal - negVal)
-
-
-      it "removes pos and neg variables from result" $ property $
-        \(posVal :: Rational) (negVal :: Rational) ->
-          let varMap = M.fromList [(5, 100), (10, posVal), (11, negVal)]
-              transform = Split 1 10 11
-              newVarMap = unapplyTransformToVarMap transform varMap
-          in M.lookup 10 newVarMap == Nothing && 
-             M.lookup 11 newVarMap == Nothing
-
-    describe "Round-trip properties" $ do
-      it "Shift transform and unapply is identity for variable value" $ property $
-        \(origVal :: Rational) (shiftBy :: Rational) ->
-          shiftBy < 0 ==>  -- Only negative shifts are valid
-            let shiftedVal = origVal - shiftBy  -- shiftedVar = originalVar - shiftBy
-                varMap = M.fromList [(5, 100), (10, shiftedVal)]
+      it "recovers originalVar = shiftedVar + shiftBy" $
+        property $
+          \(shiftedVal :: Rational) (shiftBy :: Rational) ->
+            let varMap = M.fromList [(5, 100), (10, shiftedVal)]
                 transform = Shift 1 10 shiftBy
                 newVarMap = unapplyTransformToVarMap transform varMap
-            in M.lookup 1 newVarMap == Just origVal
+            in  M.lookup 1 newVarMap == Just (shiftedVal + shiftBy)
 
-      it "Split with posVal=origVal and negVal=0 gives correct value for positive origVal" $ property $
-        \(Positive origVal :: Positive Rational) ->
-          let varMap = M.fromList [(5, 100), (10, origVal), (11, 0)]
-              transform = Split 1 10 11
-              newVarMap = unapplyTransformToVarMap transform varMap
-          in M.lookup 1 newVarMap == Just origVal
+      it "removes shifted variable from result" $
+        property $
+          \(shiftedVal :: Rational) (shiftBy :: Rational) ->
+            let varMap = M.fromList [(5, 100), (10, shiftedVal)]
+                transform = Shift 1 10 shiftBy
+                newVarMap = unapplyTransformToVarMap transform varMap
+            in  M.lookup 10 newVarMap == Nothing
 
-      it "Split with posVal=0 and negVal=-origVal gives correct value for negative origVal" $ property $
-        \(Positive origVal :: Positive Rational) ->
-          let negOrigVal = negate origVal
-              varMap = M.fromList [(5, 100), (10, 0), (11, origVal)]
-              transform = Split 1 10 11
-              newVarMap = unapplyTransformToVarMap transform varMap
-          in M.lookup 1 newVarMap == Just negOrigVal
+    describe "unapplyTransformToVarMap Split properties" $ do
+      it "recovers originalVar = posVar - negVar" $
+        property $
+          \(posVal :: Rational) (negVal :: Rational) ->
+            let varMap = M.fromList [(5, 100), (10, posVal), (11, negVal)]
+                transform = Split 1 10 11
+                newVarMap = unapplyTransformToVarMap transform varMap
+            in  M.lookup 1 newVarMap == Just (posVal - negVal)
+
+      it "removes pos and neg variables from result" $
+        property $
+          \(posVal :: Rational) (negVal :: Rational) ->
+            let varMap = M.fromList [(5, 100), (10, posVal), (11, negVal)]
+                transform = Split 1 10 11
+                newVarMap = unapplyTransformToVarMap transform varMap
+            in  M.lookup 10 newVarMap == Nothing
+                  && M.lookup 11 newVarMap == Nothing
+
+    describe "Round-trip properties" $ do
+      it "Shift transform and unapply is identity for variable value" $
+        property $
+          \(origVal :: Rational) (shiftBy :: Rational) ->
+            shiftBy < 0 ==> -- Only negative shifts are valid
+              let shiftedVal = origVal - shiftBy -- shiftedVar = originalVar - shiftBy
+                  varMap = M.fromList [(5, 100), (10, shiftedVal)]
+                  transform = Shift 1 10 shiftBy
+                  newVarMap = unapplyTransformToVarMap transform varMap
+              in  M.lookup 1 newVarMap == Just origVal
+
+      it "Split with posVal=origVal and negVal=0 gives correct value for positive origVal" $
+        property $
+          \(Positive origVal :: Positive Rational) ->
+            let varMap = M.fromList [(5, 100), (10, origVal), (11, 0)]
+                transform = Split 1 10 11
+                newVarMap = unapplyTransformToVarMap transform varMap
+            in  M.lookup 1 newVarMap == Just origVal
+
+      it "Split with posVal=0 and negVal=-origVal gives correct value for negative origVal" $
+        property $
+          \(Positive origVal :: Positive Rational) ->
+            let negOrigVal = negate origVal
+                varMap = M.fromList [(5, 100), (10, 0), (11, origVal)]
+                transform = Split 1 10 11
+                newVarMap = unapplyTransformToVarMap transform varMap
+            in  M.lookup 1 newVarMap == Just negOrigVal
 
   describe "twoPhaseSimplex with multiple objectives" $ do
     it "optimizes two objectives over the same feasible region" $ do
       -- Feasible region: x₁ + x₂ ≤ 10, x₁ ≤ 6, x₂ ≤ 8, x₁,x₂ ≥ 0
       -- Max x₁: optimal at x₁=6, x₂=0 (or x₁=6, x₂=4) with obj=6
       -- Max x₂: optimal at x₁=0, x₂=8 (or x₁=2, x₂=8) with obj=8
-      let obj1 = Max (M.fromList [(1, 1)])  -- Max x₁
-          obj2 = Max (M.fromList [(2, 1)])  -- Max x₂
-          constraints = 
+      let obj1 = Max (M.fromList [(1, 1)]) -- Max x₁
+          obj2 = Max (M.fromList [(2, 1)]) -- Max x₂
+          constraints =
             [ LEQ (M.fromList [(1, 1), (2, 1)]) 10
             , LEQ (M.fromList [(1, 1)]) 6
             , LEQ (M.fromList [(2, 1)]) 8
@@ -2046,17 +2174,17 @@ spec = do
       length objResults `shouldBe` 2
       -- First result (Max x₁) should have x₁=6
       case objResults !! 0 of
-        ObjectiveResult _ (Optimal varVals) -> 
+        ObjectiveResult _ (Optimal varVals) ->
           M.lookup 1 varVals `shouldBe` Just 6
         _ -> expectationFailure "Expected optimal result for obj1"
       -- Second result (Max x₂) should have x₂=8
       case objResults !! 1 of
-        ObjectiveResult _ (Optimal varVals) -> 
+        ObjectiveResult _ (Optimal varVals) ->
           M.lookup 2 varVals `shouldBe` Just 8
         _ -> expectationFailure "Expected optimal result for obj2"
 
     it "handles empty objective list returning feasible system only" $ do
-      let constraints = [ LEQ (M.fromList [(1, 1)]) 10 ]
+      let constraints = [LEQ (M.fromList [(1, 1)]) 10]
           domainMap = VarDomainMap $ M.fromSet (const nonNegative) (Set.singleton 1)
       SimplexResult mFeasibleSystem objResults <-
         runStdoutLoggingT $
@@ -2069,7 +2197,7 @@ spec = do
       -- x₁ ≤ 5 and x₁ ≥ 10 is infeasible
       let obj1 = Max (M.fromList [(1, 1)])
           obj2 = Min (M.fromList [(1, 1)])
-          constraints = 
+          constraints =
             [ LEQ (M.fromList [(1, 1)]) 5
             , GEQ (M.fromList [(1, 1)]) 10
             ]
@@ -2090,7 +2218,7 @@ spec = do
       -- Min x₁: optimal at x₁=0
       let obj1 = Max (M.fromList [(1, 1)])
           obj2 = Min (M.fromList [(1, 1)])
-          constraints = [ LEQ (M.fromList [(1, 1)]) 10 ]
+          constraints = [LEQ (M.fromList [(1, 1)]) 10]
           domainMap = VarDomainMap $ M.fromList [(1, nonNegative)]
       SimplexResult mFeasibleSystem objResults <-
         runStdoutLoggingT $
@@ -2100,12 +2228,12 @@ spec = do
       length objResults `shouldBe` 2
       -- Max x₁ should be 10
       case objResults !! 0 of
-        ObjectiveResult _ (Optimal varVals) -> 
+        ObjectiveResult _ (Optimal varVals) ->
           M.lookup 1 varVals `shouldBe` Just 10
         _ -> expectationFailure "Expected optimal result for Max x₁"
       -- Min x₁ should be 0 (or not present in map if zero)
       case objResults !! 1 of
-        ObjectiveResult _ (Optimal varVals) -> 
+        ObjectiveResult _ (Optimal varVals) ->
           M.findWithDefault 0 1 varVals `shouldBe` 0
         _ -> expectationFailure "Expected optimal result for Min x₁"
 
@@ -2113,11 +2241,11 @@ spec = do
       -- x₁ with only a lower bound (non-negative)
       -- Max x₁: unbounded (no upper constraint)
       -- Min x₁ with x₁ ≥ 0: optimal at x₁=0
-      let obj1 = Max (M.fromList [(1, 1)])  -- This will be unbounded
-          obj2 = Min (M.fromList [(1, 1)])  -- This will have optimal at 0
+      let obj1 = Max (M.fromList [(1, 1)]) -- This will be unbounded
+          obj2 = Min (M.fromList [(1, 1)]) -- This will have optimal at 0
           -- Add a dummy constraint to ensure the system is processable
           -- x₁ ≥ 0 (enforced by nonNegative domain) but no upper bound
-          constraints = [ GEQ (M.fromList [(1, 1)]) 0 ]  -- x₁ ≥ 0
+          constraints = [GEQ (M.fromList [(1, 1)]) 0] -- x₁ ≥ 0
           domainMap = VarDomainMap $ M.fromList [(1, nonNegative)]
       SimplexResult mFeasibleSystem objResults <-
         runStdoutLoggingT $
@@ -2131,6 +2259,6 @@ spec = do
         _ -> expectationFailure "Expected unbounded result for Max x₁"
       -- Min x₁ should be 0
       case objResults !! 1 of
-        ObjectiveResult _ (Optimal varVals) -> 
+        ObjectiveResult _ (Optimal varVals) ->
           M.findWithDefault 0 1 varVals `shouldBe` 0
         _ -> expectationFailure "Expected optimal result for Min x₁"

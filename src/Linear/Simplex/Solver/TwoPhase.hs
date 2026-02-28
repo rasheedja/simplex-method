@@ -34,6 +34,7 @@ module Linear.Simplex.Solver.TwoPhase
 
 import Prelude hiding (EQ)
 
+import qualified Control.Applicative as LPPaver
 import Control.Lens
 import Control.Monad (unless)
 import Control.Monad.IO.Class (MonadIO)
@@ -43,13 +44,12 @@ import Data.List
 import qualified Data.Map as M
 import Data.Maybe (fromJust, fromMaybe, mapMaybe)
 import Data.Ratio (denominator, numerator, (%))
-import qualified Data.Text as Text
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import GHC.Real (Ratio)
 import Linear.Simplex.Types
 import Linear.Simplex.Util
-import qualified Control.Applicative as LPPaver
 
 -- | Find a feasible solution for the given system of 'PolyConstraint's by performing the first phase of the two-phase simplex method
 --  All variables in the 'PolyConstraint' must be positive.
@@ -226,7 +226,6 @@ findFeasibleSolution unsimplifiedSystem = do
                           , newArtificialVar : artificialVarsWithNewMaxVar -- Slack var is negative, r is positive (when original constraint was GEQ)
                           )
                     else -- r < 0
-
                       if basicVarCoeff <= 0 -- Should only be -1 in the standard call path
                         then (M.insert basicVar (TableauRow {lhs = v, rhs = r}) newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
                         else
@@ -279,21 +278,22 @@ optimizeFeasibleSystem :: (MonadIO m, MonadLogger m) => ObjectiveFunction -> Fea
 optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..}) = do
   logMsg LevelInfo $
     "optimizeFeasibleSystem: Optimizing feasible system " <> showT fsys <> " with objective " <> showT objFunction
-  mResult <- if null artificialVars
-    then do
-      logMsg LevelInfo $
-        "optimizeFeasibleSystem: No artificial vars, system is feasible. Pivoting system (in dict form) "
-          <> showT phase1Dict
-          <> " with objective "
-          <> showT normalObjective
-      simplexPivot normalObjective phase1Dict
-    else do
-      logMsg LevelInfo $
-        "optimizeFeasibleSystem: Artificial vars present. Pivoting system (in dict form) "
-          <> showT phase1Dict
-          <> " with objective "
-          <> showT adjustedObjective
-      simplexPivot adjustedObjective phase1Dict
+  mResult <-
+    if null artificialVars
+      then do
+        logMsg LevelInfo $
+          "optimizeFeasibleSystem: No artificial vars, system is feasible. Pivoting system (in dict form) "
+            <> showT phase1Dict
+            <> " with objective "
+            <> showT normalObjective
+        simplexPivot normalObjective phase1Dict
+      else do
+        logMsg LevelInfo $
+          "optimizeFeasibleSystem: Artificial vars present. Pivoting system (in dict form) "
+            <> showT phase1Dict
+            <> " with objective "
+            <> showT adjustedObjective
+        simplexPivot adjustedObjective phase1Dict
   case mResult of
     Nothing -> do
       logMsg LevelInfo "optimizeFeasibleSystem: Objective is unbounded (ratio test failed)"
@@ -408,7 +408,8 @@ optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..})
 -- The returned SimplexResult contains:
 --   * The feasible system (Nothing if infeasible)
 --   * Results for each objective function (empty if infeasible)
-twoPhaseSimplex :: (MonadIO m, MonadLogger m) => VarDomainMap -> [ObjectiveFunction] -> [PolyConstraint] -> m SimplexResult
+twoPhaseSimplex ::
+  (MonadIO m, MonadLogger m) => VarDomainMap -> [ObjectiveFunction] -> [PolyConstraint] -> m SimplexResult
 twoPhaseSimplex domainMap objFunctions constraints = do
   logMsg LevelInfo $
     "twoPhaseSimplex: Solving system with domain map " <> showT domainMap
@@ -416,9 +417,12 @@ twoPhaseSimplex domainMap objFunctions constraints = do
   let originalVars = collectAllVars objFunctions constraints
   let (transformedObjs, transformedConstraints, transforms) = preprocess objFunctions domainMap constraints
   logMsg LevelInfo $
-    "twoPhaseSimplex: Applied transforms " <> showT transforms
-      <> "; Transformed objectives: " <> showT transformedObjs
-      <> "; Transformed constraints: " <> showT transformedConstraints
+    "twoPhaseSimplex: Applied transforms "
+      <> showT transforms
+      <> "; Transformed objectives: "
+      <> showT transformedObjs
+      <> "; Transformed constraints: "
+      <> showT transformedConstraints
   mFeasibleSystem <- findFeasibleSolution transformedConstraints
   case mFeasibleSystem of
     Nothing -> do
@@ -435,13 +439,16 @@ twoPhaseSimplex domainMap objFunctions constraints = do
 -- | Optimize all objective functions over the given feasible system.
 -- Returns a list of ObjectiveResult, one for each objective function.
 -- The originalVars set is used to filter the result to only include original decision variables.
-optimizeAllObjectives :: (MonadIO m, MonadLogger m) 
-                      => Set.Set Var  -- ^ Original decision variables
-                      -> [VarTransform] 
-                      -> FeasibleSystem 
-                      -> [(ObjectiveFunction, ObjectiveFunction)]  -- ^ (original, transformed) objective pairs
-                      -> m [ObjectiveResult]
-optimizeAllObjectives originalVars transforms feasibleSystem objPairs = 
+optimizeAllObjectives ::
+  (MonadIO m, MonadLogger m) =>
+  -- | Original decision variables
+  Set.Set Var ->
+  [VarTransform] ->
+  FeasibleSystem ->
+  -- | (original, transformed) objective pairs
+  [(ObjectiveFunction, ObjectiveFunction)] ->
+  m [ObjectiveResult]
+optimizeAllObjectives originalVars transforms feasibleSystem objPairs =
   mapM optimizeOne objPairs
   where
     optimizeOne (origObj, transformedObj) = do
@@ -460,7 +467,7 @@ postprocess originalVars transforms (Optimal varVals) =
       unappliedVarVals = unapplyTransformsToVarMap transforms varVals
       -- Filter to only include original decision variables
       filteredVarVals = M.filterWithKey (\k _ -> Set.member k originalVars) unappliedVarVals
-  in Optimal filteredVarVals
+  in  Optimal filteredVarVals
 
 -- | Compute the value of an objective function given variable values.
 computeObjective :: ObjectiveFunction -> M.Map Var SimplexNum -> SimplexNum
@@ -468,14 +475,15 @@ computeObjective objFunction varVals =
   let coeffs = case objFunction of
         Max m -> m
         Min m -> m
-  in sum $ map (\(var, coeff) -> coeff * M.findWithDefault 0 var varVals) (M.toList coeffs)
+  in  sum $ map (\(var, coeff) -> coeff * M.findWithDefault 0 var varVals) (M.toList coeffs)
 
 -- | Preprocess the system by applying variable transformations based on domain information.
 -- Returns the transformed objectives, constraints, and the list of transforms applied.
-preprocess :: [ObjectiveFunction]
-           -> VarDomainMap
-           -> [PolyConstraint]
-           -> ([ObjectiveFunction], [PolyConstraint], [VarTransform])
+preprocess ::
+  [ObjectiveFunction] ->
+  VarDomainMap ->
+  [PolyConstraint] ->
+  ([ObjectiveFunction], [PolyConstraint], [VarTransform])
 preprocess objFunctions (VarDomainMap domainMap) constraints =
   let -- Collect all variables in the system (from all objectives and constraints)
       allVars = collectAllVars objFunctions constraints
@@ -488,8 +496,8 @@ preprocess objFunctions (VarDomainMap domainMap) constraints =
       transformedObjs = map (\obj -> fst $ applyTransforms transforms obj constraints) objFunctions
       (_, transformedConstraints) = case objFunctions of
         [] -> (Max M.empty, applyTransformsToConstraints transforms constraints)
-        (obj:_) -> applyTransforms transforms obj constraints
-  in (transformedObjs, transformedConstraints, transforms)
+        (obj : _) -> applyTransforms transforms obj constraints
+  in  (transformedObjs, transformedConstraints, transforms)
 
 -- | Apply transforms to constraints only (used when there are no objectives)
 applyTransformsToConstraints :: [VarTransform] -> [PolyConstraint] -> [PolyConstraint]
@@ -501,12 +509,12 @@ collectAllVars :: [ObjectiveFunction] -> [PolyConstraint] -> Set Var
 collectAllVars objFunctions constraints =
   let objVars = Set.unions $ map getObjVars objFunctions
       constraintVars = Set.unions $ map getConstraintVars constraints
-  in Set.union objVars constraintVars
+  in  Set.union objVars constraintVars
   where
     getObjVars :: ObjectiveFunction -> Set Var
     getObjVars (Max m) = M.keysSet m
     getObjVars (Min m) = M.keysSet m
-    
+
     getConstraintVars :: PolyConstraint -> Set Var
     getConstraintVars (LEQ m _) = M.keysSet m
     getConstraintVars (GEQ m _) = M.keysSet m
@@ -519,7 +527,7 @@ generateTransform :: M.Map Var VarDomain -> Var -> ([VarTransform], Var) -> ([Va
 generateTransform domainMap var (transforms, nextFreshVar) =
   let domain = M.findWithDefault unbounded var domainMap
       (newTransforms, varOffset) = getTransform nextFreshVar var domain
-  in (newTransforms ++ transforms, nextFreshVar + varOffset)
+  in  (newTransforms ++ transforms, nextFreshVar + varOffset)
 
 -- | Determine what transforms are needed for a variable given its domain.
 -- Returns a list of transforms and the number of fresh variables consumed.
@@ -527,16 +535,16 @@ getTransform :: Var -> Var -> VarDomain -> ([VarTransform], Var)
 getTransform nextFreshVar var (Bounded mLower mUpper) =
   let -- Handle lower bound
       (lowerTransforms, varOffset) = case mLower of
-        Nothing -> ([], 0)  -- No lower bound: will need Split
+        Nothing -> ([], 0) -- No lower bound: will need Split
         Just l
-          | l == 0    -> ([], 0)  -- NonNegative: no transform needed
-          | l > 0     -> ([AddLowerBound var l], 0)  -- Positive lower bound: add constraint
-          | otherwise -> ([Shift var nextFreshVar l], 1)  -- Negative lower bound: shift
+          | l == 0 -> ([], 0) -- NonNegative: no transform needed
+          | l > 0 -> ([AddLowerBound var l], 0) -- Positive lower bound: add constraint
+          | otherwise -> ([Shift var nextFreshVar l], 1) -- Negative lower bound: shift
 
       -- Handle upper bound (if present)
       upperTransforms = case mUpper of
         Nothing -> []
-        Just u  -> [AddUpperBound var u]
+        Just u -> [AddUpperBound var u]
 
       -- If no lower bound (Nothing), we need Split transformation
       -- Split replaces the variable, so upper bound would apply to the original var
@@ -549,8 +557,7 @@ getTransform nextFreshVar var (Bounded mLower mUpper) =
           (Split var nextFreshVar (nextFreshVar + 1) : upperTransforms, 2)
         Just _ ->
           (lowerTransforms ++ upperTransforms, varOffset)
-
-  in (finalTransforms, finalOffset)
+  in  (finalTransforms, finalOffset)
 
 -- | Apply all transforms to the objective function and constraints.
 applyTransforms :: [VarTransform] -> ObjectiveFunction -> [PolyConstraint] -> (ObjectiveFunction, [PolyConstraint])
@@ -564,11 +571,9 @@ applyTransform transform (objFunction, constraints) =
     -- AddLowerBound: Add a GEQ constraint for the variable
     AddLowerBound v bound ->
       (objFunction, GEQ (M.singleton v 1) bound : constraints)
-
     -- AddUpperBound: Add a LEQ constraint for the variable
     AddUpperBound v bound ->
       (objFunction, LEQ (M.singleton v 1) bound : constraints)
-
     -- Shift: originalVar = shiftedVar + shiftBy (where shiftBy < 0)
     -- Substitute: wherever we see originalVar, replace with shiftedVar
     -- and adjust the RHS by -coeff * shiftBy
@@ -576,9 +581,8 @@ applyTransform transform (objFunction, constraints) =
       ( applyShiftToObjective origVar shiftedVar shiftBy objFunction
       , map (applyShiftToConstraint origVar shiftedVar shiftBy) constraints
       )
-
     -- Split: originalVar = posVar - negVar
-    -- Substitute: wherever we see originalVar with coeff c, 
+    -- Substitute: wherever we see originalVar with coeff c,
     -- replace with posVar with coeff c and negVar with coeff -c
     Split origVar posVar negVar ->
       ( applySplitToObjective origVar posVar negVar objFunction
@@ -612,13 +616,13 @@ applyShiftToConstraint origVar shiftedVar shiftBy constraint =
   case constraint of
     LEQ m rhs ->
       let (newMap, rhsAdjust) = substituteVarInMap origVar shiftedVar shiftBy m
-      in LEQ newMap (rhs - rhsAdjust)
+      in  LEQ newMap (rhs - rhsAdjust)
     GEQ m rhs ->
       let (newMap, rhsAdjust) = substituteVarInMap origVar shiftedVar shiftBy m
-      in GEQ newMap (rhs - rhsAdjust)
+      in  GEQ newMap (rhs - rhsAdjust)
     EQ m rhs ->
       let (newMap, rhsAdjust) = substituteVarInMap origVar shiftedVar shiftBy m
-      in EQ newMap (rhs - rhsAdjust)
+      in  EQ newMap (rhs - rhsAdjust)
   where
     substituteVarInMap :: Var -> Var -> SimplexNum -> VarLitMapSum -> (VarLitMapSum, SimplexNum)
     substituteVarInMap oldVar newVar shift m =
@@ -669,24 +673,21 @@ unapplyTransformToVarMap transform valMap =
   case transform of
     -- AddLowerBound: No variable substitution was done, nothing to unapply
     AddLowerBound {} -> valMap
-
     -- AddUpperBound: No variable substitution was done, nothing to unapply
     AddUpperBound {} -> valMap
-
     -- Shift: originalVar = shiftedVar + shiftBy
     -- So originalVar's value = shiftedVar's value + shiftBy
     Shift origVar shiftedVar shiftBy ->
       let shiftedVal = M.findWithDefault 0 shiftedVar valMap
           origVal = shiftedVal + shiftBy
-      in M.insert origVar origVal (M.delete shiftedVar valMap)
-
+      in  M.insert origVar origVal (M.delete shiftedVar valMap)
     -- Split: originalVar = posVar - negVar
     -- So originalVar's value = posVar's value - negVar's value
     Split origVar posVar negVar ->
       let posVal = M.findWithDefault 0 posVar valMap
           negVal = M.findWithDefault 0 negVar valMap
           origVal = posVal - negVal
-      in M.insert origVar origVal (M.delete posVar (M.delete negVar valMap))
+      in  M.insert origVar origVal (M.delete posVar (M.delete negVar valMap))
 
 -- | Perform the simplex pivot algorithm on a system with basic vars, assume that the first row is the 'ObjectiveFunction'.
 simplexPivot :: (MonadIO m, MonadLogger m) => PivotObjective -> Dict -> m (Maybe Dict)
@@ -794,13 +795,13 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
               dictEntertingRow
                 & #varMapSum
                   %~ ( \basicEquation ->
-                        -- uncurry
-                        M.insert
-                          leavingVariable
-                          (-1)
-                          (filterOutEnteringVarTerm basicEquation)
-                          & traverse
-                            %~ divideByNegatedEnteringVariableCoeff
+                         -- uncurry
+                         M.insert
+                           leavingVariable
+                           (-1)
+                           (filterOutEnteringVarTerm basicEquation)
+                           & traverse
+                             %~ divideByNegatedEnteringVariableCoeff
                      )
                 & #constant
                   %~ divideByNegatedEnteringVariableCoeff
