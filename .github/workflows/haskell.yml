@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: haskell-actions/run-fourmolu@3b7702b41516aa428dfe6e295dc73476ae58f69e # v11
         with:
-          version: "0.14.0.0"
+          version: "0.17.0.0"
   build:
     name: GHC ${{ matrix.ghc-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -43,12 +43,10 @@ jobs:
           echo "CABAL_VERSION=${CABAL_VERSION}" >> "${GITHUB_ENV}"
 
       - name: Check cabal file
-        run: cabal check
+        run: make cabal-check
 
       - name: Configure the build
-        run: |
-          cabal configure --enable-tests --enable-benchmarks --disable-documentation
-          cabal build --dry-run
+        run: make configure
 
       - name: Restore cached dependencies
         uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
@@ -61,7 +59,7 @@ jobs:
           restore-keys: ${{ env.key }}-
 
       - name: Build dependencies
-        run: cabal build --only-dependencies
+        run: make deps
 
       - name: Save cached dependencies
         uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
@@ -71,10 +69,10 @@ jobs:
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
       - name: Build the package
-        run: cabal build all
+        run: make build
 
       - name: Run tests
-        run: cabal test all
+        run: make test
 
       - name: Build documentation
-        run: cabal haddock all --disable-documentation
+        run: make docs
