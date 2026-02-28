@@ -106,19 +106,6 @@ tableauInDictionaryForm =
               }
     )
 
--- | Extract the objective value from an ObjectiveResult.
---  Returns Nothing if the result is Unbounded.
---  Returns Just the objective value if Optimal.
-extractObjectiveValue :: ObjectiveFunction -> ObjectiveResult -> Maybe SimplexNum
-extractObjectiveValue objFunction (ObjectiveResult _ outcome) =
-  case outcome of
-    Unbounded -> Nothing
-    Optimal varVals ->
-      let coeffs = case objFunction of
-            Max m -> m
-            Min m -> m
-      in  Just $ sum $ map (\(var, coeff) -> coeff * Map.findWithDefault 0 var varVals) (Map.toList coeffs)
-
 -- | Combines two 'VarLitMapSums together by summing values with matching keys
 combineVarLitMapSums :: VarLitMapSum -> VarLitMapSum -> VarLitMapSum
 combineVarLitMapSums =

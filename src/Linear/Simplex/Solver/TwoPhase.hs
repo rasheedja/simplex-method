@@ -147,14 +147,17 @@ findFeasibleSolution unsimplifiedSystem = do
     system = simplifySystem unsimplifiedSystem
 
     maxVar =
-      maximum $
-        map
-          ( \case
-              LEQ vcm _ -> maximum (map fst $ M.toList vcm)
-              GEQ vcm _ -> maximum (map fst $ M.toList vcm)
-              EQ vcm _ -> maximum (map fst $ M.toList vcm)
-          )
-          system
+      if null system
+        then 0
+        else
+          maximum $
+            map
+              ( \case
+                  LEQ vcm _ -> maximum (map fst $ M.toList vcm)
+                  GEQ vcm _ -> maximum (map fst $ M.toList vcm)
+                  EQ vcm _ -> maximum (map fst $ M.toList vcm)
+              )
+              system
 
     (systemWithSlackVars, slackVars) = systemInStandardForm system maxVar []
 
