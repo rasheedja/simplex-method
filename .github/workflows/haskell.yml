@@ -8,71 +8,48 @@ permissions:
   contents: read
 
 jobs:
-  fourmolu:
+  nix-ci:
     runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: haskell-actions/run-fourmolu@3b7702b41516aa428dfe6e295dc73476ae58f69e # v11
-        with:
-          version: "0.17.0.0"
-  build:
-    name: GHC ${{ matrix.ghc-version }} on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-        ghc-version: ["9.12", "9.10", "9.8", "9.6", "9.4", "9.2"]
+    env:
+      NIX_CONFIG: accept-flake-config = true
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Set up GHC ${{ matrix.ghc-version }}
-        uses: haskell-actions/setup@96f3dafd067155f32643c2a0757ab71d2910e2c2 # v2.8.0
-        id: setup
-        with:
-          ghc-version: ${{ matrix.ghc-version }}
+      - name: Check Nix flake inputs
+        uses: DeterminateSystems/flake-checker-action@3164002371bc90729c68af0e24d5aacf20d7c9f6 # v12
 
-      - name: Installed minor versions of GHC, Cabal, and Stack
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+
+      - name: Show toolchain versions from nix shell
         shell: bash
         run: |
-          GHC_VERSION=$(ghc --numeric-version)
-          CABAL_VERSION=$(cabal --numeric-version)
-          echo "GHC_VERSION=${GHC_VERSION}"     >> "${GITHUB_ENV}"
-          echo "CABAL_VERSION=${CABAL_VERSION}" >> "${GITHUB_ENV}"
+          nix develop --command bash -lc 'ghc --numeric-version'
+          nix develop --command bash -lc 'cabal --numeric-version'
+          nix develop --command bash -lc 'stack --numeric-version || true'
+          nix develop --command bash -lc 'fourmolu --version'
+
+      - name: Check formatting
+        run: nix develop --command make format-check
 
       - name: Check cabal file
-        run: make cabal-check
+        run: nix develop --command make cabal-check
 
       - name: Configure the build
-        run: make configure
-
-      - name: Restore cached dependencies
-        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        id: cache
-        env:
-          key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
-        with:
-          path: ${{ steps.setup.outputs.cabal-store }}
-          key: ${{ env.key }}-plan-${{ hashFiles('**/plan.json') }}
-          restore-keys: ${{ env.key }}-
+        run: nix develop --command make configure
 
       - name: Build dependencies
-        run: make deps
-
-      - name: Save cached dependencies
-        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        if: steps.cache.outputs.cache-hit != 'true'
-        with:
-          path: ${{ steps.setup.outputs.cabal-store }}
-          key: ${{ steps.cache.outputs.cache-primary-key }}
+        run: nix develop --command make deps
 
       - name: Build the package
-        run: make build
+        run: nix develop --command make build
 
       - name: Run tests
-        run: make test
+        run: nix develop --command make test
 
       - name: Build documentation
-        run: make docs
+        run: nix develop --command make docs
