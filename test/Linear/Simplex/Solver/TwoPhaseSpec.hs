@@ -2693,29 +2693,29 @@ spec = do
           \(coeff :: Rational) (oldRHS :: Rational) (shiftBy :: Rational) ->
             coeff
               /= 0
-                ==> let constraint = LEQ (M.fromList [(1, coeff)]) oldRHS
-                        LEQ _ newRHS = applyShiftToConstraint 1 10 shiftBy constraint
-                    in  newRHS == oldRHS - coeff * shiftBy
+              ==> let constraint = LEQ (M.fromList [(1, coeff)]) oldRHS
+                      LEQ _ newRHS = applyShiftToConstraint 1 10 shiftBy constraint
+                  in  newRHS == oldRHS - coeff * shiftBy
 
       it "preserves constraint type (LEQ stays LEQ)" $
         property $
           \(coeff :: Rational) (rhs :: Rational) (shiftBy :: Rational) ->
             coeff
               /= 0
-                ==> let constraint = LEQ (M.fromList [(1, coeff)]) rhs
-                    in  case applyShiftToConstraint 1 10 shiftBy constraint of
-                          LEQ {} -> True
-                          _ -> False
+              ==> let constraint = LEQ (M.fromList [(1, coeff)]) rhs
+                  in  case applyShiftToConstraint 1 10 shiftBy constraint of
+                        LEQ {} -> True
+                        _ -> False
 
       it "preserves constraint type (GEQ stays GEQ)" $
         property $
           \(coeff :: Rational) (rhs :: Rational) (shiftBy :: Rational) ->
             coeff
               /= 0
-                ==> let constraint = GEQ (M.fromList [(1, coeff)]) rhs
-                    in  case applyShiftToConstraint 1 10 shiftBy constraint of
-                          GEQ {} -> True
-                          _ -> False
+              ==> let constraint = GEQ (M.fromList [(1, coeff)]) rhs
+                  in  case applyShiftToConstraint 1 10 shiftBy constraint of
+                        GEQ {} -> True
+                        _ -> False
 
     describe "applySplitToConstraint properties" $ do
       it "preserves RHS value" $
@@ -2723,20 +2723,20 @@ spec = do
           \(coeff :: Rational) (rhs :: Rational) ->
             coeff
               /= 0
-                ==> let constraint = LEQ (M.fromList [(1, coeff)]) rhs
-                        LEQ _ newRHS = applySplitToConstraint 1 10 11 constraint
-                    in  newRHS == rhs
+              ==> let constraint = LEQ (M.fromList [(1, coeff)]) rhs
+                      LEQ _ newRHS = applySplitToConstraint 1 10 11 constraint
+                  in  newRHS == rhs
 
       it "negVar coefficient is negation of posVar coefficient" $
         property $
           \(coeff :: Rational) (rhs :: Rational) ->
             coeff
               /= 0
-                ==> let constraint = LEQ (M.fromList [(1, coeff)]) rhs
-                        LEQ m _ = applySplitToConstraint 1 10 11 constraint
-                        posCoeff = M.findWithDefault 0 10 m
-                        negCoeff = M.findWithDefault 0 11 m
-                    in  negCoeff == negate posCoeff
+              ==> let constraint = LEQ (M.fromList [(1, coeff)]) rhs
+                      LEQ m _ = applySplitToConstraint 1 10 11 constraint
+                      posCoeff = M.findWithDefault 0 10 m
+                      negCoeff = M.findWithDefault 0 11 m
+                  in  negCoeff == negate posCoeff
 
     describe "unapplyTransformToVarMap Shift properties" $ do
       it "recovers originalVar = shiftedVar + shiftBy" $
@@ -2779,12 +2779,13 @@ spec = do
           \(origVal :: Rational) (shiftBy :: Rational) ->
             shiftBy
               < 0
-                ==> let shiftedVal -- Only negative shifts are valid
-                          = origVal - shiftBy -- shiftedVar = originalVar - shiftBy
-                        varMap = M.fromList [(5, 100), (10, shiftedVal)]
-                        transform = Shift 1 10 shiftBy
-                        newVarMap = unapplyTransformToVarMap transform varMap
-                    in  M.lookup 1 newVarMap == Just origVal
+              ==> let shiftedVal -- Only negative shifts are valid
+                        =
+                        origVal - shiftBy -- shiftedVar = originalVar - shiftBy
+                      varMap = M.fromList [(5, 100), (10, shiftedVal)]
+                      transform = Shift 1 10 shiftBy
+                      newVarMap = unapplyTransformToVarMap transform varMap
+                  in  M.lookup 1 newVarMap == Just origVal
 
       it "Split with posVal=origVal and negVal=0 gives correct value for positive origVal" $
         property $
