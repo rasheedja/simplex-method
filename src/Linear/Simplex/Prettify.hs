@@ -12,11 +12,10 @@
 -- Converts "Linear.Simplex.Types" types into human-readable 'String's
 module Linear.Simplex.Prettify where
 
-import Control.Lens
 import Data.Generics.Labels ()
 import Data.Map qualified as M
-import Data.Ratio
-import Linear.Simplex.Types
+import Data.Ratio (denominator, numerator)
+import Linear.Simplex.Types (ObjectiveFunction (..), PolyConstraint (..), VarLitMapSum)
 
 -- | Convert a 'VarLitMapSum' into a human-readable 'String'
 prettyShowVarLitMapSum :: VarLitMapSum -> String

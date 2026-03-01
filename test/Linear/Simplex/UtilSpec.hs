@@ -6,11 +6,26 @@ import Prelude hiding (EQ)
 
 import Control.Exception (evaluate)
 import qualified Data.Map as M
-import Test.Hspec
-import Test.QuickCheck
+import Test.Hspec (Spec, anyErrorCall, describe, expectationFailure, it, shouldBe, shouldThrow)
+import Test.QuickCheck (Positive (..), property)
 
 import Linear.Simplex.Types
+  ( DictValue (..)
+  , ObjectiveFunction (..)
+  , PivotObjective (..)
+  , PolyConstraint (..)
+  , TableauRow (..)
+  , VarLitMapSum
+  )
 import Linear.Simplex.Util
+  ( combineVarLitMapSums
+  , dictionaryFormToTableau
+  , foldVarLitMap
+  , insertPivotObjectiveToDict
+  , isMax
+  , simplifySystem
+  , tableauInDictionaryForm
+  )
 
 spec :: Spec
 spec = do

@@ -5,18 +5,47 @@ module Linear.Simplex.Solver.TwoPhaseSpec where
 
 import Prelude hiding (EQ)
 
-import Control.Monad.Logger
+import Control.Monad.Logger (LogLevel (LevelInfo), filterLogger, runStdoutLoggingT)
 import qualified Data.Map as M
 import Data.Maybe (isJust)
-import Data.Ratio
+import Data.Ratio ((%))
 import qualified Data.Set as Set
 
-import Test.Hspec
-import Test.QuickCheck
+import Test.Hspec (Spec, describe, expectationFailure, it, shouldBe, shouldSatisfy)
+import Test.QuickCheck (NonEmptyList (..), Positive (..), property, (==>))
 
-import Linear.Simplex.Prettify
+import Linear.Simplex.Prettify (prettyShowObjectiveFunction, prettyShowPolyConstraint, prettyShowVarLitMapSum)
 import Linear.Simplex.Solver.TwoPhase
+  ( applyShiftToConstraint
+  , applyShiftToObjective
+  , applySplitToConstraint
+  , applySplitToObjective
+  , applyTransform
+  , applyTransforms
+  , collectAllVars
+  , computeObjective
+  , generateTransform
+  , getTransform
+  , postprocess
+  , preprocess
+  , twoPhaseSimplex
+  , unapplyTransformToVarMap
+  , unapplyTransformsToVarMap
+  )
 import Linear.Simplex.Types
+  ( ObjectiveFunction (..)
+  , ObjectiveResult (..)
+  , OptimisationOutcome (..)
+  , PolyConstraint (..)
+  , SimplexResult (..)
+  , VarDomainMap (..)
+  , VarTransform (..)
+  , boundedRange
+  , lowerBoundOnly
+  , nonNegative
+  , unbounded
+  , upperBoundOnly
+  )
 
 spec :: Spec
 spec = do
@@ -2662,47 +2691,52 @@ spec = do
       it "RHS adjustment follows formula: newRHS = oldRHS - coeff * shiftBy" $
         property $
           \(coeff :: Rational) (oldRHS :: Rational) (shiftBy :: Rational) ->
-            coeff /= 0 ==>
-              let constraint = LEQ (M.fromList [(1, coeff)]) oldRHS
-                  LEQ _ newRHS = applyShiftToConstraint 1 10 shiftBy constraint
-              in  newRHS == oldRHS - coeff * shiftBy
+            coeff
+              /= 0
+                ==> let constraint = LEQ (M.fromList [(1, coeff)]) oldRHS
+                        LEQ _ newRHS = applyShiftToConstraint 1 10 shiftBy constraint
+                    in  newRHS == oldRHS - coeff * shiftBy
 
       it "preserves constraint type (LEQ stays LEQ)" $
         property $
           \(coeff :: Rational) (rhs :: Rational) (shiftBy :: Rational) ->
-            coeff /= 0 ==>
-              let constraint = LEQ (M.fromList [(1, coeff)]) rhs
-              in  case applyShiftToConstraint 1 10 shiftBy constraint of
-                    LEQ {} -> True
-                    _ -> False
+            coeff
+              /= 0
+                ==> let constraint = LEQ (M.fromList [(1, coeff)]) rhs
+                    in  case applyShiftToConstraint 1 10 shiftBy constraint of
+                          LEQ {} -> True
+                          _ -> False
 
       it "preserves constraint type (GEQ stays GEQ)" $
         property $
           \(coeff :: Rational) (rhs :: Rational) (shiftBy :: Rational) ->
-            coeff /= 0 ==>
-              let constraint = GEQ (M.fromList [(1, coeff)]) rhs
-              in  case applyShiftToConstraint 1 10 shiftBy constraint of
-                    GEQ {} -> True
-                    _ -> False
+            coeff
+              /= 0
+                ==> let constraint = GEQ (M.fromList [(1, coeff)]) rhs
+                    in  case applyShiftToConstraint 1 10 shiftBy constraint of
+                          GEQ {} -> True
+                          _ -> False
 
     describe "applySplitToConstraint properties" $ do
       it "preserves RHS value" $
         property $
           \(coeff :: Rational) (rhs :: Rational) ->
-            coeff /= 0 ==>
-              let constraint = LEQ (M.fromList [(1, coeff)]) rhs
-                  LEQ _ newRHS = applySplitToConstraint 1 10 11 constraint
-              in  newRHS == rhs
+            coeff
+              /= 0
+                ==> let constraint = LEQ (M.fromList [(1, coeff)]) rhs
+                        LEQ _ newRHS = applySplitToConstraint 1 10 11 constraint
+                    in  newRHS == rhs
 
       it "negVar coefficient is negation of posVar coefficient" $
         property $
           \(coeff :: Rational) (rhs :: Rational) ->
-            coeff /= 0 ==>
-              let constraint = LEQ (M.fromList [(1, coeff)]) rhs
-                  LEQ m _ = applySplitToConstraint 1 10 11 constraint
-                  posCoeff = M.findWithDefault 0 10 m
-                  negCoeff = M.findWithDefault 0 11 m
-              in  negCoeff == negate posCoeff
+            coeff
+              /= 0
+                ==> let constraint = LEQ (M.fromList [(1, coeff)]) rhs
+                        LEQ m _ = applySplitToConstraint 1 10 11 constraint
+                        posCoeff = M.findWithDefault 0 10 m
+                        negCoeff = M.findWithDefault 0 11 m
+                    in  negCoeff == negate posCoeff
 
     describe "unapplyTransformToVarMap Shift properties" $ do
       it "recovers originalVar = shiftedVar + shiftBy" $
@@ -2743,12 +2777,14 @@ spec = do
       it "Shift transform and unapply is identity for variable value" $
         property $
           \(origVal :: Rational) (shiftBy :: Rational) ->
-            shiftBy < 0 ==> -- Only negative shifts are valid
-              let shiftedVal = origVal - shiftBy -- shiftedVar = originalVar - shiftBy
-                  varMap = M.fromList [(5, 100), (10, shiftedVal)]
-                  transform = Shift 1 10 shiftBy
-                  newVarMap = unapplyTransformToVarMap transform varMap
-              in  M.lookup 1 newVarMap == Just origVal
+            shiftBy
+              < 0
+                ==> let shiftedVal -- Only negative shifts are valid
+                          = origVal - shiftBy -- shiftedVar = originalVar - shiftBy
+                        varMap = M.fromList [(5, 100), (10, shiftedVal)]
+                        transform = Shift 1 10 shiftBy
+                        newVarMap = unapplyTransformToVarMap transform varMap
+                    in  M.lookup 1 newVarMap == Just origVal
 
       it "Split with posVal=origVal and negVal=0 gives correct value for positive origVal" $
         property $

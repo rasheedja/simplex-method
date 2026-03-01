@@ -7,20 +7,19 @@
 -- Stability   : experimental
 module Linear.Simplex.Types where
 
-import Control.Lens
 import Data.Generics.Labels ()
 import Data.List (sort)
 import qualified Data.Map as M
 import GHC.Generics (Generic)
 
--- | Variable identifier used in maps and constraints.
--- Conventionally this maps to x1, x2, ... in examples.
+-- | Variable identifier
 type Var = Int
 
--- | Numeric type used throughout simplex computations.
+-- | Numeric type used in this library
 type SimplexNum = Rational
 
--- | A feasible system produced by phase one, ready for phase two optimization.
+-- | A feasible system, typically produced by phase one of
+-- the two-phase simplex method.
 data FeasibleSystem = FeasibleSystem
   { dict :: Dict
   , slackVars :: [Var]

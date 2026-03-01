@@ -9,13 +9,10 @@
 -- Helper functions for performing the two-phase simplex method.
 module Linear.Simplex.Util where
 
-import Control.Lens
 import Control.Monad.IO.Class (MonadIO (..))
-import Control.Monad.Logger (LogLevel (..), LogLine, MonadLogger, logDebug, logError, logInfo, logWarn)
-import Data.Bifunctor
+import Control.Monad.Logger (LogLevel (..), MonadLogger, logDebug, logError, logInfo, logWarn)
 import Data.Generics.Labels ()
-import Data.Generics.Product (field)
-import Data.List
+import Data.List (nub, (\\))
 import qualified Data.Map as Map
 import qualified Data.Map.Merge.Lazy as MapMerge
 import Data.Maybe (fromMaybe)
@@ -23,6 +20,18 @@ import qualified Data.Text as T
 import Data.Time (getCurrentTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Linear.Simplex.Types
+  ( Dict
+  , DictValue (..)
+  , ObjectiveFunction (..)
+  , PivotObjective (..)
+  , PolyConstraint (..)
+  , SimplexNum
+  , Tableau
+  , TableauRow (..)
+  , Var
+  , VarLitMap
+  , VarLitMapSum
+  )
 import Prelude hiding (EQ)
 
 -- | Is the given 'ObjectiveFunction' to be 'Max'imized?

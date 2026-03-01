@@ -34,13 +34,11 @@ module Linear.Simplex.Solver.TwoPhase
 
 import Prelude hiding (EQ)
 
-import qualified Control.Applicative as LPPaver
-import Control.Lens
+import Control.Lens ((%~), (&), (.~), (<&>))
 import Control.Monad (unless)
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Logger
-import Data.Bifunctor
-import Data.List
+import Control.Monad.Logger (LogLevel (LevelError, LevelInfo, LevelWarn), MonadLogger)
+import Data.Bifunctor (second)
 import qualified Data.Map as M
 import Data.Maybe (fromJust, fromMaybe, mapMaybe)
 import Data.Ratio (denominator, numerator, (%))
@@ -49,7 +47,38 @@ import qualified Data.Set as Set
 import qualified Data.Text as Text
 import GHC.Real (Ratio)
 import Linear.Simplex.Types
+  ( Dict
+  , DictValue (..)
+  , FeasibleSystem (..)
+  , ObjectiveFunction (..)
+  , ObjectiveResult (..)
+  , OptimisationOutcome (..)
+  , PivotObjective (..)
+  , PolyConstraint (..)
+  , SimplexNum
+  , SimplexResult (..)
+  , Tableau
+  , TableauRow (..)
+  , Var
+  , VarDomain (..)
+  , VarDomainMap (..)
+  , VarLitMap
+  , VarLitMapSum
+  , VarTransform (..)
+  , nonNegative
+  , unbounded
+  )
 import Linear.Simplex.Util
+  ( combineVarLitMapSums
+  , dictionaryFormToTableau
+  , foldVarLitMap
+  , insertPivotObjectiveToDict
+  , isMax
+  , logMsg
+  , showT
+  , simplifySystem
+  , tableauInDictionaryForm
+  )
 
 -- | Find a feasible solution for the given system of 'PolyConstraint's by performing the first phase of the two-phase simplex method
 --  All variables in the 'PolyConstraint' must be positive.
