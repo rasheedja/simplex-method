@@ -19,9 +19,9 @@
           compiler-nix-name = "ghc967";
           shell = {
             tools = {
-              cabal = "3.16.0.0";
+              cabal = "3.16.1.0";
               hlint = "3.8";
-              haskell-language-server = "2.11.0.0";
+              haskell-language-server = "2.13.0.0";
               fourmolu = "0.17.0.0";
             };
             buildInputs = with pkgs; [
