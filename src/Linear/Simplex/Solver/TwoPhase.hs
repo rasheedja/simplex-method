@@ -827,13 +827,13 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
               dictEntertingRow
                 & #varMapSum
                   %~ ( \basicEquation ->
-                         -- uncurry
-                         M.insert
-                           leavingVariable
-                           (-1)
-                           (filterOutEnteringVarTerm basicEquation)
-                           & traverse
-                             %~ divideByNegatedEnteringVariableCoeff
+                        -- uncurry
+                        M.insert
+                          leavingVariable
+                          (-1)
+                          (filterOutEnteringVarTerm basicEquation)
+                          & traverse
+                            %~ divideByNegatedEnteringVariableCoeff
                      )
                 & #constant
                   %~ divideByNegatedEnteringVariableCoeff
