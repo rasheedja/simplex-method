@@ -1,45 +1,37 @@
 {
   inputs = {
-    haskellNix.url = "github:input-output-hk/haskell.nix";
-    nixpkgs.follows = "haskellNix/nixpkgs-2505";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils, haskellNix }:
+  outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        overlays = [ haskellNix.overlay ];
-        pkgs = import nixpkgs {
-          inherit system overlays;
-          inherit (haskellNix) config;
+        pkgs = import nixpkgs { inherit system; };
+        hsPkgs = pkgs.haskell.packages.ghc96;
+      in {
+        devShells.default = pkgs.mkShell {
+          buildInputs = [
+            # Haskell Tools
+            hsPkgs.ghc
+            pkgs.cabal-install
+            hsPkgs.fourmolu
+            hsPkgs.hlint
+            hsPkgs.haskell-language-server
+            # C libraries needed by Haskell deps and GHC runtime
+            pkgs.zlib
+            pkgs.zstd
+            pkgs.xz
+            pkgs.bzip2
+            pkgs.libffi
+            pkgs.gmp
+            pkgs.ncurses
+            # Other tools
+            pkgs.bash # Workaround for copilot breaking in nix+direnv shells
+            pkgs.git
+            pkgs.gh
+            pkgs.jujutsu
+          ];
         };
-
-        project = pkgs.haskell-nix.cabalProject' {
-          src = ./.;
-          compiler-nix-name = "ghc967";
-          shell = {
-            tools = {
-              cabal = "3.16.1.0";
-              hlint = "3.8";
-              haskell-language-server = "2.13.0.0";
-              fourmolu = "0.17.0.0";
-            };
-            buildInputs = with pkgs; [
-              # system dependencies go here
-            ];
-          };
-        };
-
-        flake = project.flake {};
-      in flake);
-  
-  # --- Flake Local Nix Configuration ---
-  nixConfig = {
-    # This sets the flake to use the IOG nix cache.
-    # Nix should ask for permission before using it,
-    # but remove it here if you do not want it to.
-    extra-substituters = ["https://cache.iog.io"];
-    extra-trusted-public-keys = ["hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="];
-    allow-import-from-derivation = "true";
-  };
+      });
 }

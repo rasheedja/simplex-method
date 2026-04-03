@@ -1,4 +1,4 @@
-name: Haskell CI with Nix
+name: Nix CI
 
 on:
   push:
@@ -10,8 +10,6 @@ permissions:
 jobs:
   nix-ci:
     runs-on: ubuntu-latest
-    env:
-      NIX_CONFIG: accept-flake-config = true
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -25,34 +23,16 @@ jobs:
       - name: Enable Nix cache
         uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
 
-      - name: Show toolchain versions from nix shell
-        shell: bash
+      - name: Build and test
         run: |
-          nix develop --command bash -lc 'ghc --numeric-version'
-          nix develop --command bash -lc 'cabal --numeric-version'
-          nix develop --command bash -lc 'stack --numeric-version || true'
-          nix develop --command bash -lc 'fourmolu --version'
-
-      - name: Check formatting
-        run: nix develop --command make format-check
-
-      - name: Check cabal file
-        run: nix develop --command make cabal-check
-
-      - name: Update cabal package index
-        run: nix develop --command make cabal-update
-
-      - name: Configure the build
-        run: nix develop --command make configure
-
-      - name: Build dependencies
-        run: nix develop --command make deps
-
-      - name: Build the package
-        run: nix develop --command make build
-
-      - name: Run tests
-        run: nix develop --command make test
-
-      - name: Build documentation
-        run: nix develop --command make docs
+          nix develop --command bash -c '
+            # hsc2hs-generated test binaries crash in nix shells on Linux
+            # ("stack smashing detected") due to hardening flags.
+            # Replace hsc2hs with a wrapper that adds --cross-compile to
+            # avoid running those binaries entirely.
+            real=$(which hsc2hs)
+            mkdir -p /tmp/bin
+            printf "#!/bin/sh\nexec %s --cross-compile \"\$@\"\n" "$real" > /tmp/bin/hsc2hs
+            chmod +x /tmp/bin/hsc2hs
+            CABAL_CONFIGURE_FLAGS="--with-hsc2hs=/tmp/bin/hsc2hs" make ci
+          '

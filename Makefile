@@ -20,7 +20,7 @@ cabal-update:
 
 .PHONY: configure
 configure:
-	cabal configure --enable-tests --enable-benchmarks --disable-documentation
+	cabal configure --enable-tests --enable-benchmarks --disable-documentation $(CABAL_CONFIGURE_FLAGS)
 	cabal build --dry-run
 
 .PHONY: deps
