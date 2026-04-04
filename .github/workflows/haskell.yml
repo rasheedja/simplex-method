@@ -14,9 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: haskell-actions/run-fourmolu@v11
+      - uses: haskell-actions/run-fourmolu@015e6ed9db2b3f344482792d42b7317c764eb30f # v12
         with:
-          version: "0.17.0.0"
+          version: "0.15.0.0"
 
   build:
     name: GHC ${{ matrix.ghc-version }} on ${{ matrix.os }}
