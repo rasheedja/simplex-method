@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  nix-ci:
+  cabal:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,7 +23,7 @@ jobs:
       - name: Enable Nix cache
         uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
 
-      - name: Build and test
+      - name: Build and test (cabal)
         run: |
           nix develop --command bash -c '
             # hsc2hs-generated test binaries crash in nix shells on Linux
@@ -36,3 +36,18 @@ jobs:
             chmod +x /tmp/bin/hsc2hs
             CABAL_CONFIGURE_FLAGS="--with-hsc2hs=/tmp/bin/hsc2hs" make ci
           '
+
+  stack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+
+      - name: Build and test (stack)
+        run: nix develop --command make stack-ci

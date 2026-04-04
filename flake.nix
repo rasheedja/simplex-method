@@ -15,6 +15,7 @@
             # Haskell Tools
             hsPkgs.ghc
             pkgs.cabal-install
+            pkgs.stack
             hsPkgs.fourmolu
             hsPkgs.hlint
             hsPkgs.haskell-language-server
