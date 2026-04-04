@@ -35,11 +35,6 @@ packages:
 #   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
 #
 extra-deps:
-  - QuickCheck-2.16.0.0
-  - hspec-2.11.17
-  - hspec-core-2.11.17
-  - hspec-discover-2.11.17
-  - hspec-expectations-0.8.4
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
@@ -64,5 +59,3 @@ extra-deps:
 #
 # Allow a newer minor version of GHC than the snapshot specifies
 # compiler-check: newer-minor
-
-system-ghc: true
