@@ -1,0 +1,53 @@
+name: Nix CI
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cabal:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check Nix flake inputs
+        uses: DeterminateSystems/flake-checker-action@3164002371bc90729c68af0e24d5aacf20d7c9f6 # v12
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+
+      - name: Build and test (cabal)
+        run: |
+          nix develop --command bash -c '
+            # hsc2hs-generated test binaries crash in nix shells on Linux
+            # ("stack smashing detected") due to hardening flags.
+            # Replace hsc2hs with a wrapper that adds --cross-compile to
+            # avoid running those binaries entirely.
+            real=$(which hsc2hs)
+            mkdir -p /tmp/bin
+            printf "#!/bin/sh\nexec %s --cross-compile \"\$@\"\n" "$real" > /tmp/bin/hsc2hs
+            chmod +x /tmp/bin/hsc2hs
+            CABAL_CONFIGURE_FLAGS="--with-hsc2hs=/tmp/bin/hsc2hs" make ci
+          '
+
+  stack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+
+      - name: Build and test (stack)
+        run: nix develop --command make stack-ci

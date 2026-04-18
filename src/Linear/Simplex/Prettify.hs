@@ -12,15 +12,14 @@
 -- Converts "Linear.Simplex.Types" types into human-readable 'String's
 module Linear.Simplex.Prettify where
 
-import Control.Lens
 import Data.Generics.Labels ()
 import Data.Map qualified as M
-import Data.Ratio
-import Linear.Simplex.Types
+import Data.Ratio (denominator, numerator)
+import Linear.Simplex.Types (ObjectiveFunction (..), PolyConstraint (..), VarLitMapSum)
 
--- | Convert a 'VarConstMap' into a human-readable 'String'
-prettyShowVarConstMap :: VarLitMapSum -> String
-prettyShowVarConstMap = aux . M.toList
+-- | Convert a 'VarLitMapSum' into a human-readable 'String'
+prettyShowVarLitMapSum :: VarLitMapSum -> String
+prettyShowVarLitMapSum = aux . M.toList
   where
     aux [] = ""
     aux ((vName, vCoeff) : vs) = prettyShowRational vCoeff ++ " * " ++ show vName ++ " + " ++ aux vs
@@ -34,11 +33,11 @@ prettyShowVarConstMap = aux . M.toList
 
 -- | Convert a 'PolyConstraint' into a human-readable 'String'
 prettyShowPolyConstraint :: PolyConstraint -> String
-prettyShowPolyConstraint (LEQ vcm r) = prettyShowVarConstMap vcm ++ " <= " ++ show r
-prettyShowPolyConstraint (GEQ vcm r) = prettyShowVarConstMap vcm ++ " >= " ++ show r
-prettyShowPolyConstraint (Linear.Simplex.Types.EQ vcm r) = prettyShowVarConstMap vcm ++ " == " ++ show r
+prettyShowPolyConstraint (LEQ vcm r) = prettyShowVarLitMapSum vcm ++ " <= " ++ show r
+prettyShowPolyConstraint (GEQ vcm r) = prettyShowVarLitMapSum vcm ++ " >= " ++ show r
+prettyShowPolyConstraint (Linear.Simplex.Types.EQ vcm r) = prettyShowVarLitMapSum vcm ++ " == " ++ show r
 
 -- | Convert an 'ObjectiveFunction' into a human-readable 'String'
 prettyShowObjectiveFunction :: ObjectiveFunction -> String
-prettyShowObjectiveFunction (Min vcm) = "min: " ++ prettyShowVarConstMap vcm
-prettyShowObjectiveFunction (Max vcm) = "max: " ++ prettyShowVarConstMap vcm
+prettyShowObjectiveFunction (Min vcm) = "min: " ++ prettyShowVarLitMapSum vcm
+prettyShowObjectiveFunction (Max vcm) = "max: " ++ prettyShowVarLitMapSum vcm

@@ -2,3 +2,6 @@
 *~
 dist-*/
 .vscode/*
+.direnv/*
+.envrc
+cabal.project.local

@@ -9,13 +9,10 @@
 -- Helper functions for performing the two-phase simplex method.
 module Linear.Simplex.Util where
 
-import Control.Lens
 import Control.Monad.IO.Class (MonadIO (..))
-import Control.Monad.Logger (LogLevel (..), LogLine, MonadLogger, logDebug, logError, logInfo, logWarn)
-import Data.Bifunctor
+import Control.Monad.Logger (LogLevel (..), MonadLogger, logDebug, logError, logInfo, logWarn)
 import Data.Generics.Labels ()
-import Data.Generics.Product (field)
-import Data.List
+import Data.List (nub, (\\))
 import qualified Data.Map as Map
 import qualified Data.Map.Merge.Lazy as MapMerge
 import Data.Maybe (fromMaybe)
@@ -23,6 +20,18 @@ import qualified Data.Text as T
 import Data.Time (getCurrentTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Linear.Simplex.Types
+  ( Dict
+  , DictValue (..)
+  , ObjectiveFunction (..)
+  , PivotObjective (..)
+  , PolyConstraint (..)
+  , SimplexNum
+  , Tableau
+  , TableauRow (..)
+  , Var
+  , VarLitMap
+  , VarLitMapSum
+  )
 import Prelude hiding (EQ)
 
 -- | Is the given 'ObjectiveFunction' to be 'Max'imized?
@@ -30,7 +39,7 @@ isMax :: ObjectiveFunction -> Bool
 isMax (Max _) = True
 isMax (Min _) = False
 
--- | Simplifies a system of 'PolyConstraint's by first calling 'simplifyPolyConstraint',
+-- | Simplifies a system of 'PolyConstraint's,
 --  then reducing 'LEQ' and 'GEQ' with same LHS and RHS (and other similar situations) into 'EQ',
 --  and finally removing duplicate elements using 'nub'.
 simplifySystem :: [PolyConstraint] -> [PolyConstraint]
@@ -78,7 +87,7 @@ simplifySystem = nub . reduceSystem
             then EQ lhs rhs : reduceSystem pcs
             else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
 
--- | Converts a 'Dict' to a 'Tableau' using 'dictEntryToTableauEntry'.
+-- | Converts a 'Dict' to a 'Tableau'.
 --  FIXME: maybe remove this line. The basic variables will have a coefficient of 1 in the 'Tableau'.
 dictionaryFormToTableau :: Dict -> Tableau
 dictionaryFormToTableau =
@@ -106,15 +115,6 @@ tableauInDictionaryForm =
               }
     )
 
--- | If this function is given 'Nothing', return 'Nothing'.
---  Otherwise, we 'lookup' the 'Integer' given in the first item of the pair in the map given in the second item of the pair.
---  This is typically used to extract the value of the 'ObjectiveFunction' after calling 'Linear.Simplex.Solver.TwoPhase.twoPhaseSimplex'.
-extractObjectiveValue :: Maybe Result -> Maybe SimplexNum
-extractObjectiveValue = fmap $ \result ->
-  case Map.lookup result.objectiveVar result.varValMap of
-    Nothing -> error "Objective not found in results when extracting objective value"
-    Just r -> r
-
 -- | Combines two 'VarLitMapSums together by summing values with matching keys
 combineVarLitMapSums :: VarLitMapSum -> VarLitMapSum -> VarLitMapSum
 combineVarLitMapSums =
@@ -125,17 +125,6 @@ combineVarLitMapSums =
   where
     keepVal = const pure
     sumVals k v1 v2 = Just $ v1 + v2
-
-foldDictValue :: [DictValue] -> DictValue
-foldDictValue [] = error "Empty list of DictValues given to foldDictValue"
-foldDictValue [x] = x
-foldDictValue (DictValue {varMapSum = vm1, constant = c1} : DictValue {varMapSum = vm2, constant = c2} : dvs) =
-  let combinedDictValue =
-        DictValue
-          { varMapSum = foldVarLitMap [vm1, vm2]
-          , constant = c1 + c2
-          }
-  in  foldDictValue $ combinedDictValue : dvs
 
 foldVarLitMap :: [VarLitMap] -> VarLitMap
 foldVarLitMap [] = error "Empty list of VarLitMaps given to foldVarLitMap"
@@ -154,7 +143,7 @@ foldVarLitMap (vm1 : vm2 : vms) =
                         (Just vm1VarVal, Just vm2VarVal) -> vm1VarVal + vm2VarVal
                         (Just vm1VarVal, Nothing) -> vm1VarVal
                         (Nothing, Just vm2VarVal) -> vm2VarVal
-                        (Nothing, Nothing) -> error "Reached unreachable branch in foldDictValue"
+                        (Nothing, Nothing) -> error "Reached unreachable branch in foldVarLitMap"
                     )
             )
             combinedVars
@@ -176,9 +165,3 @@ logMsg lvl msg = do
     LevelWarn -> $logWarn msgToLog
     LevelError -> $logError msgToLog
     LevelOther otherLvl -> error "logMsg: LevelOther is not implemented"
-
-extractTableauValues :: Tableau -> Map.Map Var SimplexNum
-extractTableauValues = Map.map (.rhs)
-
-extractDictValues :: Dict -> Map.Map Var SimplexNum
-extractDictValues = Map.map (.constant)

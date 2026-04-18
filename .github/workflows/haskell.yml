@@ -2,129 +2,82 @@ name: Haskell CI
 
 on:
   push:
-    branches:
-      - '*'
-  pull_request:
-    branches: [ "master" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   fourmolu:
-
     runs-on: ubuntu-latest
-  
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: haskell-actions/run-fourmolu@v9
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: haskell-actions/run-fourmolu@015e6ed9db2b3f344482792d42b7317c764eb30f # v12
         with:
-          version: "0.14.0.0"
+          version: "0.15.0.0"
+
   build:
     name: GHC ${{ matrix.ghc-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-        ghc-version: ['9.6', '9.4', '9.2', '9.0']
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        ghc-version: ['9.12', '9.10', '9.8', '9.6', '9.4', '9.2']
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up GHC ${{ matrix.ghc-version }}
-        uses: haskell/actions/setup@v2
+        uses: haskell-actions/setup@v2
         id: setup
         with:
           ghc-version: ${{ matrix.ghc-version }}
-          enable-stack: true
+          cabal-version: "3.16.1.0"
 
-      - name: Installed minor versions of GHC, Cabal, and Stack
+      - name: Show toolchain versions
         shell: bash
         run: |
-          GHC_VERSION=$(ghc --numeric-version)
-          CABAL_VERSION=$(cabal --numeric-version)
-          STACK_VERSION=$(stack --numeric-version)
-          echo "GHC_VERSION=${GHC_VERSION}"     >> "${GITHUB_ENV}"
-          echo "CABAL_VERSION=${CABAL_VERSION}" >> "${GITHUB_ENV}"
-          echo "STACK_VERSION=${STACK_VERSION}" >> "${GITHUB_ENV}"
-
-      - name: Configure the build
-        run: |
-          # cabal configure --enable-tests --enable-benchmarks --disable-documentation
-          # cabal build --dry-run
-          stack build --test --bench --no-haddock --dry-run
-        # The last step generates dist-newstyle/cache/plan.json for the cache key.
-
-      - name: Restore .stack-work cache
-        uses: actions/cache/restore@v3
-        id: cache-restore-stack-work
-        with:
-          path: .stack-work
-          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-work-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}-${{ hashFiles('**/*.hs') }}
-          restore-keys: |
-            ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-work-
-      
-      - name: Restore ~/.stack cache (Unix)
-        uses: actions/cache/restore@v3
-        id: cache-restore-stack-global-unix
-        if: runner.os == 'Linux' || runner.os == 'macOS'
-        with:
-          path: ~/.stack
-          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-
-
-      - name: Restore %APPDATA%\stack, %LOCALAPPDATA%\Programs\stack cache (Windows)
-        uses: actions/cache/restore@v3
-        id: cache-restore-stack-global-windows
-        if: runner.os == 'Windows'
-        with:
-          path: |
-            ~\AppData\Roaming\stack
-            ~\AppData\Local\Programs\stack    
-          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-stack-${{ env.STACK_VERSION }}-stack-global-
-
-      - name: Build dependencies
-        run: stack build --only-dependencies
-
-      - name: Build the package
-        run: stack build
-
-      - name: Save .stack-work cache
-        uses: actions/cache/save@v3
-        id: cache-save-stack-work
-        if: steps.cache-restore-stack-work.outputs.cache-hit != 'true'
-        with:
-          path: .stack-work
-          key: ${{ steps.cache-restore-stack-work.outputs.cache-primary-key }}
-   
-      - name: Save %APPDATA%\stack, %LOCALAPPDATA%\Programs\stack cache (Windows)
-        uses: actions/cache/save@v3
-        if: runner.os == 'Windows'
-            && steps.cache-restore-stack-global-windows.outputs.cache-hit != 'true'
-        with:
-          path: |
-            ~\AppData\Roaming\stack
-            ~\AppData\Local\Programs\stack    
-          key: ${{ steps.cache-restore-stack-global-windows.outputs.cache-primary-key }}
-  
-      - name: Save ~/.stack cache (Unix)
-        uses: actions/cache/save@v3
-        id: cache-save-stack-global
-        if: (runner.os == 'Linux' || runner.os == 'macOS') 
-            && steps.cache-restore-stack-global-unix.outputs.cache-hit != 'true'
-        with:
-          path: ~/.stack
-          key: ${{ steps.cache-restore-stack-global-unix.outputs.cache-primary-key }}
-
-      - name: Run tests
-        run: stack test
+          ghc --numeric-version
+          cabal --numeric-version
 
       - name: Check cabal file
         run: cabal check
 
+      - name: Update cabal package index
+        run: cabal update
+
+      - name: Configure the build
+        run: |
+          cabal configure --enable-tests --enable-benchmarks --disable-documentation
+          cabal build --dry-run
+
+      - name: Restore cabal store cache
+        uses: actions/cache/restore@v4
+        id: cache-restore
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: ${{ runner.os }}-ghc-${{ matrix.ghc-version }}-cabal-${{ hashFiles('**/plan.json') }}
+          restore-keys: |
+            ${{ runner.os }}-ghc-${{ matrix.ghc-version }}-cabal-
+
+      - name: Build dependencies
+        run: cabal build --only-dependencies
+
+      - name: Save cabal store cache
+        uses: actions/cache/save@v4
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: ${{ steps.cache-restore.outputs.cache-primary-key }}
+
+      - name: Build the package
+        run: cabal build all
+
+      - name: Run tests
+        run: cabal test all
+
       - name: Build documentation
-        run: stack haddock
+        run: cabal haddock all --disable-documentation
