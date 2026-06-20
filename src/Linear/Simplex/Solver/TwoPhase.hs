@@ -523,7 +523,7 @@ preprocess objFunctions (VarDomainMap domainMap) constraints =
       maxVar = if Set.null allVars then 0 else Set.findMax allVars
       -- Generate transforms for each variable based on its domain
       -- Variables not in domainMap are treated as Unbounded
-      (transforms, _) = foldr (generateTransform domainMap) ([], maxVar) (Set.toList allVars)
+      (transforms, _) = foldr (generateTransform domainMap) ([], maxVar + 1) (Set.toList allVars)
       -- Apply transforms to get the transformed system
       transformedObjs = map (\obj -> fst $ applyTransforms transforms obj constraints) objFunctions
       (_, transformedConstraints) = case objFunctions of

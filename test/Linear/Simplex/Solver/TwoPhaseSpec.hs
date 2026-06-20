@@ -1429,6 +1429,21 @@ spec = do
         SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just (-5)
         _ -> expectationFailure "Unexpected result format"
 
+    it "keeps Shift fresh variables distinct from existing non-negative variables" $ do
+      let obj = Max (M.fromList [(2, 1)])
+          constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 5]
+          domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-1)), (2, nonNegative)]
+      actualResult <-
+        runStdoutLoggingT $
+          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
+            twoPhaseSimplex domainMap [obj] constraints
+      case actualResult of
+        SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
+        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
+          varMap `shouldBe` M.fromList [(1, -1), (2, 6)]
+          computeObjective obj varMap `shouldBe` 6
+        _ -> expectationFailure "Unexpected result format"
+
     it "Split transformation for unbounded variable (max)" $ do
       let obj = Max (M.fromList [(1, 1)])
           constraints =
@@ -2626,6 +2641,28 @@ spec = do
         let (_, _, transforms) = preprocess [obj] domainMap constraints
         -- Should have AddLowerBound for var 2, Shift for var 3
         length transforms `shouldBe` 2
+      it "assigns fresh variables strictly greater than maxVar (no collision)" $ do
+        -- Reproduces the off-by-one bug: when maxVar (not maxVar+1) was used as
+        -- the fresh-var seed, a Shift on a lower-id variable could reuse a
+        -- higher-id variable's id, causing coefficient corruption via M.insert.
+        -- Variables: x=1 (Shift, negative bound), y=2 (NonNegative, no fresh var)
+        -- foldr processes y first (no fresh var consumed), then x.
+        -- With fix: x gets fresh var 3 (maxVar+1). Bug: x would get var 2 (collision).
+        let obj = Max (M.fromList [(1, 3), (2, -1)])
+            constraints = [LEQ (M.fromList [(1, 3), (2, -1)]) 0]
+            domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-1)), (2, nonNegative)]
+            ([_newObj], _newConstraints, transforms) = preprocess [obj] domainMap constraints
+            originalVars = Set.fromList [1, 2]
+            freshVarIds =
+              [shiftedVar | Shift _ shiftedVar _ <- transforms]
+                ++ [v | Split _ v _ <- transforms]
+                ++ [v | Split _ _ v <- transforms]
+        -- No fresh var should equal an existing variable
+        freshVarIds `shouldSatisfy` all (`Set.notMember` originalVars)
+        -- The single Shift should use var 3 (maxVar + 1), not var 2 (maxVar)
+        case transforms of
+          [Shift {originalVar = 1, shiftedVar = sv}] -> sv `shouldBe` 3
+          _ -> expectationFailure "Expected exactly one Shift 1->3 transform"
 
   -- ===========================================================================
   -- Property-based tests
@@ -2686,6 +2723,42 @@ spec = do
             in  case getTransform (abs nextVar + 1) (abs v + 1) (boundedRange lower upper) of
                   (transforms, _) ->
                     any (\case AddUpperBound var u -> var == abs v + 1 && u == upper; _ -> False) transforms
+
+    describe "preprocess fresh variable invariance" $ do
+      it "fresh variables are above original vars and pairwise distinct" $
+        property $
+          \(Positive shiftMagnitude :: Positive Rational) (extraBounds :: [Rational]) ->
+            let -- Always include Split, Shift, and a higher non-fresh variable.
+                -- With the old maxVar seed, Shift var 20 reused original var 30.
+                coreEntries =
+                  [ (1, unbounded)
+                  , (20, lowerBoundOnly (negate shiftMagnitude))
+                  , (30, nonNegative)
+                  ]
+                -- Add up to 5 generated extras below var 20, still mixing domain types.
+                buildExtra i b
+                  | i `mod` 3 == 0 = (i + 10, nonNegative)
+                  | i `mod` 3 == 1 = (i + 10, lowerBoundOnly (negate (abs b + 1)))
+                  | otherwise = (i + 10, unbounded)
+                domainEntries = coreEntries ++ zipWith buildExtra [(0 :: Int) ..] (take 5 extraBounds)
+                allVars = map fst domainEntries
+                domainMap = VarDomainMap $ M.fromList domainEntries
+                obj = Max (M.fromList [(v, 1) | v <- allVars])
+                constraints = [LEQ (M.fromList [(v, 1) | v <- allVars]) 100]
+                ([_], _, transforms) = preprocess [obj] domainMap constraints
+                origVarSet = Set.fromList allVars
+                freshVarIds =
+                  [v | Shift _ v _ <- transforms]
+                    ++ [v | Split _ v _ <- transforms]
+                    ++ [v | Split _ _ v <- transforms]
+                freshVarSet = Set.fromList freshVarIds
+                maxOriginalVar = Set.findMax origVarSet
+                hasShift = any (\case Shift {} -> True; _ -> False) transforms
+                hasSplit = any (\case Split {} -> True; _ -> False) transforms
+            in  hasShift
+                  && hasSplit
+                  && all (> maxOriginalVar) freshVarIds
+                  && Set.size freshVarSet == length freshVarIds
 
     describe "applyShiftToConstraint properties" $ do
       it "RHS adjustment follows formula: newRHS = oldRHS - coeff * shiftBy" $
