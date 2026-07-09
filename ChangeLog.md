@@ -1,4 +1,4 @@
-# Changelog for simplex-haskell
+# Changelog for simplex-method
 
 ## Unreleased changes
 
@@ -31,7 +31,7 @@
 - Explicit import lists on all modules
 - Bump Stackage LTS to 22.44
 
-## [v0.2.0.0](https://github.com/rasheedja/LPPaver/tree/v0.2.0.0)
+## [v0.2.0.0](https://github.com/rasheedja/simplex-method/tree/v0.2.0.0)
 
 - Setup CI
 - Use fourmolu formatter
@@ -44,6 +44,6 @@
 - Bump Stackage LTS
 - Rename Linear.Simplex.Simplex -> Linear.Simplex.TwoPhase.Simplex
 
-## [v0.1.0.0](https://github.com/rasheedja/LPPaver/tree/v0.1.0.0)
+## [v0.1.0.0](https://github.com/rasheedja/simplex-method/tree/v0.1.0.0)
 
 - Initial release
