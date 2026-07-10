@@ -1,139 +1,202 @@
 # simplex-method
 
-`simplex-method` is a Haskell library that implements the two-phase [simplex method](https://en.wikipedia.org/wiki/Simplex_algorithm) in exact rational arithmetic.
+`simplex-method` is a Haskell library that implements the two-phase
+[simplex method](https://en.wikipedia.org/wiki/Simplex_algorithm) in exact
+rational arithmetic.
 
 ## Quick Overview
 
-The `Linear.Simplex.Solver.TwoPhase` module contain both phases of the two-phase simplex method.
+The `Linear.Simplex.Solver.TwoPhase` module contains phase-one feasibility
+search, phase-two optimization, and a convenience `twoPhaseSimplex` entrypoint
+that runs both phases.
 
-### Phase One
-
-Phase one is implemented by `findFeasibleSolution`:
+Variables are identified by positive `Int` values, and all numeric values use
+`Rational`:
 
 ```haskell
-findFeasibleSolution :: (MonadIO m, MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
+type Var = Int
+type SimplexNum = Rational
+type VarLitMapSum = Map Var SimplexNum
 ```
 
-`findFeasibleSolution` takes a list of `PolyConstraint`s.
-The `PolyConstraint` type, as well as other custom types required by this library, are defined in the `Linear.Simplex.Types` module.
-`PolyConstraint` is defined as:
+`VarLitMapSum` represents a linear expression. For example,
+`Map.fromList [(1, 2), (2, -3)]` represents `2x1 - 3x2`.
+
+## Constraints And Objectives
+
+Constraints use `LEQ`, `GEQ`, and `EQ`:
 
 ```haskell
 data PolyConstraint
   = LEQ {lhs :: VarLitMapSum, rhs :: SimplexNum}
   | GEQ {lhs :: VarLitMapSum, rhs :: SimplexNum}
   | EQ {lhs :: VarLitMapSum, rhs :: SimplexNum}
-  deriving (Show, Read, Eq, Generic)
 ```
 
-`SimplexNum` is an alias for `Rational`, and `VarLitMapSum` is an alias for `VarLitMap`, which is an alias for `Map Var SimplexNum`.
-`Var` is an alias of `Int`.
-
-A `VarLitMapSum` is read as `Integer` variables mapped to their `Rational` coefficients, with an implicit `+` between each entry.
-For example: `Map.fromList [(1, 2), (2, (-3)), (1, 3)]` is equivalent to `(2x1 + (-3x2) + 3x1)`.
-
-And a `PolyConstraint` is an inequality/equality where the LHS is a `VarLitMapSum` and the RHS is a `Rational`.
-For example: `LEQ (Map.fromList [(1, 2), (2, (-3)), (1, 3)] 60)` is equivalent to `(2x1 + (-3x2) + 3x1) <= 60`.
-
-Passing a `[PolyConstraint]` to `findFeasibleSolution` will return a `FeasibleSystem` if a feasible solution exists:
+Objectives use `Max` or `Min`:
 
 ```haskell
-data FeasibleSystem = FeasibleSystem
-  { dict :: Dict
-  , slackVars :: [Var]
-  , artificialVars :: [Var]
-  , objectiveVar :: Var
+data ObjectiveFunction
+  = Max {objective :: VarLitMapSum}
+  | Min {objective :: VarLitMapSum}
+```
+
+## Variable Domains
+
+`twoPhaseSimplex` accepts a `VarDomainMap` so variables can be non-negative,
+unbounded, lower-bounded, upper-bounded, or bounded on both sides:
+
+```haskell
+newtype VarDomainMap = VarDomainMap {unVarDomainMap :: Map Var VarDomain}
+
+nonNegative :: VarDomain
+unbounded :: VarDomain
+lowerBoundOnly :: Rational -> VarDomain
+upperBoundOnly :: Rational -> VarDomain
+boundedRange :: Rational -> Rational -> VarDomain
+```
+
+Variables missing from the `VarDomainMap` are treated as `unbounded`. To keep
+the traditional simplex assumption that every variable is non-negative, provide
+`nonNegative` for every variable in the problem.
+
+## Solving
+
+The main entrypoint is:
+
+```haskell
+twoPhaseSimplex ::
+  (MonadIO m, MonadLogger m) =>
+  VarDomainMap ->
+  [ObjectiveFunction] ->
+  [PolyConstraint] ->
+  m SimplexResult
+```
+
+`twoPhaseSimplex` can optimize multiple objectives over the same constraint set.
+Pass an empty objective list to run phase one only.
+
+Results are returned as:
+
+```haskell
+data SimplexResult = SimplexResult
+  { feasibleSystem :: Maybe FeasibleSystem
+  , objectiveResults :: [ObjectiveResult]
   }
-  deriving (Show, Read, Eq, Generic)
-```
 
-```haskell
-type Dict = M.Map Var DictValue
-
-data DictValue = DictValue
-  { varMapSum :: VarLitMapSum
-  , constant :: SimplexNum
+data ObjectiveResult = ObjectiveResult
+  { objectiveFunction :: ObjectiveFunction
+  , outcome :: OptimisationOutcome
   }
-  deriving (Show, Read, Eq, Generic)
+
+data OptimisationOutcome
+  = Optimal {varValMap :: VarLitMap}
+  | Unbounded
 ```
 
-`Dict` can be thought of as a set of equations, where the key represents a basic variable on the LHS of the equation
-that is equal to the RHS represented as a `DictValue` value.
+For an `Optimal` result, `varValMap` contains values for original decision
+variables. Variables with value zero may be absent from the map.
 
-### Phase Two
+`twoPhaseSimplex` applies domain transformations before solving. Its
+`feasibleSystem` field is therefore the feasible system for the transformed
+non-negative problem, while each `Optimal.varValMap` is postprocessed back into
+the original variable space.
 
-`optimizeFeasibleSystem` performs phase two of the simplex method, and has the type:
+`computeObjective` can be used to evaluate an objective against an optimal
+variable map:
 
 ```haskell
-
-optimizeFeasibleSystem :: (MonadIO m, MonadLogger m) => ObjectiveFunction -> FeasibleSystem -> m (Maybe Result)
-
-data ObjectiveFunction = Max {objective :: VarLitMapSum} | Min {objective :: VarLitMapSum}
-
-data Result = Result
-  { objectiveVar :: Var
-  , varValMap :: VarLitMap
-  }
-  deriving (Show, Read, Eq, Generic)
+computeObjective :: ObjectiveFunction -> Map Var Rational -> Rational
 ```
 
-We give `optimizeFeasibleSystem` an `ObjectiveFunction` along with a `FeasibleSystem`.
+## Phase One And Phase Two
 
-### Two-Phase Simplex
+The lower-level phase functions do not apply `VarDomainMap` transformations.
+Use them when the system is already in the non-negative variable space expected
+by simplex, or call `twoPhaseSimplex` when solving a problem with variable
+domain metadata.
 
-`twoPhaseSimplex` performs both phases of the simplex method.
-It has the type:
+For lower-level usage, phase one is exposed as:
 
 ```haskell
-twoPhaseSimplex :: (MonadIO m, MonadLogger m) => ObjectiveFunction -> [PolyConstraint] -> m (Maybe Result)
+findFeasibleSolution ::
+  (MonadIO m, MonadLogger m) =>
+  [PolyConstraint] ->
+  m (Maybe FeasibleSystem)
 ```
 
-### Extracting Results
-
-The result of the objective function is present in the returned `Result` type of both `twoPhaseSimplex` and `optimizeFeasibleSystem`, but this can be difficult to grok in systems with many variables, so the following function will extract the value of the objective function for you.
+Phase two can optimize a feasible system:
 
 ```haskell
-dictionaryFormToTableau :: Dict -> Tableau
+optimizeFeasibleSystem ::
+  (MonadIO m, MonadLogger m) =>
+  ObjectiveFunction ->
+  FeasibleSystem ->
+  m OptimisationOutcome
 ```
-
-There are similar functions for `DictionaryForm` as well as other custom types in the module `Linear.Simplex.Util`.
 
 ## Example
 
 ```haskell
-exampleFunction :: (ObjectiveFunction, [PolyConstraint])
-exampleFunction =
-  (
-    Max {objective = Map.fromList [(1, 3), (2, 5)]},      -- 3x1 + 5x2
-    [
-      LEQ {lhs = Map.fromList [(1, 3), (2, 1)], rhs = 15}, -- 3x1 + x2 <= 15 
-      LEQ {lhs = Map.fromList [(1, 1), (2, 1)], rhs = 7},  -- x1 + x2 <= 7
-      LEQ {lhs = Map.fromList [(2, 1)], rhs = 4},          -- x2 <= 4
-      LEQ {lhs = Map.fromList [(1, -1), (2, 2)], rhs = 6}  -- -x1 + 2x2 <= 6
-    ]
+import Control.Monad.Logger (LogLevel (LevelInfo), filterLogger, runStdoutLoggingT)
+import qualified Data.Map as Map
+import Linear.Simplex.Solver.TwoPhase (collectAllVars, computeObjective, twoPhaseSimplex)
+import Linear.Simplex.Types
+  ( ObjectiveFunction (Max)
+  , ObjectiveResult (ObjectiveResult)
+  , OptimisationOutcome (Optimal)
+  , PolyConstraint (LEQ)
+  , SimplexResult (SimplexResult)
+  , VarDomainMap (VarDomainMap)
+  , nonNegative
   )
 
-twoPhaseSimplex (fst exampleFunction) (snd exampleFunction)
+example :: IO ()
+example = do
+  let objective = Max (Map.fromList [(1, 3), (2, 5)])
+      constraints =
+        [ LEQ (Map.fromList [(1, 3), (2, 1)]) 15
+        , LEQ (Map.fromList [(1, 1), (2, 1)]) 7
+        , LEQ (Map.fromList [(2, 1)]) 4
+        , LEQ (Map.fromList [(1, -1), (2, 2)]) 6
+        ]
+      allVars = collectAllVars [objective] constraints
+      domainMap = VarDomainMap $ Map.fromSet (const nonNegative) allVars
+
+  SimplexResult feasibleSystem objectiveResults <-
+    runStdoutLoggingT $
+      filterLogger (\_ logLevel -> logLevel > LevelInfo) $
+      twoPhaseSimplex domainMap [objective] constraints
+
+  case (feasibleSystem, objectiveResults) of
+    (Just _, [ObjectiveResult _ (Optimal varMap)]) -> do
+      print varMap
+      print $ computeObjective objective varMap
+    (Just _, [_]) ->
+      putStrLn "Objective is unbounded"
+    _ ->
+      putStrLn "System is infeasible"
 ```
 
-The result of the call above is:
+Ignoring `Rational` formatting details, this prints an optimal assignment
+equivalent to:
 
 ```haskell
-Just 
-  (Result
-    { objectiveVar = 7 -- Integer representing objective function
-    , varValMap = Map.fromList  
-      [ (7, 29) -- Value for variable 7, so max(3x1 + 5x2) = 29.
-      , (1, 3) -- Value for variable 1, so x1 = 3 
-      , (2, 4) -- Value for variable 2, so x2 = 4
-      ]
-    }
-  )
+Map.fromList [(1, 3), (2, 4)]
+29
 ```
 
-There are many more examples in test/TestFunctions.hs.
-You may use `prettyShowVarConstMap`, `prettyShowPolyConstraint`, and `prettyShowObjectiveFunction` to convert these tests into a more human-readable format.
+## Pretty Printing
+
+`Linear.Simplex.Prettify` provides helpers for human-readable output:
+
+```haskell
+prettyShowVarLitMapSum :: VarLitMapSum -> String
+prettyShowPolyConstraint :: PolyConstraint -> String
+prettyShowObjectiveFunction :: ObjectiveFunction -> String
+```
 
 ## Issues
 
-Please share any bugs you find [here](https://github.com/rasheedja/simplex-haskell/issues).
+Please share any bugs you find at
+[github.com/rasheedja/simplex-method/issues](https://github.com/rasheedja/simplex-method/issues).
