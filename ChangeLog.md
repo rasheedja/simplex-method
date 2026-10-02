@@ -2,6 +2,7 @@
 
 ## Unreleased changes
 
+- Remove unused pivot bindings and give the active row-update helper a descriptive name. ([#21](https://github.com/rasheedja/simplex-method/pull/21))
 - `twoPhaseSimplex` now takes a `VarDomainMap` as its first argument
   - Specify each variable's domain using smart constructors: `nonNegative`, `unbounded`, `lowerBoundOnly`, `upperBoundOnly`, or `boundedRange`
   - Variables not in the `VarDomainMap` are assumed to be `unbounded`
