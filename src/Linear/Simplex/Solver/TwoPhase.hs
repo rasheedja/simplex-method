@@ -85,7 +85,28 @@ import Linear.Simplex.Util
 --  If the system is infeasible, return 'Nothing'
 --  Otherwise, return the feasible system in 'Dict' as well as a list of slack variables, a list artificial variables, and the objective variable.
 findFeasibleSolution :: (MonadIO m, MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
-findFeasibleSolution unsimplifiedSystem = do
+findFeasibleSolution = findFeasibleSolutionWithReservedVars Set.empty
+
+-- Reserve objective variables before allocating slack, artificial, and objective IDs.
+findFeasibleSolutionWithReservedVars ::
+  (MonadIO m, MonadLogger m) => Set Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
+findFeasibleSolutionWithReservedVars reservedVars constraints
+  | any isContradictoryConstant constraints = pure Nothing
+  | otherwise = findFeasibleVariableSystem maxVar variableConstraints
+  where
+    variableConstraints = filter (any (/= 0) . (.lhs)) constraints
+    maxVar = fromMaybe 0 $ Set.lookupMax (reservedVars <> collectAllVars [] variableConstraints)
+
+    isContradictoryConstant constraint =
+      all (== 0) constraint.lhs && case constraint of
+        LEQ _ rhs -> 0 > rhs
+        GEQ _ rhs -> 0 < rhs
+        EQ _ rhs -> 0 /= rhs
+
+-- Constant rows have already been evaluated, and maxVar covers every reserved ID.
+findFeasibleVariableSystem ::
+  (MonadIO m, MonadLogger m) => Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
+findFeasibleVariableSystem maxVar unsimplifiedSystem = do
   logMsg LevelInfo $ "findFeasibleSolution: Looking for solution for " <> showT unsimplifiedSystem
   if null artificialVars -- No artificial vars, we have a feasible system
     then do
@@ -174,19 +195,6 @@ findFeasibleSolution unsimplifiedSystem = do
           pure Nothing
   where
     system = simplifySystem unsimplifiedSystem
-
-    maxVar =
-      if null system
-        then 0
-        else
-          maximum $
-            map
-              ( \case
-                  LEQ vcm _ -> maximum (map fst $ M.toList vcm)
-                  GEQ vcm _ -> maximum (map fst $ M.toList vcm)
-                  EQ vcm _ -> maximum (map fst $ M.toList vcm)
-              )
-              system
 
     (systemWithSlackVars, slackVars) = systemInStandardForm system maxVar []
 
@@ -455,7 +463,8 @@ twoPhaseSimplex domainMap objFunctions constraints = do
       <> showT transformedObjs
       <> "; Transformed constraints: "
       <> showT transformedConstraints
-  mFeasibleSystem <- findFeasibleSolution transformedConstraints
+  mFeasibleSystem <-
+    findFeasibleSolutionWithReservedVars (collectAllVars transformedObjs transformedConstraints) transformedConstraints
   case mFeasibleSystem of
     Nothing -> do
       logMsg LevelInfo "twoPhaseSimplex: No feasible solution found in phase 1"
