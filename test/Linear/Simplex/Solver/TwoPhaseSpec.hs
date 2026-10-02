@@ -5,7 +5,7 @@ module Linear.Simplex.Solver.TwoPhaseSpec where
 
 import Prelude hiding (EQ)
 
-import Control.Monad.Logger (LogLevel (LevelInfo), filterLogger, runStdoutLoggingT)
+import Control.Monad.Logger (LogLevel (LevelInfo), filterLogger, runNoLoggingT, runStdoutLoggingT)
 import qualified Data.Map as M
 import Data.Maybe (isJust)
 import Data.Ratio ((%))
@@ -2221,6 +2221,37 @@ spec = do
             (x1 + x2) `shouldSatisfy` (>= 0)
           _ -> expectationFailure "Unexpected result format"
 
+  describe "constant constraints" $ do
+    let tautologies = [LEQ M.empty 1, LEQ M.empty 0, GEQ M.empty (-1), GEQ M.empty 0, EQ M.empty 0]
+        contradictions = [LEQ M.empty (-1), GEQ M.empty 1, EQ M.empty 1, EQ M.empty (-1)]
+    mapM_
+      ( \constraint ->
+          it ("accepts constant tautology " ++ show constraint) $ do
+            result <- runNoLoggingT $ twoPhaseSimplex (VarDomainMap M.empty) [] [constraint]
+            result.feasibleSystem `shouldSatisfy` isJust
+      )
+      tautologies
+    mapM_
+      ( \constraint ->
+          it ("rejects constant contradiction " ++ show constraint) $ do
+            result <- runNoLoggingT $ twoPhaseSimplex (VarDomainMap M.empty) [] [constraint]
+            result `shouldBe` SimplexResult Nothing []
+      )
+      contradictions
+
+    it "optimizes variable constraints alongside constant tautologies" $ do
+      let obj = Max (M.singleton 1 1)
+          domains = VarDomainMap $ M.singleton 1 (boundedRange 0 3)
+      result <- runNoLoggingT $ twoPhaseSimplex domains [obj] (LEQ (M.singleton 1 1) 2 : tautologies)
+      case result.objectiveResults of
+        [ObjectiveResult _ (Optimal values)] -> computeObjective obj values `shouldBe` 2
+        _ -> expectationFailure $ "Unexpected result: " ++ show result
+
+    it "recognizes explicitly zero coefficients as constant constraints" $ do
+      let domains = VarDomainMap $ M.singleton 1 nonNegative
+      result <- runNoLoggingT $ twoPhaseSimplex domains [] [LEQ (M.singleton 1 0) (-1)]
+      result `shouldBe` SimplexResult Nothing []
+
   describe "twoPhaseSimplex edge cases and infeasibility" $ do
     it "Infeasible: negative lower bound conflicts with GEQ constraint" $ do
       -- x₁ ≥ -5 (domain), but x₁ ≥ 10 and x₁ ≤ 5 (constraints conflict)
@@ -3083,6 +3114,30 @@ spec = do
 
     it "shows Min objective" $ do
       prettyShowObjectiveFunction (Min (M.fromList [(1, 5)])) `shouldBe` "min: 5 * 1 + "
+
+  describe "objective-only variable allocation" $ do
+    it "keeps objective-only variables distinct from slack variables" $ do
+      let obj = Max (M.fromList [(1, 1), (2, 1)])
+          domains = VarDomainMap $ M.fromList [(1, nonNegative), (2, nonNegative)]
+      result <- runNoLoggingT $ twoPhaseSimplex domains [obj] [LEQ (M.singleton 1 1) 1]
+      result.feasibleSystem `shouldSatisfy` isJust
+      result.objectiveResults `shouldBe` [ObjectiveResult obj Unbounded]
+
+    it "reserves variables from later objectives when sharing phase one" $ do
+      let boundedObj = Max (M.singleton 1 1)
+          unboundedObj = Max (M.fromList [(1, 1), (2, 1)])
+          domains = VarDomainMap $ M.fromList [(1, nonNegative), (2, nonNegative)]
+      result <- runNoLoggingT $ twoPhaseSimplex domains [boundedObj, unboundedObj] [LEQ (M.singleton 1 1) 1]
+      case result.objectiveResults of
+        [ObjectiveResult _ (Optimal values), ObjectiveResult _ Unbounded] ->
+          computeObjective boundedObj values `shouldBe` 1
+        _ -> expectationFailure $ "Unexpected results: " ++ show result
+
+    it "reserves transformed objective-only variables" $ do
+      let obj = Max (M.fromList [(1, 1), (2, 1)])
+          domains = VarDomainMap $ M.fromList [(1, nonNegative), (2, unbounded)]
+      result <- runNoLoggingT $ twoPhaseSimplex domains [obj] [LEQ (M.singleton 1 1) 1]
+      result.objectiveResults `shouldBe` [ObjectiveResult obj Unbounded]
 
   describe "twoPhaseSimplex with multiple objectives" $ do
     it "optimizes two objectives over the same feasible region" $ do
