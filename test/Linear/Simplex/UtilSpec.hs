@@ -4,9 +4,8 @@ module Linear.Simplex.UtilSpec where
 
 import Prelude hiding (EQ)
 
-import Control.Exception (evaluate)
 import qualified Data.Map as M
-import Test.Hspec (Spec, anyErrorCall, describe, expectationFailure, it, shouldBe, shouldThrow)
+import Test.Hspec (Spec, describe, expectationFailure, it, shouldBe)
 import Test.QuickCheck (Positive (..), property)
 
 import Linear.Simplex.Types
@@ -243,8 +242,8 @@ spec = do
             m3 = M.fromList [(2, 7), (3, 5)]
         foldVarLitMap [m1, m2, m3] `shouldBe` M.fromList [(1, 3), (2, 10), (3, 5)]
 
-      it "throws error on empty list" $ do
-        evaluate (foldVarLitMap []) `shouldThrow` anyErrorCall
+      it "returns the zero expression for an empty list" $ do
+        foldVarLitMap [] `shouldBe` M.empty
 
     describe "Properties" $ do
       it "folding a singleton list is identity" $

@@ -2,6 +2,7 @@
 
 ## Unreleased changes
 
+- Support zero objectives after the artificial-variable phase and replace custom coefficient-map merging with standard Data.Map operations. ([#18](https://github.com/rasheedja/simplex-method/pull/18))
 - `twoPhaseSimplex` now takes a `VarDomainMap` as its first argument
   - Specify each variable's domain using smart constructors: `nonNegative`, `unbounded`, `lowerBoundOnly`, `upperBoundOnly`, or `boundedRange`
   - Variables not in the `VarDomainMap` are assumed to be `unbounded`
