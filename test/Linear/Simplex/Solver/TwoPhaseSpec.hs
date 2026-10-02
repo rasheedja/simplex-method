@@ -5,7 +5,7 @@ module Linear.Simplex.Solver.TwoPhaseSpec where
 
 import Prelude hiding (EQ)
 
-import Control.Monad.Logger (LogLevel (LevelInfo), filterLogger, runStdoutLoggingT)
+import Control.Monad.Logger (LogLevel (LevelInfo), filterLogger, runNoLoggingT, runStdoutLoggingT)
 import qualified Data.Map as M
 import Data.Maybe (isJust)
 import Data.Ratio ((%))
@@ -1235,6 +1235,21 @@ spec = do
             computeObjective obj varMap `shouldBe` (-8)
           SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
           _ -> expectationFailure "Unexpected result"
+
+  describe "zero objectives after phase one" $ do
+    mapM_
+      ( \obj ->
+          it ("optimizes " ++ show obj ++ " after introducing artificial variables") $ do
+            let domains = VarDomainMap $ M.singleton 1 nonNegative
+            result <- runNoLoggingT $ twoPhaseSimplex domains [obj] [GEQ (M.singleton 1 1) 1]
+            result.feasibleSystem `shouldSatisfy` isJust
+            case result.objectiveResults of
+              [ObjectiveResult _ (Optimal values)] -> do
+                computeObjective obj values `shouldBe` 0
+                M.findWithDefault 0 1 values `shouldSatisfy` (>= 1)
+              _ -> expectationFailure $ "Unexpected result: " ++ show result
+      )
+      [Max M.empty, Min M.empty]
 
   describe "twoPhaseSimplex with empty constraint system" $ do
     describe "Single variable with boundedRange" $ do
