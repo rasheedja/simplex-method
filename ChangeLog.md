@@ -2,6 +2,7 @@
 
 ## Unreleased changes
 
+- Correct fractional coefficients in pretty-printed expressions and remove trailing plus separators. ([#19](https://github.com/rasheedja/simplex-method/pull/19))
 - `twoPhaseSimplex` now takes a `VarDomainMap` as its first argument
   - Specify each variable's domain using smart constructors: `nonNegative`, `unbounded`, `lowerBoundOnly`, `upperBoundOnly`, or `boundedRange`
   - Variables not in the `VarDomainMap` are assumed to be `unbounded`
