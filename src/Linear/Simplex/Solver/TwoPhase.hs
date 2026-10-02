@@ -504,10 +504,7 @@ postprocess originalVars transforms (Optimal varVals) =
 -- | Compute the value of an objective function given variable values.
 computeObjective :: ObjectiveFunction -> M.Map Var SimplexNum -> SimplexNum
 computeObjective objFunction varVals =
-  let coeffs = case objFunction of
-        Max m -> m
-        Min m -> m
-  in  sum $ map (\(var, coeff) -> coeff * M.findWithDefault 0 var varVals) (M.toList coeffs)
+  sum $ map (\(var, coeff) -> coeff * M.findWithDefault 0 var varVals) (M.toList objFunction.objective)
 
 -- | Preprocess the system by applying variable transformations based on domain information.
 -- Returns the transformed objectives, constraints, and the list of transforms applied.
@@ -539,18 +536,9 @@ applyTransformsToConstraints transforms constraints =
 -- | Collect all variables appearing in the objective functions and constraints
 collectAllVars :: [ObjectiveFunction] -> [PolyConstraint] -> Set Var
 collectAllVars objFunctions constraints =
-  let objVars = Set.unions $ map getObjVars objFunctions
-      constraintVars = Set.unions $ map getConstraintVars constraints
-  in  Set.union objVars constraintVars
-  where
-    getObjVars :: ObjectiveFunction -> Set Var
-    getObjVars (Max m) = M.keysSet m
-    getObjVars (Min m) = M.keysSet m
-
-    getConstraintVars :: PolyConstraint -> Set Var
-    getConstraintVars (LEQ m _) = M.keysSet m
-    getConstraintVars (GEQ m _) = M.keysSet m
-    getConstraintVars (EQ m _) = M.keysSet m
+  Set.unions $
+    map (M.keysSet . (.objective)) objFunctions
+      ++ map (M.keysSet . (.lhs)) constraints
 
 -- | Generate a transform for a variable based on its domain.
 -- Takes the domain map, the variable, and the current (transforms, nextFreshVar).
@@ -627,15 +615,7 @@ applyTransform transform (objFunction, constraints) =
 -- The constant term changes but objectives don't have constants that affect optimization.
 applyShiftToObjective :: Var -> Var -> SimplexNum -> ObjectiveFunction -> ObjectiveFunction
 applyShiftToObjective origVar shiftedVar _shiftBy objFunction =
-  case objFunction of
-    Max m -> Max (substituteVar origVar shiftedVar m)
-    Min m -> Min (substituteVar origVar shiftedVar m)
-  where
-    substituteVar :: Var -> Var -> VarLitMapSum -> VarLitMapSum
-    substituteVar oldVar newVar m =
-      case M.lookup oldVar m of
-        Nothing -> m
-        Just coeff -> M.insert newVar coeff (M.delete oldVar m)
+  objFunction {objective = fst $ shiftVarInMap origVar shiftedVar 0 objFunction.objective}
 
 -- | Apply shift transformation to a constraint.
 -- originalVar = shiftedVar + shiftBy
@@ -645,53 +625,36 @@ applyShiftToObjective origVar shiftedVar _shiftBy objFunction =
 -- So new constraint: (replace originalVar with shiftedVar) REL (rhs - c_j * shiftBy)
 applyShiftToConstraint :: Var -> Var -> SimplexNum -> PolyConstraint -> PolyConstraint
 applyShiftToConstraint origVar shiftedVar shiftBy constraint =
-  case constraint of
-    LEQ m rhs ->
-      let (newMap, rhsAdjust) = substituteVarInMap origVar shiftedVar shiftBy m
-      in  LEQ newMap (rhs - rhsAdjust)
-    GEQ m rhs ->
-      let (newMap, rhsAdjust) = substituteVarInMap origVar shiftedVar shiftBy m
-      in  GEQ newMap (rhs - rhsAdjust)
-    EQ m rhs ->
-      let (newMap, rhsAdjust) = substituteVarInMap origVar shiftedVar shiftBy m
-      in  EQ newMap (rhs - rhsAdjust)
-  where
-    substituteVarInMap :: Var -> Var -> SimplexNum -> VarLitMapSum -> (VarLitMapSum, SimplexNum)
-    substituteVarInMap oldVar newVar shift m =
-      case M.lookup oldVar m of
-        Nothing -> (m, 0)
-        Just coeff -> (M.insert newVar coeff (M.delete oldVar m), coeff * shift)
+  let (newMap, rhsAdjust) = shiftVarInMap origVar shiftedVar shiftBy constraint.lhs
+  in  constraint {lhs = newMap, rhs = constraint.rhs - rhsAdjust}
+
+-- Substitute a shifted variable and return the constant offset introduced.
+shiftVarInMap :: Var -> Var -> SimplexNum -> VarLitMapSum -> (VarLitMapSum, SimplexNum)
+shiftVarInMap oldVar newVar shift coeffs =
+  case M.lookup oldVar coeffs of
+    Nothing -> (coeffs, 0)
+    Just coeff -> (M.insert newVar coeff (M.delete oldVar coeffs), coeff * shift)
 
 -- | Apply split transformation to objective function.
 -- originalVar = posVar - negVar
 -- coefficient c of originalVar becomes c for posVar and -c for negVar
 applySplitToObjective :: Var -> Var -> Var -> ObjectiveFunction -> ObjectiveFunction
 applySplitToObjective origVar posVar negVar objFunction =
-  case objFunction of
-    Max m -> Max (splitVar origVar posVar negVar m)
-    Min m -> Min (splitVar origVar posVar negVar m)
-  where
-    splitVar :: Var -> Var -> Var -> VarLitMapSum -> VarLitMapSum
-    splitVar oldVar pVar nVar m =
-      case M.lookup oldVar m of
-        Nothing -> m
-        Just coeff -> M.insert pVar coeff (M.insert nVar (-coeff) (M.delete oldVar m))
+  objFunction {objective = splitVarInMap origVar posVar negVar objFunction.objective}
 
 -- | Apply split transformation to a constraint.
 -- originalVar = posVar - negVar
 -- coefficient c of originalVar becomes c for posVar and -c for negVar
 applySplitToConstraint :: Var -> Var -> Var -> PolyConstraint -> PolyConstraint
 applySplitToConstraint origVar posVar negVar constraint =
-  case constraint of
-    LEQ m rhs -> LEQ (splitVarInMap origVar posVar negVar m) rhs
-    GEQ m rhs -> GEQ (splitVarInMap origVar posVar negVar m) rhs
-    EQ m rhs -> EQ (splitVarInMap origVar posVar negVar m) rhs
-  where
-    splitVarInMap :: Var -> Var -> Var -> VarLitMapSum -> VarLitMapSum
-    splitVarInMap oldVar pVar nVar m =
-      case M.lookup oldVar m of
-        Nothing -> m
-        Just coeff -> M.insert pVar coeff (M.insert nVar (-coeff) (M.delete oldVar m))
+  constraint {lhs = splitVarInMap origVar posVar negVar constraint.lhs}
+
+-- Substitute oldVar = posVar - negVar in a coefficient map.
+splitVarInMap :: Var -> Var -> Var -> VarLitMapSum -> VarLitMapSum
+splitVarInMap oldVar posVar negVar coeffs =
+  case M.lookup oldVar coeffs of
+    Nothing -> coeffs
+    Just coeff -> M.insert posVar coeff (M.insert negVar (-coeff) (M.delete oldVar coeffs))
 
 -- | Unapply transforms to convert a variable value map back to original variables.
 unapplyTransformsToVarMap :: [VarTransform] -> VarLitMap -> VarLitMap
