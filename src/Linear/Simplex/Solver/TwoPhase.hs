@@ -838,30 +838,15 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
                 & #constant
                   %~ divideByNegatedEnteringVariableCoeff
               where
-                newEnteringVarTerm = (leavingVariable, -1)
                 divideByNegatedEnteringVariableCoeff = (/ negate enteringVariableCoeff)
 
             -- Substitute pivot equation into other rows
             updatedRows :: Dict
             updatedRows =
-              M.fromList $ map (uncurry f2) $ M.toList dict
+              M.fromList $ map (uncurry updateRow) $ M.toList dict
               where
-                f entryVar entryVal =
-                  if leavingVariable == entryVar
-                    then pivotEnteringRow
-                    else case M.lookup enteringVariable (entryVal.varMapSum) of
-                      Just subsCoeff ->
-                        entryVal
-                          & #varMapSum
-                            .~ combineVarLitMapSums
-                              (pivotEnteringRow.varMapSum <&> (subsCoeff *))
-                              (filterOutEnteringVarTerm (entryVal.varMapSum))
-                          & #constant
-                            .~ ((subsCoeff * (pivotEnteringRow.constant)) + entryVal.constant)
-                      Nothing -> entryVal
-
-                f2 :: Var -> DictValue -> (Var, DictValue)
-                f2 entryVar entryVal =
+                updateRow :: Var -> DictValue -> (Var, DictValue)
+                updateRow entryVar entryVal =
                   if leavingVariable == entryVar
                     then (enteringVariable, pivotEnteringRow)
                     else case M.lookup enteringVariable (entryVal.varMapSum) of
