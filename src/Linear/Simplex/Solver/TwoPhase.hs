@@ -28,6 +28,8 @@ module Linear.Simplex.Solver.TwoPhase
   , applyShiftToConstraint
   , applySplitToObjective
   , applySplitToConstraint
+  , shiftVarInMap
+  , splitVarInMap
   , unapplyTransformsToVarMap
   , unapplyTransformToVarMap
   ) where
@@ -626,14 +628,7 @@ applyShiftToObjective origVar shiftedVar _shiftBy objFunction =
 applyShiftToConstraint :: Var -> Var -> SimplexNum -> PolyConstraint -> PolyConstraint
 applyShiftToConstraint origVar shiftedVar shiftBy constraint =
   let (newMap, rhsAdjust) = shiftVarInMap origVar shiftedVar shiftBy constraint.lhs
-  in  constraint {lhs = newMap, rhs = constraint.rhs - rhsAdjust}
-
--- Substitute a shifted variable and return the constant offset introduced.
-shiftVarInMap :: Var -> Var -> SimplexNum -> VarLitMapSum -> (VarLitMapSum, SimplexNum)
-shiftVarInMap oldVar newVar shift coeffs =
-  case M.lookup oldVar coeffs of
-    Nothing -> (coeffs, 0)
-    Just coeff -> (M.insert newVar coeff (M.delete oldVar coeffs), coeff * shift)
+  in  constraint & #lhs .~ newMap & #rhs %~ subtract rhsAdjust
 
 -- | Apply split transformation to objective function.
 -- originalVar = posVar - negVar
@@ -647,9 +642,18 @@ applySplitToObjective origVar posVar negVar objFunction =
 -- coefficient c of originalVar becomes c for posVar and -c for negVar
 applySplitToConstraint :: Var -> Var -> Var -> PolyConstraint -> PolyConstraint
 applySplitToConstraint origVar posVar negVar constraint =
-  constraint {lhs = splitVarInMap origVar posVar negVar constraint.lhs}
+  constraint & #lhs %~ splitVarInMap origVar posVar negVar
 
--- Substitute oldVar = posVar - negVar in a coefficient map.
+-- | Substitute a shifted variable and return the constant offset introduced.
+-- The replacement variable must be fresh.
+shiftVarInMap :: Var -> Var -> SimplexNum -> VarLitMapSum -> (VarLitMapSum, SimplexNum)
+shiftVarInMap oldVar newVar shift coeffs =
+  case M.lookup oldVar coeffs of
+    Nothing -> (coeffs, 0)
+    Just coeff -> (M.insert newVar coeff (M.delete oldVar coeffs), coeff * shift)
+
+-- | Substitute oldVar = posVar - negVar in a coefficient map.
+-- The replacement variables must be distinct and fresh.
 splitVarInMap :: Var -> Var -> Var -> VarLitMapSum -> VarLitMapSum
 splitVarInMap oldVar posVar negVar coeffs =
   case M.lookup oldVar coeffs of
