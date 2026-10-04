@@ -70,7 +70,6 @@ import Linear.Simplex.Types
   )
 import Linear.Simplex.Util
   ( combineVarLitMapSums
-  , dictionaryFormToTableau
   , foldVarLitMap
   , insertPivotObjectiveToDict
   , isMax
@@ -333,49 +332,21 @@ optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..})
       logMsg LevelInfo "optimizeFeasibleSystem: Objective is unbounded (ratio test failed)"
       pure Unbounded
     Just resultDict -> do
-      let result = displayResults (dictionaryFormToTableau resultDict)
+      let result = displayResults resultDict
       logMsg LevelInfo $ "optimizeFeasibleSystem: Found optimal solution: " <> showT result
       pure result
   where
-    -- \| displayResults takes a 'Tableau' and returns an 'OptimisationOutcome'. The 'Tableau'
-    -- represents the final tableau of a linear program after the simplex
-    -- algorithm has been applied. The 'OptimisationOutcome' contains the values of all
-    -- variables appearing in the system.
-    --
-    -- The function first filters out the rows of the tableau that correspond
-    -- to the slack and artificial variables. It then extracts the values of
-    -- the remaining variables and stores them in a map. If the objective
-    -- function is a maximization problem, the map contains the values of the
-    -- variables as they appear in the final tableau. If the objective function
-    -- is a minimization problem, the map contains the values of the variables
-    -- as they appear in the final tableau, except for the objective variable,
-    -- which is negated.
-    displayResults :: Tableau -> OptimisationOutcome
-    displayResults tableau =
-      Optimal extractVarVals
+    -- Extract basic-variable values directly from the final dictionary.
+    -- Omit slack/artificial variables and restore the minimization objective sign.
+    displayResults :: Dict -> OptimisationOutcome
+    displayResults resultDict =
+      Optimal $ M.mapWithKey valueOf originalRows
       where
-        extractVarVals =
-          let tableauWithOriginalVars =
-                M.filterWithKey
-                  ( \basicVarName _ ->
-                      basicVarName `notElem` slackVars ++ artificialVars
-                  )
-                  tableau
-          in  case objFunction of
-                Max _ ->
-                  M.map
-                    ( \tableauRow ->
-                        tableauRow.rhs
-                    )
-                    tableauWithOriginalVars
-                Min _ ->
-                  M.mapWithKey -- We maximized -objVar, so we negate the objVar to get the final value
-                    ( \basicVarName tableauRow ->
-                        if basicVarName == objectiveVar
-                          then negate $ tableauRow.rhs
-                          else tableauRow.rhs
-                    )
-                    tableauWithOriginalVars
+        originalRows = M.filterWithKey (\var _ -> var `notElem` slackVars ++ artificialVars) resultDict
+        valueOf var row =
+          if not (isMax objFunction) && var == objectiveVar
+            then negate row.constant
+            else row.constant
 
     -- \| Objective to use when optimising the linear program if no artificial
     -- variables were necessary in the first phase. It is essentially the original
@@ -840,30 +811,15 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
                 & #constant
                   %~ divideByNegatedEnteringVariableCoeff
               where
-                newEnteringVarTerm = (leavingVariable, -1)
                 divideByNegatedEnteringVariableCoeff = (/ negate enteringVariableCoeff)
 
             -- Substitute pivot equation into other rows
             updatedRows :: Dict
             updatedRows =
-              M.fromList $ map (uncurry f2) $ M.toList dict
+              M.fromList $ map (uncurry updateRow) $ M.toList dict
               where
-                f entryVar entryVal =
-                  if leavingVariable == entryVar
-                    then pivotEnteringRow
-                    else case M.lookup enteringVariable (entryVal.varMapSum) of
-                      Just subsCoeff ->
-                        entryVal
-                          & #varMapSum
-                            .~ combineVarLitMapSums
-                              (pivotEnteringRow.varMapSum <&> (subsCoeff *))
-                              (filterOutEnteringVarTerm (entryVal.varMapSum))
-                          & #constant
-                            .~ ((subsCoeff * (pivotEnteringRow.constant)) + entryVal.constant)
-                      Nothing -> entryVal
-
-                f2 :: Var -> DictValue -> (Var, DictValue)
-                f2 entryVar entryVal =
+                updateRow :: Var -> DictValue -> (Var, DictValue)
+                updateRow entryVar entryVal =
                   if leavingVariable == entryVar
                     then (enteringVariable, pivotEnteringRow)
                     else case M.lookup enteringVariable (entryVal.varMapSum) of
