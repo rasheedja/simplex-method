@@ -28,6 +28,8 @@ import Linear.Simplex.Solver.TwoPhase
   , getTransform
   , postprocess
   , preprocess
+  , shiftVarInMap
+  , splitVarInMap
   , twoPhaseSimplex
   , unapplyTransformToVarMap
   , unapplyTransformsToVarMap
@@ -2530,6 +2532,66 @@ spec = do
         let constraint = LEQ (M.fromList [(1, 2), (2, 3)]) 10
         applySplitToConstraint 1 10 11 constraint `shouldBe` LEQ (M.fromList [(10, 2), (11, -2), (2, 3)]) 10
 
+  describe "shiftVarInMap" $ do
+    it "leaves an empty map unchanged with no offset" $ do
+      shiftVarInMap 1 10 (-5) M.empty `shouldBe` (M.empty, 0)
+
+    it "leaves unrelated variables unchanged with no offset" $ do
+      let coeffs = M.fromList [(2, 5), (3, -7)]
+      shiftVarInMap 1 10 (-5) coeffs `shouldBe` (coeffs, 0)
+
+    mapM_
+      ( \(label, coeff, shift, offset) ->
+          it ("substitutes a " ++ label ++ " coefficient and returns its exact offset") $ do
+            let coeffs = M.fromList [(1, coeff), (2, 5), (3, -7)]
+            shiftVarInMap 1 10 shift coeffs
+              `shouldBe` (M.fromList [(10, coeff), (2, 5), (3, -7)], offset)
+      )
+      [ ("positive", 3, -5, -15)
+      , ("negative", -3, -5, 15)
+      , ("fractional", 2 % 3, -5 % 7, -10 % 21)
+      , ("zero", 0, -5, 0)
+      ]
+
+    it "renames the variable even when the shift is zero" $ do
+      shiftVarInMap 1 10 0 (M.singleton 1 (2 % 3))
+        `shouldBe` (M.singleton 10 (2 % 3), 0)
+
+    it "preserves evaluation under originalVar = shiftedVar + shift" $
+      property $
+        \(coeff :: Rational) (otherCoeff :: Rational) (shift :: Rational) (shiftedValue :: Rational) (otherValue :: Rational) ->
+          let coeffs = M.fromList [(1, coeff), (2, otherCoeff)]
+              (shiftedCoeffs, offset) = shiftVarInMap 1 10 shift coeffs
+              values = M.fromList [(10, shiftedValue), (2, otherValue)]
+          in  sum (M.intersectionWith (*) shiftedCoeffs values) + offset
+                == coeff * (shiftedValue + shift) + otherCoeff * otherValue
+
+  describe "splitVarInMap" $ do
+    it "leaves an empty map unchanged" $ do
+      splitVarInMap 1 10 11 M.empty `shouldBe` M.empty
+
+    it "leaves unrelated variables unchanged" $ do
+      let coeffs = M.fromList [(2, 5), (3, -7)]
+      splitVarInMap 1 10 11 coeffs `shouldBe` coeffs
+
+    mapM_
+      ( \(label, coeff) ->
+          it ("splits a " ++ label ++ " coefficient into opposite signed terms") $ do
+            let coeffs = M.fromList [(1, coeff), (2, 5), (3, -7)]
+            splitVarInMap 1 10 11 coeffs
+              `shouldBe` M.fromList [(10, coeff), (11, -coeff), (2, 5), (3, -7)]
+      )
+      [("positive", 3), ("negative", -3), ("fractional", 2 % 3), ("zero", 0)]
+
+    it "preserves evaluation under originalVar = positiveVar - negativeVar" $
+      property $
+        \(coeff :: Rational) (otherCoeff :: Rational) (positiveValue :: Rational) (negativeValue :: Rational) (otherValue :: Rational) ->
+          let coeffs = M.fromList [(1, coeff), (2, otherCoeff)]
+              splitCoeffs = splitVarInMap 1 10 11 coeffs
+              values = M.fromList [(10, positiveValue), (11, negativeValue), (2, otherValue)]
+          in  sum (M.intersectionWith (*) splitCoeffs values)
+                == coeff * (positiveValue - negativeValue) + otherCoeff * otherValue
+
   describe "applyTransform and applyTransforms" $ do
     describe "Unit tests" $ do
       it "applyTransform AddLowerBound adds GEQ constraint" $ do
@@ -3073,31 +3135,35 @@ spec = do
       prettyShowVarLitMapSum M.empty `shouldBe` ""
 
     it "shows single positive coefficient" $ do
-      prettyShowVarLitMapSum (M.fromList [(1, 3)]) `shouldBe` "3 * 1 + "
+      prettyShowVarLitMapSum (M.fromList [(1, 3)]) `shouldBe` "3 * 1"
 
     it "shows single negative coefficient with parentheses" $ do
-      prettyShowVarLitMapSum (M.fromList [(1, -2)]) `shouldBe` "(-2) * 1 + "
+      prettyShowVarLitMapSum (M.fromList [(1, -2)]) `shouldBe` "(-2) * 1"
+
+    it "shows positive and negative fractional coefficients exactly" $ do
+      prettyShowVarLitMapSum (M.fromList [(1, 1 % 2), (2, (-3) % 4)])
+        `shouldBe` "1 / 2 * 1 + (-3 / 4) * 2"
 
     it "shows multiple coefficients" $ do
       let result = prettyShowVarLitMapSum (M.fromList [(1, 2), (2, 3)])
-      result `shouldBe` "2 * 1 + 3 * 2 + "
+      result `shouldBe` "2 * 1 + 3 * 2"
 
   describe "prettyShowPolyConstraint" $ do
     it "shows LEQ constraint" $ do
-      prettyShowPolyConstraint (LEQ (M.fromList [(1, 2)]) 10) `shouldBe` "2 * 1 + " ++ " <= " ++ show (10 :: Rational)
+      prettyShowPolyConstraint (LEQ (M.fromList [(1, 2)]) 10) `shouldBe` "2 * 1" ++ " <= " ++ show (10 :: Rational)
 
     it "shows GEQ constraint" $ do
-      prettyShowPolyConstraint (GEQ (M.fromList [(1, 1)]) 5) `shouldBe` "1 * 1 + " ++ " >= " ++ show (5 :: Rational)
+      prettyShowPolyConstraint (GEQ (M.fromList [(1, 1)]) 5) `shouldBe` "1 * 1" ++ " >= " ++ show (5 :: Rational)
 
     it "shows EQ constraint" $ do
-      prettyShowPolyConstraint (EQ (M.fromList [(1, 1)]) 3) `shouldBe` "1 * 1 + " ++ " == " ++ show (3 :: Rational)
+      prettyShowPolyConstraint (EQ (M.fromList [(1, 1)]) 3) `shouldBe` "1 * 1" ++ " == " ++ show (3 :: Rational)
 
   describe "prettyShowObjectiveFunction" $ do
     it "shows Max objective" $ do
-      prettyShowObjectiveFunction (Max (M.fromList [(1, 2)])) `shouldBe` "max: 2 * 1 + "
+      prettyShowObjectiveFunction (Max (M.fromList [(1, 2)])) `shouldBe` "max: 2 * 1"
 
     it "shows Min objective" $ do
-      prettyShowObjectiveFunction (Min (M.fromList [(1, 5)])) `shouldBe` "min: 5 * 1 + "
+      prettyShowObjectiveFunction (Min (M.fromList [(1, 5)])) `shouldBe` "min: 5 * 1"
 
   describe "twoPhaseSimplex with multiple objectives" $ do
     it "optimizes two objectives over the same feasible region" $ do

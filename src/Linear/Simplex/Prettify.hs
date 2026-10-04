@@ -13,23 +13,24 @@
 module Linear.Simplex.Prettify where
 
 import Data.Generics.Labels ()
+import Data.List (intercalate)
 import Data.Map qualified as M
 import Data.Ratio (denominator, numerator)
 import Linear.Simplex.Types (ObjectiveFunction (..), PolyConstraint (..), VarLitMapSum)
 
 -- | Convert a 'VarLitMapSum' into a human-readable 'String'
 prettyShowVarLitMapSum :: VarLitMapSum -> String
-prettyShowVarLitMapSum = aux . M.toList
+prettyShowVarLitMapSum = intercalate " + " . map prettyShowTerm . M.toList
   where
-    aux [] = ""
-    aux ((vName, vCoeff) : vs) = prettyShowRational vCoeff ++ " * " ++ show vName ++ " + " ++ aux vs
+    prettyShowTerm (vName, vCoeff) = prettyShowRational vCoeff ++ " * " ++ show vName
+
+    prettyShowRational r =
+      if r < 0 then "(" ++ rendered ++ ")" else rendered
       where
-        prettyShowRational r =
-          if r < 0
-            then "(" ++ r' ++ ")"
-            else r'
-          where
-            r' = if denominator r == 1 then show (numerator r) else show (numerator r) ++ " / " ++ show (numerator r)
+        rendered =
+          if denominator r == 1
+            then show (numerator r)
+            else show (numerator r) ++ " / " ++ show (denominator r)
 
 -- | Convert a 'PolyConstraint' into a human-readable 'String'
 prettyShowPolyConstraint :: PolyConstraint -> String
