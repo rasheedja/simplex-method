@@ -130,7 +130,7 @@ findFeasibleSolution unsimplifiedSystem = do
                       <> showT eliminateArtificialVarsFromPhase1Tableau
                   pure . Just $
                     FeasibleSystem
-                      { dict = eliminateArtificialVarsFromPhase1Tableau
+                      { dict = removeArtificialBasics phase1Dict
                       , slackVars = slackVars
                       , artificialVars = artificialVars
                       , objectiveVar = objectiveVar
@@ -150,7 +150,7 @@ findFeasibleSolution unsimplifiedSystem = do
                       <> showT eliminateArtificialVarsFromPhase1Tableau
                   pure . Just $
                     FeasibleSystem
-                      { dict = eliminateArtificialVarsFromPhase1Tableau
+                      { dict = removeArtificialBasics phase1Dict
                       , slackVars = slackVars
                       , artificialVars = artificialVars
                       , objectiveVar = objectiveVar
@@ -174,6 +174,26 @@ findFeasibleSolution unsimplifiedSystem = do
               <> showT systemWithBasicVarsAsDictionary
           pure Nothing
   where
+    -- Called only after the phase-one optimum has been verified to be zero.
+    -- A remaining artificial basic must stay zero in the original problem.
+    -- Pivot it out on any nonzero non-artificial coefficient, of either sign:
+    -- its zero constant makes the pivot degenerate and preserves feasibility.
+    -- A row with no such coefficient is redundant once artificials are zero.
+    removeArtificialBasics :: Dict -> Dict
+    removeArtificialBasics dictionary =
+      M.map (\row -> row & #varMapSum %~ (`M.withoutKeys` artificialVarSet)) $
+        foldl removeBasic dictionary artificialVars
+      where
+        removeBasic dict artificialVar =
+          case M.lookup artificialVar dict of
+            Nothing -> dict
+            Just row
+              | row.constant /= 0 -> error "removeArtificialBasics: artificial basic variable is nonzero"
+              | otherwise ->
+                  case M.lookupMin (M.filter (/= 0) (M.withoutKeys row.varMapSum artificialVarSet)) of
+                    Nothing -> M.delete artificialVar dict
+                    Just (enteringVar, _) -> pivot artificialVar enteringVar dict
+
     system = simplifySystem unsimplifiedSystem
 
     maxVar =
@@ -732,65 +752,65 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
           , row.constant >= 0
           ]
 
-    -- Pivot a dictionary using the two given variables.
-    -- The first variable is the leaving (non-basic) variable.
-    -- The second variable is the entering (basic) variable.
-    -- Expects the entering variable to be present in the row containing the leaving variable.
-    -- Expects each row to have a unique basic variable.
-    -- Expects each basic variable to not appear on the RHS of any equation.
-    pivot :: Var -> Var -> Dict -> Dict
-    pivot leavingVariable enteringVariable dict =
-      case M.lookup enteringVariable (dictEntertingRow.varMapSum) of
-        Just enteringVariableCoeff ->
-          updatedRows
-          where
-            -- Move entering variable to basis, update other variables in row appropriately
-            pivotEnteringRow :: DictValue
-            pivotEnteringRow =
-              dictEntertingRow
-                & #varMapSum
-                  %~ ( \basicEquation ->
-                        -- uncurry
-                        M.insert
-                          leavingVariable
-                          (-1)
-                          (filterOutEnteringVarTerm basicEquation)
-                          & traverse
-                            %~ divideByNegatedEnteringVariableCoeff
-                     )
-                & #constant
-                  %~ divideByNegatedEnteringVariableCoeff
-              where
-                divideByNegatedEnteringVariableCoeff = (/ negate enteringVariableCoeff)
-
-            -- Substitute pivot equation into other rows
-            updatedRows :: Dict
-            updatedRows =
-              M.fromList $ map (uncurry updateRow) $ M.toList dict
-              where
-                updateRow :: Var -> DictValue -> (Var, DictValue)
-                updateRow entryVar entryVal =
-                  if leavingVariable == entryVar
-                    then (enteringVariable, pivotEnteringRow)
-                    else case M.lookup enteringVariable (entryVal.varMapSum) of
-                      Just subsCoeff ->
-                        ( entryVar
-                        , entryVal
-                            & #varMapSum
-                              .~ combineVarLitMapSums
-                                (pivotEnteringRow.varMapSum <&> (subsCoeff *))
-                                (filterOutEnteringVarTerm (entryVal.varMapSum))
-                            & #constant
-                              .~ ((subsCoeff * (pivotEnteringRow.constant)) + entryVal.constant)
-                        )
-                      Nothing -> (entryVar, entryVal)
-        Nothing -> error "pivot: non basic variable not found in basic row"
+-- Pivot a dictionary using the two given variables.
+-- The first variable is the leaving basic variable.
+-- The second variable is the entering non-basic variable.
+-- Expects the entering variable to be present in the row containing the leaving variable.
+-- Expects each row to have a unique basic variable.
+-- Expects each basic variable to not appear on the RHS of any equation.
+pivot :: Var -> Var -> Dict -> Dict
+pivot leavingVariable enteringVariable dict =
+  case M.lookup enteringVariable (dictEntertingRow.varMapSum) of
+    Just enteringVariableCoeff ->
+      updatedRows
       where
-        -- \| The entering row, i.e., the row in the dict which is the value of
-        -- leavingVariable.
-        dictEntertingRow =
-          fromMaybe
-            (error "pivot: Basic variable not found in Dict")
-            $ M.lookup leavingVariable dict
+        -- Move entering variable to basis, update other variables in row appropriately
+        pivotEnteringRow :: DictValue
+        pivotEnteringRow =
+          dictEntertingRow
+            & #varMapSum
+              %~ ( \basicEquation ->
+                    -- uncurry
+                    M.insert
+                      leavingVariable
+                      (-1)
+                      (filterOutEnteringVarTerm basicEquation)
+                      & traverse
+                        %~ divideByNegatedEnteringVariableCoeff
+                 )
+            & #constant
+              %~ divideByNegatedEnteringVariableCoeff
+          where
+            divideByNegatedEnteringVariableCoeff = (/ negate enteringVariableCoeff)
 
-        filterOutEnteringVarTerm = M.delete enteringVariable
+        -- Substitute pivot equation into other rows
+        updatedRows :: Dict
+        updatedRows =
+          M.fromList $ map (uncurry updateRow) $ M.toList dict
+          where
+            updateRow :: Var -> DictValue -> (Var, DictValue)
+            updateRow entryVar entryVal =
+              if leavingVariable == entryVar
+                then (enteringVariable, pivotEnteringRow)
+                else case M.lookup enteringVariable (entryVal.varMapSum) of
+                  Just subsCoeff ->
+                    ( entryVar
+                    , entryVal
+                        & #varMapSum
+                          .~ combineVarLitMapSums
+                            (pivotEnteringRow.varMapSum <&> (subsCoeff *))
+                            (filterOutEnteringVarTerm (entryVal.varMapSum))
+                        & #constant
+                          .~ ((subsCoeff * (pivotEnteringRow.constant)) + entryVal.constant)
+                    )
+                  Nothing -> (entryVar, entryVal)
+    Nothing -> error "pivot: non basic variable not found in basic row"
+  where
+    -- \| The entering row, i.e., the row in the dict which is the value of
+    -- leavingVariable.
+    dictEntertingRow =
+      fromMaybe
+        (error "pivot: Basic variable not found in Dict")
+        $ M.lookup leavingVariable dict
+
+    filterOutEnteringVarTerm = M.delete enteringVariable

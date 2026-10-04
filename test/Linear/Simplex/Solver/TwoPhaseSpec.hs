@@ -6,11 +6,21 @@ module Linear.Simplex.Solver.TwoPhaseSpec where
 import Prelude hiding (EQ)
 
 import Control.Exception (evaluate)
-import Control.Monad.Logger (LogLevel (LevelInfo), filterLogger, runNoLoggingT, runStdoutLoggingT)
+import Control.Monad.Logger
+  ( LogLevel (LevelInfo)
+  , filterLogger
+  , fromLogStr
+  , runLoggingT
+  , runNoLoggingT
+  , runStdoutLoggingT
+  )
+import Data.IORef (modifyIORef', newIORef, readIORef)
 import qualified Data.Map as M
 import Data.Maybe (isJust)
 import Data.Ratio ((%))
 import qualified Data.Set as Set
+import qualified Data.Text as Text
+import Data.Text.Encoding (decodeUtf8)
 import System.Timeout (timeout)
 
 import Test.Hspec (Spec, describe, expectationFailure, it, shouldBe, shouldSatisfy)
@@ -113,17 +123,27 @@ spec = do
     it "chooses the least entering index and least tied leaving index during phase one" $ do
       -- The artificial objective has coefficients 3 for x1 and 6 for x2.
       -- Both artificial rows (x3 and x4) have ratio zero. Bland chooses
-      -- x1 to enter and x3 to leave, retaining x4 as a degenerate basic row.
+      -- x1 to enter and x3 to leave. Cleanup then removes redundant x4.
+      -- Observe the pivot choices before cleanup removes that basis evidence.
+      pivotChoices <- newIORef []
       actual <-
         withinTimeout $
-          runNoLoggingT $
-            findFeasibleSolution
-              [ EQ (M.fromList [(1, 1), (2, 2)]) 0
-              , EQ (M.fromList [(1, 2), (2, 4)]) 0
-              ]
+          runLoggingT
+            ( findFeasibleSolution
+                [ EQ (M.fromList [(1, 1), (2, 2)]) 0
+                , EQ (M.fromList [(1, 2), (2, 4)]) 0
+                ]
+            )
+            ( \_ _ _ message -> do
+                let text = decodeUtf8 (fromLogStr message)
+                if "pivoting variable" `Text.isInfixOf` text
+                  then modifyIORef' pivotChoices (++ [Text.takeWhileEnd (/= ' ') text])
+                  else pure ()
+            )
+      readIORef pivotChoices >>= (`shouldBe` ["1", "3"])
       case actual of
         Just (Just feasible) -> do
-          M.keys (M.delete feasible.objectiveVar feasible.dict) `shouldBe` [1, 4]
+          M.keys (M.delete feasible.objectiveVar feasible.dict) `shouldBe` [1]
           feasible.artificialVars `shouldBe` [3, 4]
         Nothing -> expectationFailure "Degenerate phase one timed out after five seconds"
         Just Nothing -> expectationFailure "The origin satisfies both degenerate equalities"
@@ -144,6 +164,76 @@ spec = do
         Just (Optimal varMap) -> computeObjective obj varMap `shouldBe` 1
         Nothing -> expectationFailure "Optimization with a retained objective row timed out"
         Just Unbounded -> expectationFailure "The actual constraint bounds x1 by one"
+
+    it "keeps zero artificial basic variables fixed when optimizing the original system" $ do
+      let domains = VarDomainMap $ M.fromList [(v, boundedRange 1 2) | v <- [1, 2]]
+          objectives = concat [[Min (M.singleton v 1), Max (M.singleton v 1)] | v <- [1, 2]]
+          cornerConstraints =
+            [ LEQ (M.fromList [(1, 1), (2, 1)]) 2
+            , LEQ (M.fromList [(1, 2), (2, 2)]) 5
+            ]
+      actual <- withinTimeout $ runNoLoggingT $ twoPhaseSimplex domains objectives cornerConstraints
+      case actual of
+        Just (SimplexResult (Just feasible) results) -> do
+          -- x1,x2 >= 1 and x1+x2 <= 2 force the unique point (1,1).
+          -- A residual artificial basic must not relax either lower bound.
+          map (.objectiveFunction) results `shouldBe` objectives
+          mapM_
+            ( \(ObjectiveResult obj outcome) -> case outcome of
+                Optimal varMap -> do
+                  [M.findWithDefault 0 v varMap | v <- [1, 2]] `shouldBe` [1, 1]
+                  computeObjective obj varMap `shouldBe` 1
+                Unbounded -> expectationFailure "The unique feasible point cannot yield an unbounded objective"
+            )
+            results
+          M.keys feasible.dict `shouldSatisfy` all (`notElem` feasible.artificialVars)
+          mapM_ (\row -> M.keys row.varMapSum `shouldSatisfy` all (`notElem` feasible.artificialVars)) (M.elems feasible.dict)
+        Nothing -> expectationFailure "The unique feasible point LP timed out"
+        Just result -> expectationFailure $ "Expected the unique feasible point (1,1), got " ++ show result
+
+    it "drops only redundant zero rows when removing artificial basic variables" $ do
+      let domains = VarDomainMap $ M.fromList [(v, nonNegative) | v <- [1, 2]]
+          objectives = concat [[Min (M.singleton v 1), Max (M.singleton v 1)] | v <- [1, 2]]
+          redundantEqualities =
+            [ EQ (M.fromList [(1, 1), (2, 1)]) 1
+            , EQ (M.fromList [(1, 2), (2, 2)]) 2
+            , EQ (M.fromList [(1, 3), (2, 3)]) 3
+            ]
+      actual <- withinTimeout $ runNoLoggingT $ twoPhaseSimplex domains objectives redundantEqualities
+      case actual of
+        Just (SimplexResult (Just feasible) results) -> do
+          M.size (M.delete feasible.objectiveVar feasible.dict) `shouldBe` 1
+          map (.objectiveFunction) results `shouldBe` objectives
+          mapM_
+            ( \(ObjectiveResult obj outcome, expected) -> case outcome of
+                Optimal varMap -> do
+                  let values = [M.findWithDefault 0 v varMap | v <- [1, 2]]
+                  values `shouldSatisfy` all (>= 0)
+                  sum values `shouldBe` 1
+                  computeObjective obj varMap `shouldBe` expected
+                Unbounded -> expectationFailure "The retained equality bounds both variables"
+            )
+            (zip results [0, 1, 0, 1])
+        Nothing -> expectationFailure "The redundant equalities timed out"
+        Just result -> expectationFailure $ "Expected feasible redundant equalities, got " ++ show result
+
+    it "can remove an artificial basic by pivoting on a negative coefficient" $ do
+      -- Phase one first pivots x1 into the x3 row, leaving x4 = -x2 + x3
+      -- and x5 = 2*x2 + x3. The phase-one objective is already optimal.
+      -- Cleanup encounters x4 first and must accept its negative x2 coefficient.
+      actual <- withinTimeout $ runNoLoggingT $ do
+        feasible <-
+          findFeasibleSolution
+            [ EQ (M.fromList [(1, 1), (2, 2)]) 0
+            , EQ (M.fromList [(1, 1), (2, 3)]) 0
+            , EQ (M.singleton 1 1) 0
+            ]
+        traverse (optimizeFeasibleSystem (Max (M.singleton 2 1))) feasible
+      case actual of
+        Just (Just (Optimal varMap)) ->
+          [M.findWithDefault 0 v varMap | v <- [1, 2]] `shouldBe` [0, 0]
+        Nothing -> expectationFailure "Cleanup with a negative pivot coefficient timed out"
+        Just result -> expectationFailure $ "Expected the origin as the unique feasible point, got " ++ show result
 
   describe "twoPhaseSimplex" $ do
     -- From page 50 of 'Linear and Integer Programming Made Easy'
