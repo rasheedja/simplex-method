@@ -3,6 +3,7 @@
 ## Unreleased changes
 
 - Extract optimal variable values directly from dictionary constants without an intermediate tableau conversion. ([#22](https://github.com/rasheedja/simplex-method/pull/22))
+- Remove QuickCheck from the library dependencies while retaining it for property tests. ([#24](https://github.com/rasheedja/simplex-method/pull/24))
 - `twoPhaseSimplex` now takes a `VarDomainMap` as its first argument
   - Specify each variable's domain using smart constructors: `nonNegative`, `unbounded`, `lowerBoundOnly`, `upperBoundOnly`, or `boundedRange`
   - Variables not in the `VarDomainMap` are assumed to be `unbounded`
