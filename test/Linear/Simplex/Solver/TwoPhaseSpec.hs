@@ -5,11 +5,23 @@ module Linear.Simplex.Solver.TwoPhaseSpec where
 
 import Prelude hiding (EQ)
 
-import Control.Monad.Logger (LogLevel (LevelInfo), filterLogger, runNoLoggingT, runStdoutLoggingT)
+import Control.Exception (evaluate)
+import Control.Monad.Logger
+  ( LogLevel (LevelInfo)
+  , filterLogger
+  , fromLogStr
+  , runLoggingT
+  , runNoLoggingT
+  , runStdoutLoggingT
+  )
+import Data.IORef (modifyIORef', newIORef, readIORef)
 import qualified Data.Map as M
 import Data.Maybe (isJust)
 import Data.Ratio ((%))
 import qualified Data.Set as Set
+import qualified Data.Text as Text
+import Data.Text.Encoding (decodeUtf8)
+import System.Timeout (timeout)
 
 import Test.Hspec (Spec, describe, expectationFailure, it, shouldBe, shouldSatisfy)
 import Test.QuickCheck (NonEmptyList (..), Positive (..), property, (==>))
@@ -24,8 +36,10 @@ import Linear.Simplex.Solver.TwoPhase
   , applyTransforms
   , collectAllVars
   , computeObjective
+  , findFeasibleSolution
   , generateTransform
   , getTransform
+  , optimizeFeasibleSystem
   , postprocess
   , preprocess
   , shiftVarInMap
@@ -35,7 +49,9 @@ import Linear.Simplex.Solver.TwoPhase
   , unapplyTransformsToVarMap
   )
 import Linear.Simplex.Types
-  ( ObjectiveFunction (..)
+  ( DictValue (..)
+  , FeasibleSystem (..)
+  , ObjectiveFunction (..)
   , ObjectiveResult (..)
   , OptimisationOutcome (..)
   , PolyConstraint (..)
@@ -51,6 +67,174 @@ import Linear.Simplex.Types
 
 spec :: Spec
 spec = do
+  describe "Bland's anti-cycling rule" $ do
+    let -- a, b, c, d, z, in that order. The old pivot policy repeats a
+        -- six-pivot cycle on this bounded, feasible variant of Beale's LP.
+        constraints =
+          [ LEQ (M.singleton 2 1) 1
+          , LEQ (M.fromList [(1, -3 % 2), (2, 1 % 2), (3, 1), (4, -1 % 2)]) 0
+          , LEQ (M.fromList [(1, -11 % 2), (2, 1 % 2), (3, 9), (4, -5 % 2)]) 0
+          , LEQ (M.fromList [(1, 57), (2, -10), (3, 24), (4, 9), (5, 1)]) 0
+          ]
+        domainMap = VarDomainMap $ M.fromList [(v, boundedRange 0 10) | v <- [1 .. 5]]
+        assertFeasible varMap = do
+          mapM_ (\v -> M.findWithDefault 0 v varMap `shouldSatisfy` (\x -> 0 <= x && x <= 10)) [1 .. 5]
+          mapM_ (\constraint -> computeObjective (Max constraint.lhs) varMap `shouldSatisfy` (<= constraint.rhs)) constraints
+        -- Force the whole result inside the timeout: timing only construction
+        -- of a lazy result would not guard against a nonterminating solver.
+        withinTimeout action = timeout 5000000 $ do
+          result <- action
+          _ <- evaluate (length (show result))
+          pure result
+
+    it "terminates on a bounded cycling LP and preserves each objective optimum" $ do
+      let objectives = [Max (M.singleton 5 1), Min (M.singleton 5 (-1)), Min (M.singleton 5 1)]
+      actual <- withinTimeout $ runNoLoggingT $ twoPhaseSimplex domainMap objectives constraints
+      case actual of
+        Nothing -> expectationFailure "Solver timed out after five seconds on the bounded cycling LP"
+        Just (SimplexResult (Just _) results) -> do
+          map (.objectiveFunction) results `shouldBe` objectives
+          -- The second constraint implies d >= b - 3a + 2c, hence
+          -- z <= b - 30a - 42c <= 1. (a,b,c,d,z)=(0,1,0,1,1)
+          -- attains that bound; the origin attains min z = 0.
+          mapM_
+            ( \(ObjectiveResult obj outcome, expected) -> case outcome of
+                Optimal varMap -> do
+                  assertFeasible varMap
+                  computeObjective obj varMap `shouldBe` expected
+                Unbounded -> expectationFailure "A bounded cycling LP was reported unbounded"
+            )
+            (zip results [1, -1, 0])
+        Just result -> expectationFailure $ "Expected a feasible cycling LP, got " ++ show result
+
+    it "also terminates when the public phase-one and phase-two APIs are called separately" $ do
+      let bounds = [LEQ (M.singleton v 1) 10 | v <- [1 .. 5]]
+          obj = Max (M.singleton 5 1)
+      actual <- withinTimeout $ runNoLoggingT $ do
+        feasible <- findFeasibleSolution (constraints ++ bounds)
+        traverse (optimizeFeasibleSystem obj) feasible
+      case actual of
+        Just (Just (Optimal varMap)) -> do
+          assertFeasible varMap
+          computeObjective obj varMap `shouldBe` 1
+        Nothing -> expectationFailure "Separate solver phases timed out after five seconds on the cycling LP"
+        Just result -> expectationFailure $ "Expected an optimum from the separate solver phases, got " ++ show result
+
+    it "chooses the least entering index and least tied leaving index during phase one" $ do
+      -- The artificial objective has coefficients 3 for x1 and 6 for x2.
+      -- Both artificial rows (x3 and x4) have ratio zero. Bland chooses
+      -- x1 to enter and x3 to leave. Cleanup then removes redundant x4.
+      -- Observe the pivot choices before cleanup removes that basis evidence.
+      pivotChoices <- newIORef []
+      actual <-
+        withinTimeout $
+          runLoggingT
+            ( findFeasibleSolution
+                [ EQ (M.fromList [(1, 1), (2, 2)]) 0
+                , EQ (M.fromList [(1, 2), (2, 4)]) 0
+                ]
+            )
+            ( \_ _ _ message -> do
+                let text = decodeUtf8 (fromLogStr message)
+                if "pivoting variable" `Text.isInfixOf` text
+                  then modifyIORef' pivotChoices (++ [Text.takeWhileEnd (/= ' ') text])
+                  else pure ()
+            )
+      readIORef pivotChoices >>= (`shouldBe` ["1", "3"])
+      case actual of
+        Just (Just feasible) -> do
+          M.keys (M.delete feasible.objectiveVar feasible.dict) `shouldBe` [1]
+          feasible.artificialVars `shouldBe` [3, 4]
+        Nothing -> expectationFailure "Degenerate phase one timed out after five seconds"
+        Just Nothing -> expectationFailure "The origin satisfies both degenerate equalities"
+
+    it "excludes a retained objective row from the leaving-variable ratio test" $ do
+      -- x2 = 1 - x1 is the constraint; the retained objective x3 = -x1
+      -- imposes no nonnegativity restriction on x1 when maximizing x1.
+      let feasible =
+            FeasibleSystem
+              { dict = M.fromList [(2, DictValue (M.singleton 1 (-1)) 1), (3, DictValue (M.singleton 1 (-1)) 0)]
+              , slackVars = [2]
+              , artificialVars = []
+              , objectiveVar = 3
+              }
+          obj = Max (M.singleton 1 1)
+      actual <- withinTimeout $ runNoLoggingT $ optimizeFeasibleSystem obj feasible
+      case actual of
+        Just (Optimal varMap) -> computeObjective obj varMap `shouldBe` 1
+        Nothing -> expectationFailure "Optimization with a retained objective row timed out"
+        Just Unbounded -> expectationFailure "The actual constraint bounds x1 by one"
+
+    it "keeps zero artificial basic variables fixed when optimizing the original system" $ do
+      let domains = VarDomainMap $ M.fromList [(v, boundedRange 1 2) | v <- [1, 2]]
+          objectives = concat [[Min (M.singleton v 1), Max (M.singleton v 1)] | v <- [1, 2]]
+          cornerConstraints =
+            [ LEQ (M.fromList [(1, 1), (2, 1)]) 2
+            , LEQ (M.fromList [(1, 2), (2, 2)]) 5
+            ]
+      actual <- withinTimeout $ runNoLoggingT $ twoPhaseSimplex domains objectives cornerConstraints
+      case actual of
+        Just (SimplexResult (Just feasible) results) -> do
+          -- x1,x2 >= 1 and x1+x2 <= 2 force the unique point (1,1).
+          -- A residual artificial basic must not relax either lower bound.
+          map (.objectiveFunction) results `shouldBe` objectives
+          mapM_
+            ( \(ObjectiveResult obj outcome) -> case outcome of
+                Optimal varMap -> do
+                  [M.findWithDefault 0 v varMap | v <- [1, 2]] `shouldBe` [1, 1]
+                  computeObjective obj varMap `shouldBe` 1
+                Unbounded -> expectationFailure "The unique feasible point cannot yield an unbounded objective"
+            )
+            results
+          M.keys feasible.dict `shouldSatisfy` all (`notElem` feasible.artificialVars)
+          mapM_ (\row -> M.keys row.varMapSum `shouldSatisfy` all (`notElem` feasible.artificialVars)) (M.elems feasible.dict)
+        Nothing -> expectationFailure "The unique feasible point LP timed out"
+        Just result -> expectationFailure $ "Expected the unique feasible point (1,1), got " ++ show result
+
+    it "drops only redundant zero rows when removing artificial basic variables" $ do
+      let domains = VarDomainMap $ M.fromList [(v, nonNegative) | v <- [1, 2]]
+          objectives = concat [[Min (M.singleton v 1), Max (M.singleton v 1)] | v <- [1, 2]]
+          redundantEqualities =
+            [ EQ (M.fromList [(1, 1), (2, 1)]) 1
+            , EQ (M.fromList [(1, 2), (2, 2)]) 2
+            , EQ (M.fromList [(1, 3), (2, 3)]) 3
+            ]
+      actual <- withinTimeout $ runNoLoggingT $ twoPhaseSimplex domains objectives redundantEqualities
+      case actual of
+        Just (SimplexResult (Just feasible) results) -> do
+          M.size (M.delete feasible.objectiveVar feasible.dict) `shouldBe` 1
+          map (.objectiveFunction) results `shouldBe` objectives
+          mapM_
+            ( \(ObjectiveResult obj outcome, expected) -> case outcome of
+                Optimal varMap -> do
+                  let values = [M.findWithDefault 0 v varMap | v <- [1, 2]]
+                  values `shouldSatisfy` all (>= 0)
+                  sum values `shouldBe` 1
+                  computeObjective obj varMap `shouldBe` expected
+                Unbounded -> expectationFailure "The retained equality bounds both variables"
+            )
+            (zip results [0, 1, 0, 1])
+        Nothing -> expectationFailure "The redundant equalities timed out"
+        Just result -> expectationFailure $ "Expected feasible redundant equalities, got " ++ show result
+
+    it "can remove an artificial basic by pivoting on a negative coefficient" $ do
+      -- Phase one first pivots x1 into the x3 row, leaving x4 = -x2 + x3
+      -- and x5 = 2*x2 + x3. The phase-one objective is already optimal.
+      -- Cleanup encounters x4 first and must accept its negative x2 coefficient.
+      actual <- withinTimeout $ runNoLoggingT $ do
+        feasible <-
+          findFeasibleSolution
+            [ EQ (M.fromList [(1, 1), (2, 2)]) 0
+            , EQ (M.fromList [(1, 1), (2, 3)]) 0
+            , EQ (M.singleton 1 1) 0
+            ]
+        traverse (optimizeFeasibleSystem (Max (M.singleton 2 1))) feasible
+      case actual of
+        Just (Just (Optimal varMap)) ->
+          [M.findWithDefault 0 v varMap | v <- [1, 2]] `shouldBe` [0, 0]
+        Nothing -> expectationFailure "Cleanup with a negative pivot coefficient timed out"
+        Just result -> expectationFailure $ "Expected the origin as the unique feasible point, got " ++ show result
+
   describe "twoPhaseSimplex" $ do
     -- From page 50 of 'Linear and Integer Programming Made Easy'
     describe "From 'Linear and Integer Programming Made Easy' (page 50)" $ do
@@ -809,7 +993,8 @@ spec = do
               twoPhaseSimplex domainMap [obj] constraints
         case actualResult of
           SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 5 % 2), (2, 5 % 3), (3, 0)]
+            -- A zero variable may be non-basic and omitted from the result.
+            M.union varMap (M.singleton 3 0) `shouldBe` M.fromList [(1, 5 % 2), (2, 5 % 3), (3, 0)]
             computeObjective obj varMap `shouldBe` (5 % 2)
           SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
           _ -> expectationFailure "Unexpected result"
@@ -839,7 +1024,7 @@ spec = do
               twoPhaseSimplex domainMap [obj] constraints
         case actualResult of
           SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 5 % 2), (1, 5 % 2), (3, 0)]
+            M.union varMap (M.singleton 3 0) `shouldBe` M.fromList [(2, 5 % 2), (1, 5 % 2), (3, 0)]
             computeObjective obj varMap `shouldBe` (5 % 2)
           SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
           _ -> expectationFailure "Unexpected result"
@@ -950,7 +1135,7 @@ spec = do
               twoPhaseSimplex domainMap [obj] constraints
         case actualResult of
           SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 5 % 9), (1, 7 % 2), (3, 0)]
+            M.union varMap (M.singleton 3 0) `shouldBe` M.fromList [(2, 5 % 9), (1, 7 % 2), (3, 0)]
             computeObjective obj varMap `shouldBe` (7 % 2)
           SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
           _ -> expectationFailure "Unexpected result"
