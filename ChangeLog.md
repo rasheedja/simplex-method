@@ -2,6 +2,7 @@
 
 ## Unreleased changes
 
+- Prevent degenerate simplex pivot cycles by using Bland's least-index entering and leaving rules in both phases. Tied optimal solutions may select different variable values while preserving the objective optimum.
 - Support zero objectives after the artificial-variable phase and replace custom coefficient-map merging with standard Data.Map operations. ([#18](https://github.com/rasheedja/simplex-method/pull/18))
 - Correct fractional coefficients in pretty-printed expressions and remove trailing plus separators. ([#19](https://github.com/rasheedja/simplex-method/pull/19))
 - Share shift and split coefficient-map transformations between objectives and constraints, and simplify access to their fields. ([#23](https://github.com/rasheedja/simplex-method/pull/23))
