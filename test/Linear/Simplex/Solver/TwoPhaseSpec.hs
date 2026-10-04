@@ -3120,31 +3120,35 @@ spec = do
       prettyShowVarLitMapSum M.empty `shouldBe` ""
 
     it "shows single positive coefficient" $ do
-      prettyShowVarLitMapSum (M.fromList [(1, 3)]) `shouldBe` "3 * 1 + "
+      prettyShowVarLitMapSum (M.fromList [(1, 3)]) `shouldBe` "3 * 1"
 
     it "shows single negative coefficient with parentheses" $ do
-      prettyShowVarLitMapSum (M.fromList [(1, -2)]) `shouldBe` "(-2) * 1 + "
+      prettyShowVarLitMapSum (M.fromList [(1, -2)]) `shouldBe` "(-2) * 1"
+
+    it "shows positive and negative fractional coefficients exactly" $ do
+      prettyShowVarLitMapSum (M.fromList [(1, 1 % 2), (2, (-3) % 4)])
+        `shouldBe` "1 / 2 * 1 + (-3 / 4) * 2"
 
     it "shows multiple coefficients" $ do
       let result = prettyShowVarLitMapSum (M.fromList [(1, 2), (2, 3)])
-      result `shouldBe` "2 * 1 + 3 * 2 + "
+      result `shouldBe` "2 * 1 + 3 * 2"
 
   describe "prettyShowPolyConstraint" $ do
     it "shows LEQ constraint" $ do
-      prettyShowPolyConstraint (LEQ (M.fromList [(1, 2)]) 10) `shouldBe` "2 * 1 + " ++ " <= " ++ show (10 :: Rational)
+      prettyShowPolyConstraint (LEQ (M.fromList [(1, 2)]) 10) `shouldBe` "2 * 1" ++ " <= " ++ show (10 :: Rational)
 
     it "shows GEQ constraint" $ do
-      prettyShowPolyConstraint (GEQ (M.fromList [(1, 1)]) 5) `shouldBe` "1 * 1 + " ++ " >= " ++ show (5 :: Rational)
+      prettyShowPolyConstraint (GEQ (M.fromList [(1, 1)]) 5) `shouldBe` "1 * 1" ++ " >= " ++ show (5 :: Rational)
 
     it "shows EQ constraint" $ do
-      prettyShowPolyConstraint (EQ (M.fromList [(1, 1)]) 3) `shouldBe` "1 * 1 + " ++ " == " ++ show (3 :: Rational)
+      prettyShowPolyConstraint (EQ (M.fromList [(1, 1)]) 3) `shouldBe` "1 * 1" ++ " == " ++ show (3 :: Rational)
 
   describe "prettyShowObjectiveFunction" $ do
     it "shows Max objective" $ do
-      prettyShowObjectiveFunction (Max (M.fromList [(1, 2)])) `shouldBe` "max: 2 * 1 + "
+      prettyShowObjectiveFunction (Max (M.fromList [(1, 2)])) `shouldBe` "max: 2 * 1"
 
     it "shows Min objective" $ do
-      prettyShowObjectiveFunction (Min (M.fromList [(1, 5)])) `shouldBe` "min: 5 * 1 + "
+      prettyShowObjectiveFunction (Min (M.fromList [(1, 5)])) `shouldBe` "min: 5 * 1"
 
   describe "twoPhaseSimplex with multiple objectives" $ do
     it "optimizes two objectives over the same feasible region" $ do

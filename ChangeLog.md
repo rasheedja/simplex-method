@@ -2,6 +2,7 @@
 
 ## Unreleased changes
 
+- Correct fractional coefficients in pretty-printed expressions and remove trailing plus separators. ([#19](https://github.com/rasheedja/simplex-method/pull/19))
 - Share shift and split coefficient-map transformations between objectives and constraints, and simplify access to their fields. ([#23](https://github.com/rasheedja/simplex-method/pull/23))
   - Avoid ambiguous constraint record updates using the existing field lenses, group the substitution helpers together, and test them directly.
 - Use standard Data.Map selection and deletion operations for solver variable filtering. ([#20](https://github.com/rasheedja/simplex-method/pull/20))
