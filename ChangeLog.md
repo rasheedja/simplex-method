@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+- Share shift and split coefficient-map transformations between objectives and constraints, and simplify access to their fields. ([#23](https://github.com/rasheedja/simplex-method/pull/23))
+  - Avoid ambiguous constraint record updates using the existing field lenses, group the substitution helpers together, and test them directly.
 - Use standard Data.Map selection and deletion operations for solver variable filtering. ([#20](https://github.com/rasheedja/simplex-method/pull/20))
 - Remove unused pivot bindings and give the active row-update helper a descriptive name. ([#21](https://github.com/rasheedja/simplex-method/pull/21))
 - Extract optimal variable values directly from dictionary constants without an intermediate tableau conversion. ([#22](https://github.com/rasheedja/simplex-method/pull/22))
