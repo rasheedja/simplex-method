@@ -106,7 +106,7 @@ findFeasibleSolution unsimplifiedSystem = do
                 M.map
                   ( \DictValue {..} ->
                       DictValue
-                        { varMapSum = M.filterWithKey (\k _ -> k `notElem` artificialVars) varMapSum
+                        { varMapSum = M.withoutKeys varMapSum artificialVarSet
                         , ..
                         }
                   )
@@ -192,6 +192,8 @@ findFeasibleSolution unsimplifiedSystem = do
     maxVarWithSlackVars = if null slackVars then maxVar else maximum slackVars
 
     (systemWithBasicVars, artificialVars) = systemWithArtificialVars systemWithSlackVars maxVarWithSlackVars
+
+    artificialVarSet = Set.fromList artificialVars
 
     finalMaxVar = if null artificialVars then maxVarWithSlackVars else maximum artificialVars
 
@@ -288,14 +290,14 @@ findFeasibleSolution unsimplifiedSystem = do
         }
       where
         -- Filter out non-artificial entries
-        rowsToAdd = M.filterWithKey (\k _ -> k `elem` artificialVars) rows
-        negatedRows = M.map (\(DictValue rowVarMapSum rowConstant) -> DictValue (M.map negate rowVarMapSum) (negate rowConstant)) rowsToAdd
+        artificialVarSet = Set.fromList artificialVars
+        rowsToAdd = M.restrictKeys rows artificialVarSet
         -- Negate rows, discard keys and artificial vars since the pivot objective does not care about them
         negatedRowsWithoutArtificialVars =
           map
             ( \(_, DictValue {..}) ->
                 DictValue
-                  { varMapSum = M.map negate $ M.filterWithKey (\k _ -> k `notElem` artificialVars) varMapSum
+                  { varMapSum = M.map negate $ M.withoutKeys varMapSum artificialVarSet
                   , constant = negate constant
                   }
             )
@@ -469,7 +471,7 @@ postprocess originalVars transforms (Optimal varVals) =
   let -- Unapply transforms to get variable values in original space
       unappliedVarVals = unapplyTransformsToVarMap transforms varVals
       -- Filter to only include original decision variables
-      filteredVarVals = M.filterWithKey (\k _ -> Set.member k originalVars) unappliedVarVals
+      filteredVarVals = M.restrictKeys unappliedVarVals originalVars
   in  Optimal filteredVarVals
 
 -- | Compute the value of an objective function given variable values.
@@ -841,4 +843,4 @@ simplexPivot objective@(PivotObjective {variable = objectiveVar, function = obje
             (error "pivot: Basic variable not found in Dict")
             $ M.lookup leavingVariable dict
 
-        filterOutEnteringVarTerm = M.filterWithKey (\vName _ -> vName /= enteringVariable)
+        filterOutEnteringVarTerm = M.delete enteringVariable
