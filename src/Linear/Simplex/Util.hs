@@ -14,7 +14,6 @@ import Control.Monad.Logger (LogLevel (..), MonadLogger, logDebug, logError, log
 import Data.Generics.Labels ()
 import Data.List (nub, (\\))
 import qualified Data.Map as Map
-import qualified Data.Map.Merge.Lazy as MapMerge
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import Data.Time (getCurrentTime)
@@ -117,37 +116,11 @@ tableauInDictionaryForm =
 
 -- | Combines two 'VarLitMapSums together by summing values with matching keys
 combineVarLitMapSums :: VarLitMapSum -> VarLitMapSum -> VarLitMapSum
-combineVarLitMapSums =
-  MapMerge.merge
-    (MapMerge.mapMaybeMissing keepVal)
-    (MapMerge.mapMaybeMissing keepVal)
-    (MapMerge.zipWithMaybeMatched sumVals)
-  where
-    keepVal = const pure
-    sumVals k v1 v2 = Just $ v1 + v2
+combineVarLitMapSums = Map.unionWith (+)
 
+-- | Sum coefficient maps, treating an empty list as the zero expression.
 foldVarLitMap :: [VarLitMap] -> VarLitMap
-foldVarLitMap [] = error "Empty list of VarLitMaps given to foldVarLitMap"
-foldVarLitMap [x] = x
-foldVarLitMap (vm1 : vm2 : vms) =
-  let combinedVars = nub $ Map.keys vm1 <> Map.keys vm2
-
-      combinedVarMap =
-        Map.fromList $
-          map
-            ( \var ->
-                let mVm1VarVal = Map.lookup var vm1
-                    mVm2VarVal = Map.lookup var vm2
-                in  ( var
-                    , case (mVm1VarVal, mVm2VarVal) of
-                        (Just vm1VarVal, Just vm2VarVal) -> vm1VarVal + vm2VarVal
-                        (Just vm1VarVal, Nothing) -> vm1VarVal
-                        (Nothing, Just vm2VarVal) -> vm2VarVal
-                        (Nothing, Nothing) -> error "Reached unreachable branch in foldVarLitMap"
-                    )
-            )
-            combinedVars
-  in  foldVarLitMap $ combinedVarMap : vms
+foldVarLitMap = Map.unionsWith (+)
 
 insertPivotObjectiveToDict :: PivotObjective -> Dict -> Dict
 insertPivotObjectiveToDict objective = Map.insert objective.variable (DictValue {varMapSum = objective.function, constant = objective.constant})
