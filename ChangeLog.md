@@ -2,6 +2,7 @@
 
 ## Unreleased changes
 
+- Add solver-level property tests on small bounded linear programs: every optimal answer is checked to be feasible inside its domains, its objective value is checked against a brute-force vertex enumeration, and each objective's result is checked not to depend on the other objectives requested alongside it. ([#N](https://github.com/rasheedja/simplex-method/pull/N))
 - Reserve every variable that appears in an objective when allocating slack and artificial variable ids in phase one, so a variable that appears only in an objective no longer shares an id with a slack variable and silently returns a wrong optimum. ([#27](https://github.com/rasheedja/simplex-method/pull/27))
 - Prevent degenerate simplex pivot cycles by using Bland's least-index entering and leaving rules in both phases. Tied optimal solutions may select different variable values while preserving the objective optimum.
 - Remove zero-valued artificial basic variables before phase two, preserving the original constraints when a degenerate phase-one optimum leaves artificials in the basis.
