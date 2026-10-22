@@ -42,9 +42,10 @@ import Prelude hiding (EQ)
 import Control.Lens ((%~), (&), (.~), (<&>))
 import Control.Monad (unless)
 import Control.Monad.Logger (LogLevel (LevelDebug, LevelError, LevelInfo), MonadLogger)
-import Data.List (mapAccumL)
+import Data.List (mapAccumL, minimumBy)
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
+import Data.Ord (Down (..), comparing)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
@@ -149,7 +150,7 @@ runPhaseOne reservedVars unsimplifiedSystem = do
       -- once here so 'simplexPivot' never has to take it back out and put it
       -- back in on every iteration.
       let phase1System = M.insert objectiveVar artificialObjectiveRow systemWithBasicVarsAsDictionary
-      mPhase1Dict <- simplexPivot 1 objectiveVar phase1System
+      mPhase1Dict <- simplexPivot 1 objectiveVar Dantzig phase1System
       case mPhase1Dict of
         Just phase1Dict -> do
           logMsg LevelDebug $
@@ -366,7 +367,7 @@ optimizeFeasibleSystem objFunction (FeasibleSystem {dict = phase1Dict, ..}) = do
     "optimizeFeasibleSystem: Optimizing with objective " <> Text.pack (prettyShowObjectiveFunction objFunction)
   logMsg LevelDebug $ "optimizeFeasibleSystem: Feasible system (in Dict form):\n" <> Text.pack (prettyShowDict phase1Dict)
   logMsg LevelDebug "optimizeFeasibleSystem: Pivoting with the back-substituted objective row"
-  mResult <- simplexPivot 1 objectiveVar (M.insert objectiveVar phase2ObjectiveRow phase1Dict)
+  mResult <- simplexPivot 1 objectiveVar Dantzig (M.insert objectiveVar phase2ObjectiveRow phase1Dict)
   case mResult of
     Nothing -> do
       logMsg LevelInfo "optimizeFeasibleSystem: Objective is unbounded (ratio test failed)"
@@ -692,11 +693,32 @@ unapplyTransformToVarMap transform valMap =
           origVal = posVal - negVal
       in  M.insert origVar origVal (M.delete posVar (M.delete negVar valMap))
 
--- | Pivot a feasible dictionary using Bland's anti-cycling rule in both phases.
--- Choose the least-index improving non-basic variable, then the least-index
--- basic variable among minimum-ratio ties. The fixed 'Var' ordering and exact
--- rational arithmetic ensure degenerate pivots cannot cycle. The objective row
--- is not a nonnegative basic variable and must not constrain the ratio test.
+-- | Which non-basic variable a pivot makes basic.
+data PivotRule = Dantzig | Bland
+
+-- | The rule as it is reported in the pivot 'LevelInfo' line.
+pivotRuleName :: PivotRule -> Text.Text
+pivotRuleName Dantzig = "dantzig"
+pivotRuleName Bland = "bland"
+
+-- | Pivot a feasible dictionary, starting with Dantzig's rule and falling back to
+-- Bland's anti-cycling rule once a pivot is degenerate.
+--
+-- The entering variable is the least-index improving non-basic variable under
+-- 'Bland', and the improving non-basic variable with the largest objective
+-- coefficient under 'Dantzig' (ties broken by least index). Dantzig usually
+-- reaches the optimum in far fewer pivots, but it can cycle across a run of
+-- degenerate pivots. Cycling needs a degenerate pivot, so from the first pivot
+-- whose minimum ratio is zero onwards this loop continues with 'Bland' for the
+-- rest of the solve: a zero step means the basis changes without improving the
+-- objective, and Bland's fixed 'Var' ordering cannot revisit a basis. A
+-- non-degenerate pivot strictly increases the objective, so there are only
+-- finitely many of those before the degenerate fallback takes over.
+--
+-- The leaving variable is the minimum-ratio basic variable, ties broken by least
+-- index, under either rule. The fixed 'Var' ordering and exact rational
+-- arithmetic are what make the fallback terminate. The objective row is not a
+-- nonnegative basic variable and must not constrain the ratio test.
 --
 -- The first 'Var' is the objective variable. Its row must already be in the
 -- dictionary: the objective is an ordinary row that is read, pivoted and
@@ -705,15 +727,16 @@ unapplyTransformToVarMap transform valMap =
 -- The 'Int' is the pivot number. Callers start it at 1 and each recursive pivot
 -- increments it, so a trace can be followed by pivot instead of by wall-clock
 -- time. 'LevelInfo' gets exactly one line per pivot; the objective constant on
--- that line is the value the pivot starts from.
-simplexPivot :: (MonadLogger m) => Int -> Var -> Dict -> m (Maybe Dict)
-simplexPivot pivotNumber objectiveVar dictionary = do
+-- that line is the value the pivot starts from, and @rule=@ names the entering
+-- rule that pivot used.
+simplexPivot :: (MonadLogger m) => Int -> Var -> PivotRule -> Dict -> m (Maybe Dict)
+simplexPivot pivotNumber objectiveVar rule dictionary = do
   logMsg LevelDebug $
     "simplexPivot: pivot "
       <> showT pivotNumber
       <> " starting from system (in Dict form, objective row included):\n"
       <> Text.pack (prettyShowDict dictionary)
-  case M.lookupMin (M.filter (> 0) objectiveFunc) of
+  case enteringVarFor rule of
     Nothing -> do
       logMsg LevelInfo $
         "simplexPivot: pivot "
@@ -721,7 +744,7 @@ simplexPivot pivotNumber objectiveVar dictionary = do
           <> ": no positive objective coefficient left, optimal with objective constant "
           <> Text.pack (prettyShowRational objectiveConstant)
       pure $ Just dictionary
-    Just (pivotNonBasicVar, _) ->
+    Just pivotNonBasicVar ->
       case ratioTest dictionary pivotNonBasicVar of
         Nothing -> do
           logMsg LevelInfo $
@@ -731,7 +754,7 @@ simplexPivot pivotNumber objectiveVar dictionary = do
               <> showT pivotNonBasicVar
               <> ", ratio test failed, objective is unbounded"
           pure Nothing
-        Just pivotBasicVar -> do
+        Just (pivotBasicVar, step) -> do
           logMsg LevelInfo $
             "simplexPivot: pivot "
               <> showT pivotNumber
@@ -741,7 +764,13 @@ simplexPivot pivotNumber objectiveVar dictionary = do
               <> showT pivotBasicVar
               <> ", objective constant "
               <> Text.pack (prettyShowRational objectiveConstant)
-          let pivotedDict = pivot pivotBasicVar pivotNonBasicVar dictionary
+              <> ", rule="
+              <> pivotRuleName rule
+          -- A zero step is a degenerate pivot, which is the only way the
+          -- objective can fail to improve; this solve continues with Bland so
+          -- those pivots cannot cycle.
+          let nextRule = if step == 0 then Bland else rule
+              pivotedDict = pivot pivotBasicVar pivotNonBasicVar dictionary
           logMsg LevelDebug $
             "simplexPivot: pivot "
               <> showT (pivotNumber + 1)
@@ -750,6 +779,7 @@ simplexPivot pivotNumber objectiveVar dictionary = do
           simplexPivot
             (pivotNumber + 1)
             objectiveVar
+            nextRule
             pivotedDict
   where
     objectiveRow =
@@ -761,12 +791,23 @@ simplexPivot pivotNumber objectiveVar dictionary = do
 
     objectiveConstant = objectiveRow.constant
 
-    ratioTest :: Dict -> Var -> Maybe Var
+    positiveObjectiveCoeffs = M.filter (> 0) objectiveFunc
+
+    -- The entering variable: 'Dantzig' takes the largest positive objective
+    -- coefficient (ties broken by least index), 'Bland' the least index.
+    enteringVarFor :: PivotRule -> Maybe Var
+    enteringVarFor Bland = fst <$> M.lookupMin positiveObjectiveCoeffs
+    enteringVarFor Dantzig = case M.toList positiveObjectiveCoeffs of
+      [] -> Nothing
+      candidates -> Just . fst $ minimumBy (comparing (\(var, coeff) -> (Down coeff, var))) candidates
+
+    -- The leaving variable and the step it takes. Pair ordering first minimizes
+    -- the step, then the leaving variable, so a zero step is the degenerate case.
+    ratioTest :: Dict -> Var -> Maybe (Var, SimplexNum)
     ratioTest dict enteringVar =
       case ratios of
         [] -> Nothing
-        -- Pair ordering first minimizes the step, then the leaving variable.
-        _ -> Just (snd (minimum ratios))
+        _ -> let (step, basicVar) = minimum ratios in Just (basicVar, step)
       where
         ratios =
           [ (row.constant / negate coeff, basicVar)
