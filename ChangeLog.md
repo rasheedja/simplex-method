@@ -2,6 +2,7 @@
 
 ## Unreleased changes
 
+- Add solver-level property tests on small bounded linear programs: every optimal answer is checked to be feasible inside its domains, its objective value is checked against a brute-force vertex enumeration, and each objective's result is checked not to depend on the other objectives requested alongside it. ([#29](https://github.com/rasheedja/simplex-method/pull/29))
 - Reserve every variable that appears in an objective when allocating slack and artificial variable ids in phase one, so a variable that appears only in an objective no longer shares an id with a slack variable and silently returns a wrong optimum. ([#27](https://github.com/rasheedja/simplex-method/pull/27))
 - Remove an unreachable objective-row lookup branch in `findFeasibleSolution` and correct its inverted phase-one objective RHS error message. ([#26](https://github.com/rasheedja/simplex-method/pull/26))
 - Decide constant constraints, whose left-hand side has only zero coefficients, before phase one: a contradiction returns infeasible instead of crashing on an empty variable list, and tautologies are dropped. ([#28](https://github.com/rasheedja/simplex-method/pull/28))
