@@ -13,6 +13,7 @@
 -- 'twoPhaseSimplex' supports variable domains via its 'VarDomainMap' argument.
 module Linear.Simplex.Solver.TwoPhase
   ( findFeasibleSolution
+  , findFeasibleSolutionReserving
   , optimizeFeasibleSystem
   , twoPhaseSimplex
   -- Internal functions exported for testing
@@ -81,12 +82,19 @@ import Linear.Simplex.Util
   , tableauInDictionaryForm
   )
 
+-- | Find a feasible solution for the given system of 'PolyConstraint's.
+--  No variable ids are reserved beyond those appearing in the constraints.
+findFeasibleSolution :: (MonadIO m, MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
+findFeasibleSolution = findFeasibleSolutionReserving Set.empty
+
 -- | Find a feasible solution for the given system of 'PolyConstraint's by performing the first phase of the two-phase simplex method
 --  All variables in the 'PolyConstraint' must be positive.
+--  Slack and artificial variables are allocated above every variable in the given reserved set as well as every variable
+--  in the constraints, so a variable that only appears in an objective function never shares an id with them.
 --  If the system is infeasible, return 'Nothing'
 --  Otherwise, return the feasible system in 'Dict' as well as a list of slack variables, a list artificial variables, and the objective variable.
-findFeasibleSolution :: (MonadIO m, MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
-findFeasibleSolution unsimplifiedSystem = do
+findFeasibleSolutionReserving :: (MonadIO m, MonadLogger m) => Set Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
+findFeasibleSolutionReserving reservedVars unsimplifiedSystem = do
   logMsg LevelInfo $ "findFeasibleSolution: Looking for solution for " <> showT unsimplifiedSystem
   if null artificialVars -- No artificial vars, we have a feasible system
     then do
@@ -196,18 +204,27 @@ findFeasibleSolution unsimplifiedSystem = do
 
     system = simplifySystem unsimplifiedSystem
 
-    maxVar =
-      if null system
-        then 0
-        else
-          maximum $
-            map
-              ( \case
-                  LEQ vcm _ -> maximum (map fst $ M.toList vcm)
-                  GEQ vcm _ -> maximum (map fst $ M.toList vcm)
-                  EQ vcm _ -> maximum (map fst $ M.toList vcm)
-              )
-              system
+    -- Slack and artificial variables are allocated from 'maxVar' upwards, so 'maxVar' must be at least
+    -- every variable id in the system, including the reserved ids that may only occur in an objective.
+    maxVar = case (Set.lookupMax reservedVars, maxConstraintVar) of
+      (Just reservedMax, Just systemMax) -> max reservedMax systemMax
+      (Just reservedMax, Nothing) -> reservedMax
+      (Nothing, Just systemMax) -> systemMax
+      (Nothing, Nothing) -> 0
+
+    maxConstraintVar :: Maybe Var
+    maxConstraintVar
+      | null system = Nothing
+      | otherwise =
+          Just $
+            maximum $
+              map
+                ( \case
+                    LEQ vcm _ -> maximum (map fst $ M.toList vcm)
+                    GEQ vcm _ -> maximum (map fst $ M.toList vcm)
+                    EQ vcm _ -> maximum (map fst $ M.toList vcm)
+                )
+                system
 
     (systemWithSlackVars, slackVars) = systemInStandardForm system maxVar []
 
@@ -450,7 +467,11 @@ twoPhaseSimplex domainMap objFunctions constraints = do
       <> showT transformedObjs
       <> "; Transformed constraints: "
       <> showT transformedConstraints
-  mFeasibleSystem <- findFeasibleSolution transformedConstraints
+  -- Reserve every variable that appears in an objective, including variables that
+  -- appear in no constraint and variables introduced by the transforms, so the
+  -- slack and artificial ids allocated in phase one cannot collide with them.
+  let objectiveVars = Set.unions $ map (M.keysSet . (.objective)) transformedObjs
+  mFeasibleSystem <- findFeasibleSolutionReserving objectiveVars transformedConstraints
   case mFeasibleSystem of
     Nothing -> do
       logMsg LevelInfo "twoPhaseSimplex: No feasible solution found in phase 1"
