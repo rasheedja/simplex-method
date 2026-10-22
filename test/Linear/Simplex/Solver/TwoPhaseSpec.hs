@@ -37,6 +37,7 @@ import Linear.Simplex.Solver.TwoPhase
   , collectAllVars
   , computeObjective
   , findFeasibleSolution
+  , findFeasibleSolutionReserving
   , generateTransform
   , getTransform
   , optimizeFeasibleSystem
@@ -3460,3 +3461,52 @@ spec = do
         ObjectiveResult _ (Optimal varVals) ->
           M.findWithDefault 0 1 varVals `shouldBe` 0
         _ -> expectationFailure "Expected optimal result for Min x₁"
+
+  describe "objective-only variable allocation" $ do
+    -- Slack and artificial variables must not reuse an id that belongs to a
+    -- variable appearing only in an objective. Otherwise the objective reads a
+    -- slack variable and the solver silently returns a wrong optimum.
+    let constraint = LEQ (M.singleton 1 1) 1
+        bothNonNegative = VarDomainMap $ M.fromList [(1, nonNegative), (2, nonNegative)]
+        unboundedObjective = Max (M.fromList [(1, 1), (2, 1)])
+
+    it "reports an unbounded phase-two objective over a constraint-only feasible system" $ do
+      -- A bare 'findFeasibleSolution' knows nothing about the objective, so it
+      -- allocates the slack variable id 2 that the objective uses for x₂.
+      -- Reserving the objective's variables makes phase two see them instead.
+      actual <- runNoLoggingT $ do
+        mfs <- findFeasibleSolutionReserving (collectAllVars [unboundedObjective] [constraint]) [constraint]
+        traverse (optimizeFeasibleSystem unboundedObjective) mfs
+      case actual of
+        Just Unbounded -> pure ()
+        result -> expectationFailure $ "Expected a feasible system with an unbounded objective, got " ++ show result
+
+    it "reports an unbounded objective through twoPhaseSimplex" $ do
+      actual <- runNoLoggingT $ twoPhaseSimplex bothNonNegative [unboundedObjective] [constraint]
+      case actual of
+        SimplexResult (Just _) [ObjectiveResult _ Unbounded] -> pure ()
+        result -> expectationFailure $ "Expected a feasible system with an unbounded objective, got " ++ show result
+
+    it "still returns the optimum when the objective only uses constrained variables" $ do
+      actual <- runNoLoggingT $ twoPhaseSimplex bothNonNegative [Max (M.singleton 1 1)] [constraint]
+      case actual of
+        SimplexResult (Just _) [ObjectiveResult _ (Optimal varVals)] ->
+          M.lookup 1 varVals `shouldBe` Just 1
+        result -> expectationFailure $ "Expected the optimum x₁ = 1, got " ++ show result
+
+    it "reserves a variable that only appears in a later objective" $ do
+      let objectives = [Max (M.singleton 1 1), unboundedObjective]
+      actual <- runNoLoggingT $ twoPhaseSimplex bothNonNegative objectives [constraint]
+      case actual of
+        SimplexResult (Just _) [ObjectiveResult _ firstOutcome, ObjectiveResult _ secondOutcome] -> do
+          case firstOutcome of
+            Optimal varVals -> M.findWithDefault 0 1 varVals `shouldBe` 1
+            Unbounded -> expectationFailure "The constraint bounds the first objective"
+          secondOutcome `shouldBe` Unbounded
+        result -> expectationFailure $ "Expected an optimum then unboundedness, got " ++ show result
+
+    it "allocates slack ids above the ids passed to findFeasibleSolutionReserving" $ do
+      mfs <- runNoLoggingT $ findFeasibleSolutionReserving (Set.singleton 5) [constraint]
+      case mfs of
+        Just feasible -> feasible.slackVars `shouldSatisfy` (\vars -> not (null vars) && all (> 5) vars)
+        Nothing -> expectationFailure "A single constraint x₁ <= 1 is feasible"
