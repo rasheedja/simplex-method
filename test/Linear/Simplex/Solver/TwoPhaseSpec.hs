@@ -13,7 +13,9 @@ import Control.Monad.Logger
   , runLoggingT
   , runNoLoggingT
   , runStdoutLoggingT
+  , runWriterLoggingT
   )
+import Data.Functor.Identity (runIdentity)
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import qualified Data.Map as M
 import Data.Maybe (isJust)
@@ -37,6 +39,7 @@ import Linear.Simplex.Solver.TwoPhase
   , collectAllVars
   , computeObjective
   , findFeasibleSolution
+  , findFeasibleSolutionReserving
   , generateTransform
   , getTransform
   , optimizeFeasibleSystem
@@ -125,7 +128,7 @@ spec = do
       -- Both artificial rows (x3 and x4) have ratio zero. Bland chooses
       -- x1 to enter and x3 to leave. Cleanup then removes redundant x4.
       -- Observe the pivot choices before cleanup removes that basis evidence.
-      pivotChoices <- newIORef []
+      pivotLines <- newIORef []
       actual <-
         withinTimeout $
           runLoggingT
@@ -136,11 +139,15 @@ spec = do
             )
             ( \_ _ _ message -> do
                 let text = decodeUtf8 (fromLogStr message)
-                if "pivoting variable" `Text.isInfixOf` text
-                  then modifyIORef' pivotChoices (++ [Text.takeWhileEnd (/= ' ') text])
+                -- Only actual pivots report an entering variable; the final
+                -- optimality line does not, so this counts pivots, not recursion.
+                if "simplexPivot: pivot " `Text.isInfixOf` text && "entering " `Text.isInfixOf` text
+                  then modifyIORef' pivotLines (++ [text])
                   else pure ()
             )
-      readIORef pivotChoices >>= (`shouldBe` ["1", "3"])
+      pivots <- readIORef pivotLines
+      length pivots `shouldBe` 1
+      pivots `shouldSatisfy` all (Text.isPrefixOf "simplexPivot: pivot 1: entering 1, leaving 3, objective constant ")
       case actual of
         Just (Just feasible) -> do
           M.keys (M.delete feasible.objectiveVar feasible.dict) `shouldBe` [1]
@@ -234,6 +241,45 @@ spec = do
           [M.findWithDefault 0 v varMap | v <- [1, 2]] `shouldBe` [0, 0]
         Nothing -> expectationFailure "Cleanup with a negative pivot coefficient timed out"
         Just result -> expectationFailure $ "Expected the origin as the unique feasible point, got " ++ show result
+
+  describe "logging and monad requirements" $ do
+    -- Page 50 LP of 'Linear and Integer Programming Made Easy': Max 3x1 + 5x2
+    -- needs at least one phase-two pivot to reach x1=3, x2=4.
+    let obj = Max (M.fromList [(1, 3), (2, 5)])
+        constraints =
+          [ LEQ (M.fromList [(1, 3), (2, 1)]) 15
+          , LEQ (M.fromList [(1, 1), (2, 1)]) 7
+          , LEQ (M.fromList [(2, 1)]) 4
+          , LEQ (M.fromList [(1, -1), (2, 2)]) 6
+          ]
+        domainMap = VarDomainMap $ M.fromSet (const nonNegative) (collectAllVars [obj] constraints)
+
+    it "runs in a pure monad" $ do
+      -- 'twoPhaseSimplex' only needs 'MonadLogger', so a pure 'Identity' run
+      -- with logging switched off has to solve the problem identically.
+      let result = runIdentity $ runNoLoggingT $ twoPhaseSimplex domainMap [obj] constraints
+      case result of
+        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
+          varMap `shouldBe` M.fromList [(1, 3), (2, 4)]
+          computeObjective obj varMap `shouldBe` 29
+        SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
+        _ -> expectationFailure $ "Unexpected result from the pure solver run: " ++ show result
+
+    it "logs one line per pivot at Info with no dictionary dumps" $ do
+      let (result, logs) = runIdentity $ runWriterLoggingT $ twoPhaseSimplex domainMap [obj] constraints
+          infoLines =
+            [ decodeUtf8 (fromLogStr message)
+            | (_, _, level, message) <- logs
+            , level == LevelInfo
+            ]
+      infoLines `shouldSatisfy` any (Text.isInfixOf "simplexPivot: pivot 1:")
+      -- A dictionary dump is 'show'n, so it is the only Info text that can
+      -- mention the row type.
+      infoLines `shouldSatisfy` all (not . Text.isInfixOf "DictValue")
+      case result of
+        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> varMap `shouldBe` M.fromList [(1, 3), (2, 4)]
+        SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
+        _ -> expectationFailure $ "Unexpected result from the logged run: " ++ show result
 
   describe "twoPhaseSimplex" $ do
     -- From page 50 of 'Linear and Integer Programming Made Easy'
@@ -1438,6 +1484,54 @@ spec = do
       )
       [Max M.empty, Min M.empty]
 
+  describe "constant constraints" $ do
+    describe "accepts constant tautologies" $ do
+      mapM_
+        ( \constraint ->
+            it (show constraint ++ " is feasible") $ do
+              result <- runNoLoggingT $ twoPhaseSimplex (VarDomainMap M.empty) [] [constraint]
+              result.feasibleSystem `shouldSatisfy` isJust
+        )
+        [LEQ M.empty 1, LEQ M.empty 0, GEQ M.empty (-1), GEQ M.empty 0, EQ M.empty 0]
+
+    describe "rejects constant contradictions" $ do
+      mapM_
+        ( \constraint ->
+            it (show constraint ++ " is infeasible") $ do
+              result <- runNoLoggingT $ twoPhaseSimplex (VarDomainMap M.empty) [] [constraint]
+              result `shouldBe` SimplexResult Nothing []
+        )
+        [LEQ M.empty (-1), GEQ M.empty 1, EQ M.empty 1, EQ M.empty (-1)]
+
+    it "optimises variable constraints alongside constant tautologies" $ do
+      let tautologies =
+            [LEQ M.empty 1, LEQ M.empty 0, GEQ M.empty (-1), GEQ M.empty 0, EQ M.empty 0]
+          obj = Max (M.singleton 1 1)
+          domainMap = VarDomainMap $ M.singleton 1 (boundedRange 0 3)
+          constraints = LEQ (M.singleton 1 1) 2 : tautologies
+      result <- runNoLoggingT $ twoPhaseSimplex domainMap [obj] constraints
+      result.feasibleSystem `shouldSatisfy` isJust
+      case result.objectiveResults of
+        [ObjectiveResult _ (Optimal varMap)] -> do
+          M.findWithDefault 0 1 varMap `shouldBe` 2
+          computeObjective obj varMap `shouldBe` 2
+        _ -> expectationFailure $ "Unexpected result: " ++ show result
+
+    it "treats an explicit zero coefficient as a constant constraint" $ do
+      let domainMap = VarDomainMap $ M.singleton 1 nonNegative
+      result <- runNoLoggingT $ twoPhaseSimplex domainMap [] [LEQ (M.singleton 1 0) (-1)]
+      result `shouldBe` SimplexResult Nothing []
+
+    it "finds a feasible system for a single constant tautology without throwing" $ do
+      actual <- runNoLoggingT $ findFeasibleSolution [LEQ M.empty 1]
+      case actual of
+        Just feasible -> do
+          feasible.dict `shouldBe` M.empty
+          feasible.slackVars `shouldBe` []
+          feasible.artificialVars `shouldBe` []
+          feasible.objectiveVar `shouldBe` 1
+        Nothing -> expectationFailure "0 <= 1 holds for every variable assignment"
+
   describe "twoPhaseSimplex with empty constraint system" $ do
     describe "Single variable with boundedRange" $ do
       it "Max x₁ with 0 ≤ x₁ ≤ 10: optimal at x₁=10" $ do
@@ -1678,7 +1772,7 @@ spec = do
         SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just (-10)
         _ -> expectationFailure "Unexpected result format"
 
-    it "AddLowerBound with positive lower bound" $ do
+    it "Shift with positive lower bound" $ do
       let obj = Max (M.fromList [(1, 1)])
           constraints = [LEQ (M.fromList [(1, 1)]) 10]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
@@ -1691,7 +1785,7 @@ spec = do
         SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just 10
         _ -> expectationFailure "Unexpected result format"
 
-    it "AddLowerBound finds minimum at positive bound" $ do
+    it "Shift finds minimum at positive bound" $ do
       let obj = Min (M.fromList [(1, 1)])
           constraints = [LEQ (M.fromList [(1, 1)]) 10]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
@@ -2376,7 +2470,7 @@ spec = do
 
     describe "Positive lower bound with other domain types" $ do
       it "Max 2x₁ + 3x₂ with x₁ ≥ 2 (positive bound), x₂ ≥ -3, 2x₁ + x₂ ≤ 20" $ do
-        -- x₁ has positive lower bound (uses AddLowerBound)
+        -- x₁ has positive lower bound (uses Shift)
         -- x₂ has negative lower bound (uses Shift)
         let obj = Max (M.fromList [(1, 2), (2, 3)])
             constraints =
@@ -2569,11 +2663,11 @@ spec = do
       it "returns empty list for lowerBoundOnly 0" $ do
         getTransform 10 1 (lowerBoundOnly 0) `shouldBe` ([], 0)
 
-      it "returns AddLowerBound for positive lower bound" $ do
-        getTransform 10 1 (lowerBoundOnly 5) `shouldBe` ([AddLowerBound 1 5], 0)
+      it "returns Shift for positive lower bound" $ do
+        getTransform 10 1 (lowerBoundOnly 5) `shouldBe` ([Shift 1 10 5], 1)
 
-      it "returns AddLowerBound for fractional positive lower bound" $ do
-        getTransform 10 1 (lowerBoundOnly (3 % 2)) `shouldBe` ([AddLowerBound 1 (3 % 2)], 0)
+      it "returns Shift for fractional positive lower bound" $ do
+        getTransform 10 1 (lowerBoundOnly (3 % 2)) `shouldBe` ([Shift 1 10 (3 % 2)], 1)
 
       it "returns Shift for negative lower bound" $ do
         getTransform 10 1 (lowerBoundOnly (-5)) `shouldBe` ([Shift 1 10 (-5)], 1)
@@ -2587,8 +2681,8 @@ spec = do
       it "returns AddUpperBound for upper bound only" $ do
         getTransform 10 1 (upperBoundOnly 5) `shouldBe` ([Split 1 10 11, AddUpperBound 1 5], 2)
 
-      it "returns AddLowerBound and AddUpperBound for bounded range" $ do
-        getTransform 10 1 (boundedRange 2 10) `shouldBe` ([AddLowerBound 1 2, AddUpperBound 1 10], 0)
+      it "returns Shift and AddUpperBound for bounded range" $ do
+        getTransform 10 1 (boundedRange 2 10) `shouldBe` ([Shift 1 10 2, AddUpperBound 1 10], 1)
 
       it "returns Shift and AddUpperBound for negative lower bound with upper bound" $ do
         getTransform 10 1 (boundedRange (-5) 10) `shouldBe` ([Shift 1 10 (-5), AddUpperBound 1 10], 1)
@@ -2599,9 +2693,9 @@ spec = do
         let domainMap = M.fromList [(1, nonNegative)]
         generateTransform domainMap 1 ([], 10) `shouldBe` ([], 10)
 
-      it "generates AddLowerBound for positive bound in domain map" $ do
+      it "generates Shift for positive bound in domain map" $ do
         let domainMap = M.fromList [(1, lowerBoundOnly 5)]
-        generateTransform domainMap 1 ([], 10) `shouldBe` ([AddLowerBound 1 5], 10)
+        generateTransform domainMap 1 ([], 10) `shouldBe` ([Shift 1 10 5], 11)
 
       it "generates Shift for negative bound and increments fresh var" $ do
         let domainMap = M.fromList [(1, lowerBoundOnly (-5))]
@@ -2617,8 +2711,8 @@ spec = do
 
       it "accumulates transforms" $ do
         let domainMap = M.fromList [(1, lowerBoundOnly 5)]
-            existing = [AddLowerBound 2 3]
-        generateTransform domainMap 1 (existing, 10) `shouldBe` ([AddLowerBound 1 5] ++ existing, 10)
+            existing = [AddUpperBound 2 3]
+        generateTransform domainMap 1 (existing, 10) `shouldBe` ([Shift 1 10 5] ++ existing, 11)
 
       it "generates AddUpperBound for upper bound" $ do
         let domainMap = M.fromList [(1, boundedRange 0 10)]
@@ -2779,12 +2873,15 @@ spec = do
 
   describe "applyTransform and applyTransforms" $ do
     describe "Unit tests" $ do
-      it "applyTransform AddLowerBound adds GEQ constraint" $ do
+      it "applyTransforms applies the shift to the added upper bound" $ do
+        -- The upper bound is added on the original variable, so the Shift applied
+        -- afterwards must rewrite that constraint too: x = x' + 2 with x <= 5
+        -- becomes x' <= 3.
         let obj = Max (M.fromList [(1, 1)])
-            constraints = [LEQ (M.fromList [(1, 1)]) 10]
-            transform = AddLowerBound 1 5
-        applyTransform transform (obj, constraints)
-          `shouldBe` (obj, [GEQ (M.singleton 1 1) 5, LEQ (M.fromList [(1, 1)]) 10])
+            transforms = [Shift 1 10 2, AddUpperBound 1 5]
+        let (newObj, newConstraints) = applyTransforms transforms obj []
+        newObj `shouldBe` Max (M.fromList [(10, 1)])
+        newConstraints `shouldBe` [LEQ (M.fromList [(10, 1)]) 3]
 
       it "applyTransform Shift transforms objective and constraints" $ do
         let obj = Max (M.fromList [(1, 2)])
@@ -2805,17 +2902,17 @@ spec = do
       it "applyTransforms applies multiple transforms in order" $ do
         let obj = Max (M.fromList [(1, 1), (2, 1)])
             constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 10]
-            transforms = [AddLowerBound 1 5, AddLowerBound 2 3]
+            transforms = [Shift 1 10 5, Shift 2 11 3]
         let (newObj, newConstraints) = applyTransforms transforms obj constraints
-        newObj `shouldBe` obj
-        -- Two GEQ constraints should be added
-        length newConstraints `shouldBe` 3
+        newObj `shouldBe` Max (M.fromList [(10, 1), (11, 1)])
+        -- Both shifts are subtracted from the right-hand side
+        newConstraints `shouldBe` [LEQ (M.fromList [(10, 1), (11, 1)]) 2]
 
   describe "unapplyTransformToVarMap and unapplyTransformsToVarMap" $ do
     describe "Unit tests" $ do
-      it "unapplyTransformToVarMap AddLowerBound leaves result unchanged" $ do
+      it "unapplyTransformToVarMap AddUpperBound leaves result unchanged" $ do
         let varVals = M.fromList [(1, 7)]
-            transform = AddLowerBound 1 5
+            transform = AddUpperBound 1 5
         unapplyTransformToVarMap transform varVals `shouldBe` varVals
 
       it "unapplyTransformToVarMap Shift recovers original variable value" $ do
@@ -2864,13 +2961,14 @@ spec = do
         newObj `shouldBe` obj
         newConstraints `shouldBe` constraints
 
-      it "generates AddLowerBound for positive lower bounds" $ do
+      it "generates Shift for positive lower bounds" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 10]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
-        let (_, newConstraints, transforms) = preprocess [obj] domainMap constraints
-        transforms `shouldBe` [AddLowerBound 1 5]
-        length newConstraints `shouldBe` 2 -- original + GEQ
+        let ([newObj], newConstraints, transforms) = preprocess [obj] domainMap constraints
+        transforms `shouldBe` [Shift 1 2 5]
+        newObj `shouldBe` Max (M.fromList [(2, 1)])
+        newConstraints `shouldBe` [LEQ (M.fromList [(2, 1)]) 5] -- shifted original only, no GEQ row
       it "generates Shift for negative lower bounds" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 10]
@@ -2901,7 +2999,7 @@ spec = do
                 M.fromList
                   [(1, nonNegative), (2, lowerBoundOnly 5), (3, lowerBoundOnly (-3))]
         let (_, _, transforms) = preprocess [obj] domainMap constraints
-        -- Should have AddLowerBound for var 2, Shift for var 3
+        -- Should have Shift for var 2, Shift for var 3
         length transforms `shouldBe` 2
       it "assigns fresh variables strictly greater than maxVar (no collision)" $ do
         -- Reproduces the off-by-one bug: when maxVar (not maxVar+1) was used as
@@ -2925,6 +3023,71 @@ spec = do
         case transforms of
           [Shift {originalVar = 1, shiftedVar = sv}] -> sv `shouldBe` 3
           _ -> expectationFailure "Expected exactly one Shift 1->3 transform"
+
+      it "shifts the upper bound of a bounded range onto the fresh variable" $ do
+        -- boundedRange 2 5 becomes Shift 1 2 2 plus AddUpperBound 1 5, and the
+        -- shift rewrites the added upper bound: 2 <= 5 - 2 = 3, i.e. the single
+        -- row LEQ {2: 1} 3, which is feasible at the origin.
+        let obj = Max (M.fromList [(1, 1)])
+            constraints = []
+            domainMap = VarDomainMap $ M.fromList [(1, boundedRange 2 5)]
+            ([newObj], newConstraints, transforms) = preprocess [obj] domainMap constraints
+        transforms `shouldBe` [Shift 1 2 2, AddUpperBound 1 5]
+        newObj `shouldBe` Max (M.fromList [(2, 1)])
+        newConstraints `shouldBe` [LEQ (M.fromList [(2, 1)]) 3]
+
+  describe "positive lower bounds are shifted instead of bounded by a GEQ row" $ do
+    let -- A three-variable box with one real constraint. Every lower bound is
+        -- positive, so before the shift each one needed an artificial variable.
+        domainMap =
+          VarDomainMap $
+            M.fromList
+              [ (1, boundedRange (3 % 10) (1 % 2))
+              , (2, boundedRange 1 2)
+              , (3, boundedRange 1 2)
+              ]
+        constraints = [LEQ (M.fromList [(1, 1), (2, 1), (3, -1)]) 1]
+        objectives = [Min (M.fromList [(1, 1)]), Max (M.fromList [(1, 1)])]
+
+    it "do not create artificial variables" $ do
+      let (_, transformedConstraints, _) = preprocess objectives domainMap constraints
+      mFeasibleSystem <- runNoLoggingT $ findFeasibleSolution transformedConstraints
+      case mFeasibleSystem of
+        Nothing -> expectationFailure "Expected the shifted system to be feasible"
+        Just feasibleSystem -> feasibleSystem.artificialVars `shouldBe` []
+
+    it "give the same optima as before" $ do
+      actualResult <- runNoLoggingT $ twoPhaseSimplex domainMap objectives constraints
+      case actualResult of
+        SimplexResult _ [ObjectiveResult minObj (Optimal minVals), ObjectiveResult maxObj (Optimal maxVals)] -> do
+          computeObjective minObj minVals `shouldBe` (3 % 10)
+          computeObjective maxObj maxVals `shouldBe` (1 % 2)
+        _ -> expectationFailure "Expected optimal results for both objectives"
+
+  describe "artificial variable construction" $ do
+    -- One rule decides whether a standard-form row needs an artificial variable:
+    -- it is needed when the row has no basic variable, or when the basic variable
+    -- cannot be non-negative there. A GEQ row gets a slack with coefficient -1,
+    -- which no non-negative slack value can satisfy against a positive rhs; a LEQ
+    -- row's slack satisfies it; an EQ row has no basic variable at all.
+    -- 'findFeasibleSolution' assumes every variable is non-negative.
+    it "creates exactly one artificial variable for a GEQ row" $ do
+      mfs <- runNoLoggingT $ findFeasibleSolution [GEQ (M.singleton 1 1) 2]
+      case mfs of
+        Nothing -> expectationFailure "x1 >= 2 is feasible for a non-negative x1"
+        Just feasible -> length feasible.artificialVars `shouldBe` 1
+
+    it "creates no artificial variable for a LEQ row" $ do
+      mfs <- runNoLoggingT $ findFeasibleSolution [LEQ (M.singleton 1 1) 2]
+      case mfs of
+        Nothing -> expectationFailure "x1 <= 2 is feasible for a non-negative x1"
+        Just feasible -> feasible.artificialVars `shouldBe` []
+
+    it "creates exactly one artificial variable for an EQ row" $ do
+      mfs <- runNoLoggingT $ findFeasibleSolution [EQ (M.singleton 1 1) 2]
+      case mfs of
+        Nothing -> expectationFailure "x1 = 2 is feasible for a non-negative x1"
+        Just feasible -> length feasible.artificialVars `shouldBe` 1
 
   -- ===========================================================================
   -- Property-based tests
@@ -2956,11 +3119,12 @@ spec = do
           \(nextVar :: Int) (v :: Int) ->
             getTransform (abs nextVar + 1) (abs v + 1) (lowerBoundOnly 0) == ([], 0)
 
-      it "positive lowerBoundOnly produces AddLowerBound" $
+      it "positive lowerBoundOnly produces Shift with that offset" $
         property $
           \(Positive bound :: Positive Rational) (nextVar :: Int) (v :: Int) ->
             case getTransform (abs nextVar + 1) (abs v + 1) (lowerBoundOnly bound) of
-              ([AddLowerBound var b], 0) -> var == abs v + 1 && b == bound
+              ([Shift origVar shiftedVar shiftBy], 1) ->
+                origVar == abs v + 1 && shiftedVar == abs nextVar + 1 && shiftBy == bound
               _ -> False
 
       it "negative lowerBoundOnly produces Shift" $
@@ -3460,3 +3624,52 @@ spec = do
         ObjectiveResult _ (Optimal varVals) ->
           M.findWithDefault 0 1 varVals `shouldBe` 0
         _ -> expectationFailure "Expected optimal result for Min x₁"
+
+  describe "objective-only variable allocation" $ do
+    -- Slack and artificial variables must not reuse an id that belongs to a
+    -- variable appearing only in an objective. Otherwise the objective reads a
+    -- slack variable and the solver silently returns a wrong optimum.
+    let constraint = LEQ (M.singleton 1 1) 1
+        bothNonNegative = VarDomainMap $ M.fromList [(1, nonNegative), (2, nonNegative)]
+        unboundedObjective = Max (M.fromList [(1, 1), (2, 1)])
+
+    it "reports an unbounded phase-two objective over a constraint-only feasible system" $ do
+      -- A bare 'findFeasibleSolution' knows nothing about the objective, so it
+      -- allocates the slack variable id 2 that the objective uses for x₂.
+      -- Reserving the objective's variables makes phase two see them instead.
+      actual <- runNoLoggingT $ do
+        mfs <- findFeasibleSolutionReserving (collectAllVars [unboundedObjective] [constraint]) [constraint]
+        traverse (optimizeFeasibleSystem unboundedObjective) mfs
+      case actual of
+        Just Unbounded -> pure ()
+        result -> expectationFailure $ "Expected a feasible system with an unbounded objective, got " ++ show result
+
+    it "reports an unbounded objective through twoPhaseSimplex" $ do
+      actual <- runNoLoggingT $ twoPhaseSimplex bothNonNegative [unboundedObjective] [constraint]
+      case actual of
+        SimplexResult (Just _) [ObjectiveResult _ Unbounded] -> pure ()
+        result -> expectationFailure $ "Expected a feasible system with an unbounded objective, got " ++ show result
+
+    it "still returns the optimum when the objective only uses constrained variables" $ do
+      actual <- runNoLoggingT $ twoPhaseSimplex bothNonNegative [Max (M.singleton 1 1)] [constraint]
+      case actual of
+        SimplexResult (Just _) [ObjectiveResult _ (Optimal varVals)] ->
+          M.lookup 1 varVals `shouldBe` Just 1
+        result -> expectationFailure $ "Expected the optimum x₁ = 1, got " ++ show result
+
+    it "reserves a variable that only appears in a later objective" $ do
+      let objectives = [Max (M.singleton 1 1), unboundedObjective]
+      actual <- runNoLoggingT $ twoPhaseSimplex bothNonNegative objectives [constraint]
+      case actual of
+        SimplexResult (Just _) [ObjectiveResult _ firstOutcome, ObjectiveResult _ secondOutcome] -> do
+          case firstOutcome of
+            Optimal varVals -> M.findWithDefault 0 1 varVals `shouldBe` 1
+            Unbounded -> expectationFailure "The constraint bounds the first objective"
+          secondOutcome `shouldBe` Unbounded
+        result -> expectationFailure $ "Expected an optimum then unboundedness, got " ++ show result
+
+    it "allocates slack ids above the ids passed to findFeasibleSolutionReserving" $ do
+      mfs <- runNoLoggingT $ findFeasibleSolutionReserving (Set.singleton 5) [constraint]
+      case mfs of
+        Just feasible -> feasible.slackVars `shouldSatisfy` (\vars -> not (null vars) && all (> 5) vars)
+        Nothing -> expectationFailure "A single constraint x₁ <= 1 is feasible"
