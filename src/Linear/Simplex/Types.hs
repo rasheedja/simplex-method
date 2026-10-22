@@ -173,4 +173,10 @@ data VarTransform
       , posVar :: !Var
       , negVar :: !Var
       }
+  | -- | var = value. The variable's lower and upper bounds coincide, so it is a
+    -- constant and is substituted out before phase one.
+    Fix
+      { var :: !Var
+      , value :: !SimplexNum
+      }
   deriving stock (Show, Read, Eq, Generic)
