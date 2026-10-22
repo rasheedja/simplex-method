@@ -42,6 +42,8 @@ import Linear.Simplex.Solver.TwoPhase
   , applySplitToConstraint
   , applySplitToObjective
   , applyTransform
+  , applyTransformToConstraints
+  , applyTransformToObjective
   , applyTransforms
   , collectAllVars
   , computeObjective
@@ -1305,6 +1307,49 @@ spec = do
           x2 `shouldSatisfy` (<= 10)
           (x1 + x2) `shouldBe` 20
 
+  describe "twoPhaseSimplex with fixed variables (Fix transformation)" $ do
+    -- A variable whose lower and upper bound coincide is a constant. It is
+    -- substituted out before phase one, so it needs no fresh variable and no
+    -- bound row of its own.
+    it "substitutes a fixed variable instead of adding a shift and a bound row" $ do
+      let obj = Max (M.fromList [(1, 1)])
+          constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 5]
+          domainMap = VarDomainMap $ M.fromList [(1, boundedRange 0 10), (2, boundedRange 1 1)]
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimal obj (M.fromList [(1, 4), (2, 1)]) 4 actualResult
+      case actualResult of
+        SimplexResult (Just feasibleSystem) _ -> do
+          -- x₂ = 1 leaves x₁ <= 4 and x₁ <= 10, both bounded rows with no
+          -- artificial variable, and no row mentions the fixed variable.
+          feasibleSystem.artificialVars `shouldBe` []
+          mapM_ (\row -> row.varMapSum `shouldSatisfy` M.notMember 2) (M.elems feasibleSystem.dict)
+        SimplexResult Nothing _ -> expectationFailure "Expected a feasible system"
+
+    it "reports infeasibility when a fixed value contradicts a constraint" $ do
+      -- x₂ = 7 but x₂ <= 5 leaves the constant contradiction 0 <= -2.
+      let obj = Max (M.singleton 2 1)
+          constraints = [LEQ (M.singleton 2 1) 5]
+          domainMap = VarDomainMap $ M.singleton 2 (boundedRange 7 7)
+      actualResult <- solveWith domainMap [obj] constraints
+      actualResult `shouldBe` SimplexResult Nothing []
+
+    it "optimizes an objective that only mentions a fixed variable" $ do
+      let obj = Max (M.singleton 2 1)
+          domainMap = VarDomainMap $ M.singleton 2 (boundedRange 2 2)
+      actualResult <- solveWith domainMap [obj] []
+      expectOptimal obj (M.singleton 2 2) 2 actualResult
+
+    it "keeps a fixed variable's value when the objective mixes it with a free variable" $ do
+      -- Max 2x₁ + 3x₂ with x₂ = 2 and x₁ <= 1: the fixed term is a constant
+      -- that leaves the optimum at x₁ = 1 while the objective value counts it.
+      let obj = Max (M.fromList [(1, 2), (2, 3)])
+          constraints = [LEQ (M.singleton 1 1) 1]
+          domainMap = VarDomainMap $ M.fromList [(1, boundedRange 0 1), (2, boundedRange 2 2)]
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> do
+        computeObjective obj varMap `shouldBe` 8
+        M.lookup 2 varMap `shouldBe` Just 2
+
   describe "twoPhaseSimplex with negative lower bounds (Shift transformation)" $ do
     describe "Simple single variable systems" $ do
       it "Max x₁ with x₁ ≤ 5, x₁ ≥ -3: optimal at upper bound x₁=5" $ do
@@ -1828,6 +1873,18 @@ spec = do
       it "returns Shift and AddUpperBound for negative lower bound with upper bound" $ do
         getTransform 10 1 (boundedRange (-5) 10) `shouldBe` ([Shift 1 10 (-5), AddUpperBound 1 10], 1)
 
+      it "returns a single Fix for coincident bounds" $ do
+        getTransform 10 1 (boundedRange 3 3) `shouldBe` ([Fix 1 3], 0)
+
+      it "returns Fix rather than no transform for a variable fixed at zero" $ do
+        getTransform 10 1 (boundedRange 0 0) `shouldBe` ([Fix 1 0], 0)
+
+      it "returns Fix for a fractional coincident bound" $ do
+        getTransform 10 1 (boundedRange (3 % 2) (3 % 2)) `shouldBe` ([Fix 1 (3 % 2)], 0)
+
+      it "returns Fix for a negative coincident bound" $ do
+        getTransform 10 1 (boundedRange (-5) (-5)) `shouldBe` ([Fix 1 (-5)], 0)
+
   describe "generateTransform" $ do
     describe "Unit tests" $ do
       it "generates no transform for NonNegative in domain map" $ do
@@ -1858,6 +1915,10 @@ spec = do
       it "generates AddUpperBound for upper bound" $ do
         let domainMap = M.fromList [(1, boundedRange 0 10)]
         generateTransform domainMap 1 ([], 10) `shouldBe` ([AddUpperBound 1 10], 10)
+
+      it "generates Fix for coincident bounds without consuming a fresh variable" $ do
+        let domainMap = M.fromList [(1, boundedRange 3 3)]
+        generateTransform domainMap 1 ([], 10) `shouldBe` ([Fix 1 3], 10)
 
   describe "applyShiftToObjective" $ do
     describe "Unit tests" $ do
@@ -2049,6 +2110,24 @@ spec = do
         -- Both shifts are subtracted from the right-hand side
         newConstraints `shouldBe` [LEQ (M.fromList [(10, 1), (11, 1)]) 2]
 
+      it "applyTransform Fix substitutes the constant into the objective and constraints" $ do
+        -- x₂ = 3, so 2x₁ + 3x₂ becomes 2x₁ and 4x₁ + x₂ <= 10 becomes 4x₁ <= 7.
+        let obj = Max (M.fromList [(1, 2), (2, 3)])
+            constraints = [LEQ (M.fromList [(1, 4), (2, 1)]) 10]
+            transform = Fix 2 3
+        let (newObj, newConstraints) = applyTransform transform (obj, constraints)
+        newObj `shouldBe` Max (M.fromList [(1, 2)])
+        newConstraints `shouldBe` [LEQ (M.fromList [(1, 4)]) 7]
+
+      it "applyTransform Fix leaves a constraint that becomes constant empty" $ do
+        -- 3x₂ <= 5 with x₂ = 2 becomes the contradiction 0 <= -1.
+        let constraints = [LEQ (M.singleton 2 3) 5]
+        applyTransformToConstraints (Fix 2 2) constraints `shouldBe` [LEQ M.empty (-1)]
+
+      it "applyTransformToObjective Fix leaves the objective alone when it omits the variable" $ do
+        let obj = Max (M.fromList [(1, 2)])
+        applyTransformToObjective (Fix 2 3) obj `shouldBe` obj
+
   describe "unapplyTransformToVarMap and unapplyTransformsToVarMap" $ do
     describe "Unit tests" $ do
       it "unapplyTransformToVarMap AddUpperBound leaves result unchanged" $ do
@@ -2090,6 +2169,11 @@ spec = do
         let newVarVals = unapplyTransformsToVarMap transforms varVals
         M.lookup 1 newVarVals `shouldBe` Just 10
         M.lookup 2 newVarVals `shouldBe` Just 5
+
+      it "unapplyTransformToVarMap Fix inserts the fixed value" $ do
+        let varVals = M.fromList [(5, 7)]
+            transform = Fix 1 (3 % 2)
+        unapplyTransformToVarMap transform varVals `shouldBe` M.fromList [(1, 3 % 2), (5, 7)]
 
   describe "preprocess" $ do
     describe "Unit tests" $ do
@@ -2332,6 +2416,12 @@ spec = do
             in  case getTransform (abs nextVar + 1) (abs v + 1) (boundedRange lower upper) of
                   (transforms, _) ->
                     any (\case AddUpperBound var u -> var == abs v + 1 && u == upper; _ -> False) transforms
+
+      it "coincident bounds produce a single Fix and consume no fresh variable" $
+        property $
+          \(fixedValue :: Rational) (nextVar :: Int) (v :: Int) ->
+            getTransform (abs nextVar + 1) (abs v + 1) (boundedRange fixedValue fixedValue)
+              == ([Fix (abs v + 1) fixedValue], 0)
 
     describe "preprocess fresh variable invariance" $ do
       it "fresh variables are above original vars and pairwise distinct" $
