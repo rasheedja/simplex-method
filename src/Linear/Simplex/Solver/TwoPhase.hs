@@ -565,12 +565,14 @@ generateTransform domainMap var (transforms, nextFreshVar) =
 getTransform :: Var -> Var -> VarDomain -> ([VarTransform], Var)
 getTransform nextFreshVar var (Bounded mLower mUpper) =
   let -- Handle lower bound
+      -- Any nonzero lower bound is handled by a shift, so the bound becomes the
+      -- implicit shiftedVar >= 0: an upper bound then stays a LEQ row, whose
+      -- slack is feasible at the origin, and no artificial variable is needed.
       (lowerTransforms, varOffset) = case mLower of
         Nothing -> ([], 0) -- No lower bound: will need Split
         Just l
           | l == 0 -> ([], 0) -- NonNegative: no transform needed
-          | l > 0 -> ([AddLowerBound var l], 0) -- Positive lower bound: add constraint
-          | otherwise -> ([Shift var nextFreshVar l], 1) -- Negative lower bound: shift
+          | otherwise -> ([Shift var nextFreshVar l], 1) -- Nonzero lower bound: shift
 
       -- Handle upper bound (if present)
       upperTransforms = case mUpper of
@@ -599,13 +601,10 @@ applyTransforms transforms objFunction constraints =
 applyTransform :: VarTransform -> (ObjectiveFunction, [PolyConstraint]) -> (ObjectiveFunction, [PolyConstraint])
 applyTransform transform (objFunction, constraints) =
   case transform of
-    -- AddLowerBound: Add a GEQ constraint for the variable
-    AddLowerBound v bound ->
-      (objFunction, GEQ (M.singleton v 1) bound : constraints)
     -- AddUpperBound: Add a LEQ constraint for the variable
     AddUpperBound v bound ->
       (objFunction, LEQ (M.singleton v 1) bound : constraints)
-    -- Shift: originalVar = shiftedVar + shiftBy (where shiftBy < 0)
+    -- Shift: originalVar = shiftedVar + shiftBy (where shiftBy /= 0)
     -- Substitute: wherever we see originalVar, replace with shiftedVar
     -- and adjust the RHS by -coeff * shiftBy
     Shift origVar shiftedVar shiftBy ->
@@ -679,8 +678,6 @@ unapplyTransformsToVarMap transforms valMap =
 unapplyTransformToVarMap :: VarTransform -> VarLitMap -> VarLitMap
 unapplyTransformToVarMap transform valMap =
   case transform of
-    -- AddLowerBound: No variable substitution was done, nothing to unapply
-    AddLowerBound {} -> valMap
     -- AddUpperBound: No variable substitution was done, nothing to unapply
     AddUpperBound {} -> valMap
     -- Shift: originalVar = shiftedVar + shiftBy

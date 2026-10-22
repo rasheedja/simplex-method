@@ -1727,7 +1727,7 @@ spec = do
         SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just (-10)
         _ -> expectationFailure "Unexpected result format"
 
-    it "AddLowerBound with positive lower bound" $ do
+    it "Shift with positive lower bound" $ do
       let obj = Max (M.fromList [(1, 1)])
           constraints = [LEQ (M.fromList [(1, 1)]) 10]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
@@ -1740,7 +1740,7 @@ spec = do
         SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just 10
         _ -> expectationFailure "Unexpected result format"
 
-    it "AddLowerBound finds minimum at positive bound" $ do
+    it "Shift finds minimum at positive bound" $ do
       let obj = Min (M.fromList [(1, 1)])
           constraints = [LEQ (M.fromList [(1, 1)]) 10]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
@@ -2425,7 +2425,7 @@ spec = do
 
     describe "Positive lower bound with other domain types" $ do
       it "Max 2x₁ + 3x₂ with x₁ ≥ 2 (positive bound), x₂ ≥ -3, 2x₁ + x₂ ≤ 20" $ do
-        -- x₁ has positive lower bound (uses AddLowerBound)
+        -- x₁ has positive lower bound (uses Shift)
         -- x₂ has negative lower bound (uses Shift)
         let obj = Max (M.fromList [(1, 2), (2, 3)])
             constraints =
@@ -2618,11 +2618,11 @@ spec = do
       it "returns empty list for lowerBoundOnly 0" $ do
         getTransform 10 1 (lowerBoundOnly 0) `shouldBe` ([], 0)
 
-      it "returns AddLowerBound for positive lower bound" $ do
-        getTransform 10 1 (lowerBoundOnly 5) `shouldBe` ([AddLowerBound 1 5], 0)
+      it "returns Shift for positive lower bound" $ do
+        getTransform 10 1 (lowerBoundOnly 5) `shouldBe` ([Shift 1 10 5], 1)
 
-      it "returns AddLowerBound for fractional positive lower bound" $ do
-        getTransform 10 1 (lowerBoundOnly (3 % 2)) `shouldBe` ([AddLowerBound 1 (3 % 2)], 0)
+      it "returns Shift for fractional positive lower bound" $ do
+        getTransform 10 1 (lowerBoundOnly (3 % 2)) `shouldBe` ([Shift 1 10 (3 % 2)], 1)
 
       it "returns Shift for negative lower bound" $ do
         getTransform 10 1 (lowerBoundOnly (-5)) `shouldBe` ([Shift 1 10 (-5)], 1)
@@ -2636,8 +2636,8 @@ spec = do
       it "returns AddUpperBound for upper bound only" $ do
         getTransform 10 1 (upperBoundOnly 5) `shouldBe` ([Split 1 10 11, AddUpperBound 1 5], 2)
 
-      it "returns AddLowerBound and AddUpperBound for bounded range" $ do
-        getTransform 10 1 (boundedRange 2 10) `shouldBe` ([AddLowerBound 1 2, AddUpperBound 1 10], 0)
+      it "returns Shift and AddUpperBound for bounded range" $ do
+        getTransform 10 1 (boundedRange 2 10) `shouldBe` ([Shift 1 10 2, AddUpperBound 1 10], 1)
 
       it "returns Shift and AddUpperBound for negative lower bound with upper bound" $ do
         getTransform 10 1 (boundedRange (-5) 10) `shouldBe` ([Shift 1 10 (-5), AddUpperBound 1 10], 1)
@@ -2648,9 +2648,9 @@ spec = do
         let domainMap = M.fromList [(1, nonNegative)]
         generateTransform domainMap 1 ([], 10) `shouldBe` ([], 10)
 
-      it "generates AddLowerBound for positive bound in domain map" $ do
+      it "generates Shift for positive bound in domain map" $ do
         let domainMap = M.fromList [(1, lowerBoundOnly 5)]
-        generateTransform domainMap 1 ([], 10) `shouldBe` ([AddLowerBound 1 5], 10)
+        generateTransform domainMap 1 ([], 10) `shouldBe` ([Shift 1 10 5], 11)
 
       it "generates Shift for negative bound and increments fresh var" $ do
         let domainMap = M.fromList [(1, lowerBoundOnly (-5))]
@@ -2666,8 +2666,8 @@ spec = do
 
       it "accumulates transforms" $ do
         let domainMap = M.fromList [(1, lowerBoundOnly 5)]
-            existing = [AddLowerBound 2 3]
-        generateTransform domainMap 1 (existing, 10) `shouldBe` ([AddLowerBound 1 5] ++ existing, 10)
+            existing = [AddUpperBound 2 3]
+        generateTransform domainMap 1 (existing, 10) `shouldBe` ([Shift 1 10 5] ++ existing, 11)
 
       it "generates AddUpperBound for upper bound" $ do
         let domainMap = M.fromList [(1, boundedRange 0 10)]
@@ -2828,12 +2828,15 @@ spec = do
 
   describe "applyTransform and applyTransforms" $ do
     describe "Unit tests" $ do
-      it "applyTransform AddLowerBound adds GEQ constraint" $ do
+      it "applyTransforms applies the shift to the added upper bound" $ do
+        -- The upper bound is added on the original variable, so the Shift applied
+        -- afterwards must rewrite that constraint too: x = x' + 2 with x <= 5
+        -- becomes x' <= 3.
         let obj = Max (M.fromList [(1, 1)])
-            constraints = [LEQ (M.fromList [(1, 1)]) 10]
-            transform = AddLowerBound 1 5
-        applyTransform transform (obj, constraints)
-          `shouldBe` (obj, [GEQ (M.singleton 1 1) 5, LEQ (M.fromList [(1, 1)]) 10])
+            transforms = [Shift 1 10 2, AddUpperBound 1 5]
+        let (newObj, newConstraints) = applyTransforms transforms obj []
+        newObj `shouldBe` Max (M.fromList [(10, 1)])
+        newConstraints `shouldBe` [LEQ (M.fromList [(10, 1)]) 3]
 
       it "applyTransform Shift transforms objective and constraints" $ do
         let obj = Max (M.fromList [(1, 2)])
@@ -2854,17 +2857,17 @@ spec = do
       it "applyTransforms applies multiple transforms in order" $ do
         let obj = Max (M.fromList [(1, 1), (2, 1)])
             constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 10]
-            transforms = [AddLowerBound 1 5, AddLowerBound 2 3]
+            transforms = [Shift 1 10 5, Shift 2 11 3]
         let (newObj, newConstraints) = applyTransforms transforms obj constraints
-        newObj `shouldBe` obj
-        -- Two GEQ constraints should be added
-        length newConstraints `shouldBe` 3
+        newObj `shouldBe` Max (M.fromList [(10, 1), (11, 1)])
+        -- Both shifts are subtracted from the right-hand side
+        newConstraints `shouldBe` [LEQ (M.fromList [(10, 1), (11, 1)]) 2]
 
   describe "unapplyTransformToVarMap and unapplyTransformsToVarMap" $ do
     describe "Unit tests" $ do
-      it "unapplyTransformToVarMap AddLowerBound leaves result unchanged" $ do
+      it "unapplyTransformToVarMap AddUpperBound leaves result unchanged" $ do
         let varVals = M.fromList [(1, 7)]
-            transform = AddLowerBound 1 5
+            transform = AddUpperBound 1 5
         unapplyTransformToVarMap transform varVals `shouldBe` varVals
 
       it "unapplyTransformToVarMap Shift recovers original variable value" $ do
@@ -2913,13 +2916,14 @@ spec = do
         newObj `shouldBe` obj
         newConstraints `shouldBe` constraints
 
-      it "generates AddLowerBound for positive lower bounds" $ do
+      it "generates Shift for positive lower bounds" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 10]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
-        let (_, newConstraints, transforms) = preprocess [obj] domainMap constraints
-        transforms `shouldBe` [AddLowerBound 1 5]
-        length newConstraints `shouldBe` 2 -- original + GEQ
+        let ([newObj], newConstraints, transforms) = preprocess [obj] domainMap constraints
+        transforms `shouldBe` [Shift 1 2 5]
+        newObj `shouldBe` Max (M.fromList [(2, 1)])
+        newConstraints `shouldBe` [LEQ (M.fromList [(2, 1)]) 5] -- shifted original only, no GEQ row
       it "generates Shift for negative lower bounds" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 10]
@@ -2950,7 +2954,7 @@ spec = do
                 M.fromList
                   [(1, nonNegative), (2, lowerBoundOnly 5), (3, lowerBoundOnly (-3))]
         let (_, _, transforms) = preprocess [obj] domainMap constraints
-        -- Should have AddLowerBound for var 2, Shift for var 3
+        -- Should have Shift for var 2, Shift for var 3
         length transforms `shouldBe` 2
       it "assigns fresh variables strictly greater than maxVar (no collision)" $ do
         -- Reproduces the off-by-one bug: when maxVar (not maxVar+1) was used as
@@ -2974,6 +2978,46 @@ spec = do
         case transforms of
           [Shift {originalVar = 1, shiftedVar = sv}] -> sv `shouldBe` 3
           _ -> expectationFailure "Expected exactly one Shift 1->3 transform"
+
+      it "shifts the upper bound of a bounded range onto the fresh variable" $ do
+        -- boundedRange 2 5 becomes Shift 1 2 2 plus AddUpperBound 1 5, and the
+        -- shift rewrites the added upper bound: 2 <= 5 - 2 = 3, i.e. the single
+        -- row LEQ {2: 1} 3, which is feasible at the origin.
+        let obj = Max (M.fromList [(1, 1)])
+            constraints = []
+            domainMap = VarDomainMap $ M.fromList [(1, boundedRange 2 5)]
+            ([newObj], newConstraints, transforms) = preprocess [obj] domainMap constraints
+        transforms `shouldBe` [Shift 1 2 2, AddUpperBound 1 5]
+        newObj `shouldBe` Max (M.fromList [(2, 1)])
+        newConstraints `shouldBe` [LEQ (M.fromList [(2, 1)]) 3]
+
+  describe "positive lower bounds are shifted instead of bounded by a GEQ row" $ do
+    let -- A three-variable box with one real constraint. Every lower bound is
+        -- positive, so before the shift each one needed an artificial variable.
+        domainMap =
+          VarDomainMap $
+            M.fromList
+              [ (1, boundedRange (3 % 10) (1 % 2))
+              , (2, boundedRange 1 2)
+              , (3, boundedRange 1 2)
+              ]
+        constraints = [LEQ (M.fromList [(1, 1), (2, 1), (3, -1)]) 1]
+        objectives = [Min (M.fromList [(1, 1)]), Max (M.fromList [(1, 1)])]
+
+    it "do not create artificial variables" $ do
+      let (_, transformedConstraints, _) = preprocess objectives domainMap constraints
+      mFeasibleSystem <- runNoLoggingT $ findFeasibleSolution transformedConstraints
+      case mFeasibleSystem of
+        Nothing -> expectationFailure "Expected the shifted system to be feasible"
+        Just feasibleSystem -> feasibleSystem.artificialVars `shouldBe` []
+
+    it "give the same optima as before" $ do
+      actualResult <- runNoLoggingT $ twoPhaseSimplex domainMap objectives constraints
+      case actualResult of
+        SimplexResult _ [ObjectiveResult minObj (Optimal minVals), ObjectiveResult maxObj (Optimal maxVals)] -> do
+          computeObjective minObj minVals `shouldBe` (3 % 10)
+          computeObjective maxObj maxVals `shouldBe` (1 % 2)
+        _ -> expectationFailure "Expected optimal results for both objectives"
 
   -- ===========================================================================
   -- Property-based tests
@@ -3005,11 +3049,12 @@ spec = do
           \(nextVar :: Int) (v :: Int) ->
             getTransform (abs nextVar + 1) (abs v + 1) (lowerBoundOnly 0) == ([], 0)
 
-      it "positive lowerBoundOnly produces AddLowerBound" $
+      it "positive lowerBoundOnly produces Shift with that offset" $
         property $
           \(Positive bound :: Positive Rational) (nextVar :: Int) (v :: Int) ->
             case getTransform (abs nextVar + 1) (abs v + 1) (lowerBoundOnly bound) of
-              ([AddLowerBound var b], 0) -> var == abs v + 1 && b == bound
+              ([Shift origVar shiftedVar shiftBy], 1) ->
+                origVar == abs v + 1 && shiftedVar == abs nextVar + 1 && shiftBy == bound
               _ -> False
 
       it "negative lowerBoundOnly produces Shift" $

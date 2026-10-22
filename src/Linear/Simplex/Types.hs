@@ -167,17 +167,12 @@ newtype VarDomainMap = VarDomainMap {unVarDomainMap :: M.Map Var VarDomain}
 
 -- | Transformations applied to variables to ensure they satisfy the non-negativity requirement.
 data VarTransform
-  = -- | var >= bound where bound > 0. Adds GEQ constraint to system.
-    AddLowerBound
-      { var :: !Var
-      , bound :: !SimplexNum
-      }
-  | -- | var <= bound. Adds LEQ constraint to system.
+  = -- | var <= bound. Adds LEQ constraint to system.
     AddUpperBound
       { var :: !Var
       , bound :: !SimplexNum
       }
-  | -- | originalVar = shiftedVar + shiftBy, where shiftBy < 0. After solving: originalVar = shiftedVar + shiftBy
+  | -- | originalVar = shiftedVar + shiftBy, where shiftBy /= 0. After solving: originalVar = shiftedVar + shiftBy
     Shift
       { originalVar :: !Var
       , shiftedVar :: !Var
