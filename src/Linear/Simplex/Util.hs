@@ -9,8 +9,15 @@
 -- Helper functions for performing the two-phase simplex method.
 module Linear.Simplex.Util where
 
-import Control.Monad.IO.Class (MonadIO (..))
-import Control.Monad.Logger (LogLevel (..), MonadLogger, logDebug, logError, logInfo, logWarn)
+import Control.Monad.Logger
+  ( LogLevel (..)
+  , LoggingT
+  , MonadLogger
+  , defaultOutput
+  , logOtherN
+  , runLoggingT
+  , toLogStr
+  )
 import Data.Generics.Labels ()
 import Data.List (nub, (\\))
 import qualified Data.Map as Map
@@ -31,6 +38,7 @@ import Linear.Simplex.Types
   , VarLitMap
   , VarLitMapSum
   )
+import System.IO (stdout)
 import Prelude hiding (EQ)
 
 -- | Is the given 'ObjectiveFunction' to be 'Max'imized?
@@ -128,13 +136,25 @@ insertPivotObjectiveToDict objective = Map.insert objective.variable (DictValue 
 showT :: (Show a) => a -> T.Text
 showT = T.pack . show
 
-logMsg :: (MonadIO m, MonadLogger m) => LogLevel -> T.Text -> m ()
-logMsg lvl msg = do
-  currTime <- T.pack . iso8601Show <$> liftIO getCurrentTime
-  let msgToLog = currTime <> ": " <> msg
-  case lvl of
-    LevelDebug -> $logDebug msgToLog
-    LevelInfo -> $logInfo msgToLog
-    LevelWarn -> $logWarn msgToLog
-    LevelError -> $logError msgToLog
-    LevelOther otherLvl -> error "logMsg: LevelOther is not implemented"
+-- | Log a message at the given level, exactly as given.
+--
+-- No timestamp is attached: reading a clock is the log sink's job, so the
+-- solver stays free of @MonadIO@ and does no IO when logging is disabled.
+-- For deterministic output the interesting axis is the pivot number, which the
+-- solver puts in its own messages. Use 'runTimestampedStdoutLoggingT' to get
+-- wall-clock timestamps back.
+logMsg :: (MonadLogger m) => LogLevel -> T.Text -> m ()
+logMsg = logOtherN
+
+-- | Run a 'LoggingT' action, prefixing every emitted line with the current
+-- ISO-8601 time.
+--
+-- This is where timestamps moved to when 'logMsg' stopped reading a clock. It
+-- renders exactly like @runStdoutLoggingT@, only with the timestamp prepended,
+-- so it is a drop-in replacement for callers that want the old output and do
+-- not mind paying for the clock syscall on every message.
+runTimestampedStdoutLoggingT :: LoggingT IO a -> IO a
+runTimestampedStdoutLoggingT action =
+  runLoggingT action $ \loc source level message -> do
+    timestamp <- T.pack . iso8601Show <$> getCurrentTime
+    defaultOutput stdout loc source level (toLogStr (timestamp <> ": ") <> message)

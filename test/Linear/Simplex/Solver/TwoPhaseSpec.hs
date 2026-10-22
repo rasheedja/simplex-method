@@ -13,7 +13,9 @@ import Control.Monad.Logger
   , runLoggingT
   , runNoLoggingT
   , runStdoutLoggingT
+  , runWriterLoggingT
   )
+import Data.Functor.Identity (runIdentity)
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import qualified Data.Map as M
 import Data.Maybe (isJust)
@@ -126,7 +128,7 @@ spec = do
       -- Both artificial rows (x3 and x4) have ratio zero. Bland chooses
       -- x1 to enter and x3 to leave. Cleanup then removes redundant x4.
       -- Observe the pivot choices before cleanup removes that basis evidence.
-      pivotChoices <- newIORef []
+      pivotLines <- newIORef []
       actual <-
         withinTimeout $
           runLoggingT
@@ -137,11 +139,15 @@ spec = do
             )
             ( \_ _ _ message -> do
                 let text = decodeUtf8 (fromLogStr message)
-                if "pivoting variable" `Text.isInfixOf` text
-                  then modifyIORef' pivotChoices (++ [Text.takeWhileEnd (/= ' ') text])
+                -- Only actual pivots report an entering variable; the final
+                -- optimality line does not, so this counts pivots, not recursion.
+                if "simplexPivot: pivot " `Text.isInfixOf` text && "entering " `Text.isInfixOf` text
+                  then modifyIORef' pivotLines (++ [text])
                   else pure ()
             )
-      readIORef pivotChoices >>= (`shouldBe` ["1", "3"])
+      pivots <- readIORef pivotLines
+      length pivots `shouldBe` 1
+      pivots `shouldSatisfy` all (Text.isPrefixOf "simplexPivot: pivot 1: entering 1, leaving 3, objective constant ")
       case actual of
         Just (Just feasible) -> do
           M.keys (M.delete feasible.objectiveVar feasible.dict) `shouldBe` [1]
@@ -235,6 +241,45 @@ spec = do
           [M.findWithDefault 0 v varMap | v <- [1, 2]] `shouldBe` [0, 0]
         Nothing -> expectationFailure "Cleanup with a negative pivot coefficient timed out"
         Just result -> expectationFailure $ "Expected the origin as the unique feasible point, got " ++ show result
+
+  describe "logging and monad requirements" $ do
+    -- Page 50 LP of 'Linear and Integer Programming Made Easy': Max 3x1 + 5x2
+    -- needs at least one phase-two pivot to reach x1=3, x2=4.
+    let obj = Max (M.fromList [(1, 3), (2, 5)])
+        constraints =
+          [ LEQ (M.fromList [(1, 3), (2, 1)]) 15
+          , LEQ (M.fromList [(1, 1), (2, 1)]) 7
+          , LEQ (M.fromList [(2, 1)]) 4
+          , LEQ (M.fromList [(1, -1), (2, 2)]) 6
+          ]
+        domainMap = VarDomainMap $ M.fromSet (const nonNegative) (collectAllVars [obj] constraints)
+
+    it "runs in a pure monad" $ do
+      -- 'twoPhaseSimplex' only needs 'MonadLogger', so a pure 'Identity' run
+      -- with logging switched off has to solve the problem identically.
+      let result = runIdentity $ runNoLoggingT $ twoPhaseSimplex domainMap [obj] constraints
+      case result of
+        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
+          varMap `shouldBe` M.fromList [(1, 3), (2, 4)]
+          computeObjective obj varMap `shouldBe` 29
+        SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
+        _ -> expectationFailure $ "Unexpected result from the pure solver run: " ++ show result
+
+    it "logs one line per pivot at Info with no dictionary dumps" $ do
+      let (result, logs) = runIdentity $ runWriterLoggingT $ twoPhaseSimplex domainMap [obj] constraints
+          infoLines =
+            [ decodeUtf8 (fromLogStr message)
+            | (_, _, level, message) <- logs
+            , level == LevelInfo
+            ]
+      infoLines `shouldSatisfy` any (Text.isInfixOf "simplexPivot: pivot 1:")
+      -- A dictionary dump is 'show'n, so it is the only Info text that can
+      -- mention the row type.
+      infoLines `shouldSatisfy` all (not . Text.isInfixOf "DictValue")
+      case result of
+        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> varMap `shouldBe` M.fromList [(1, 3), (2, 4)]
+        SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
+        _ -> expectationFailure $ "Unexpected result from the logged run: " ++ show result
 
   describe "twoPhaseSimplex" $ do
     -- From page 50 of 'Linear and Integer Programming Made Easy'

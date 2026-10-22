@@ -16,7 +16,15 @@ import Data.Generics.Labels ()
 import Data.List (intercalate)
 import Data.Map qualified as M
 import Data.Ratio (denominator, numerator)
-import Linear.Simplex.Types (ObjectiveFunction (..), PolyConstraint (..), VarLitMapSum)
+import Linear.Simplex.Types
+  ( Dict
+  , DictValue (..)
+  , ObjectiveFunction (..)
+  , PivotObjective (..)
+  , PolyConstraint (..)
+  , SimplexNum
+  , VarLitMapSum
+  )
 
 -- | Convert a 'VarLitMapSum' into a human-readable 'String'
 prettyShowVarLitMapSum :: VarLitMapSum -> String
@@ -24,13 +32,37 @@ prettyShowVarLitMapSum = intercalate " + " . map prettyShowTerm . M.toList
   where
     prettyShowTerm (vName, vCoeff) = prettyShowRational vCoeff ++ " * " ++ show vName
 
-    prettyShowRational r =
-      if r < 0 then "(" ++ rendered ++ ")" else rendered
-      where
-        rendered =
-          if denominator r == 1
-            then show (numerator r)
-            else show (numerator r) ++ " / " ++ show (denominator r)
+-- | Convert a 'SimplexNum' into a human-readable 'String', parenthesising
+-- negative values so they can sit inside a sum.
+prettyShowRational :: SimplexNum -> String
+prettyShowRational r =
+  if r < 0 then "(" ++ rendered ++ ")" else rendered
+  where
+    rendered =
+      if denominator r == 1
+        then show (numerator r)
+        else show (numerator r) ++ " / " ++ show (denominator r)
+
+-- | Convert a 'Dict' into a human-readable 'String', one row per line as
+-- @x<basic> = <constant> + <terms>@.
+prettyShowDict :: Dict -> String
+prettyShowDict = intercalate "\n" . map prettyShowRow . M.toList
+  where
+    prettyShowRow (basicVar, DictValue {varMapSum, constant}) =
+      let constantTerm = prettyShowRational constant
+          terms = prettyShowVarLitMapSum varMapSum
+      in  "x"
+            ++ show basicVar
+            ++ " = "
+            ++ constantTerm
+            ++ if null terms then "" else " + " ++ terms
+
+-- | Convert a 'PivotObjective' into a human-readable 'String': the single
+-- dictionary row @x<variable> = <constant> + <function>@ it represents.
+prettyShowPivotObjective :: PivotObjective -> String
+prettyShowPivotObjective objective =
+  prettyShowDict $
+    M.singleton objective.variable (DictValue {varMapSum = objective.function, constant = objective.constant})
 
 -- | Convert a 'PolyConstraint' into a human-readable 'String'
 prettyShowPolyConstraint :: PolyConstraint -> String

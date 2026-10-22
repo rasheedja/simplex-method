@@ -39,8 +39,7 @@ import Prelude hiding (EQ)
 
 import Control.Lens ((%~), (&), (.~), (<&>))
 import Control.Monad (unless)
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Logger (LogLevel (LevelError, LevelInfo), MonadLogger)
+import Control.Monad.Logger (LogLevel (LevelDebug, LevelError, LevelInfo), MonadLogger)
 import Data.Bifunctor (second)
 import qualified Data.Map as M
 import Data.Maybe (fromJust, fromMaybe, mapMaybe)
@@ -49,6 +48,12 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import GHC.Real (Ratio)
+import Linear.Simplex.Prettify
+  ( prettyShowDict
+  , prettyShowObjectiveFunction
+  , prettyShowPivotObjective
+  , prettyShowRational
+  )
 import Linear.Simplex.Types
   ( Dict
   , DictValue (..)
@@ -84,7 +89,7 @@ import Linear.Simplex.Util
 
 -- | Find a feasible solution for the given system of 'PolyConstraint's.
 --  No variable ids are reserved beyond those appearing in the constraints.
-findFeasibleSolution :: (MonadIO m, MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
+findFeasibleSolution :: (MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
 findFeasibleSolution = findFeasibleSolutionReserving Set.empty
 
 -- | Is the given 'PolyConstraint' constant, i.e. does it involve no variable at all?
@@ -112,7 +117,7 @@ contradictingConstantConstraints =
 --  in the constraints, so a variable that only appears in an objective function never shares an id with them.
 --  If the system is infeasible, return 'Nothing'
 --  Otherwise, return the feasible system in 'Dict' as well as a list of slack variables, a list artificial variables, and the objective variable.
-findFeasibleSolutionReserving :: (MonadIO m, MonadLogger m) => Set Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
+findFeasibleSolutionReserving :: (MonadLogger m) => Set Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
 findFeasibleSolutionReserving reservedVars unsimplifiedSystem = case contradictingConstantConstraints unsimplifiedSystem of
   contradicting : _ -> do
     logMsg LevelInfo $
@@ -125,25 +130,33 @@ findFeasibleSolutionReserving reservedVars unsimplifiedSystem = case contradicti
 -- | Perform phase one for a system whose constant constraints have been decided
 --  by 'findFeasibleSolutionReserving'. Slack and artificial ids are allocated above
 --  every reserved id and every constraint variable.
-runPhaseOne :: (MonadIO m, MonadLogger m) => Set Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
+runPhaseOne :: (MonadLogger m) => Set Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
 runPhaseOne reservedVars unsimplifiedSystem = do
-  logMsg LevelInfo $ "findFeasibleSolution: Looking for solution for " <> showT unsimplifiedSystem
+  logMsg LevelInfo $
+    "findFeasibleSolution: Looking for a solution for "
+      <> showT (length variableConstraints)
+      <> " constraints"
+  logMsg LevelDebug $ "findFeasibleSolution: Constraints " <> showT variableConstraints
   if null artificialVars -- No artificial vars, we have a feasible system
     then do
       logMsg LevelInfo "findFeasibleSolution: Feasible solution found with no artificial vars"
       pure . Just $ FeasibleSystem systemWithBasicVarsAsDictionary slackVars artificialVars objectiveVar
     else do
       logMsg LevelInfo $
-        "findFeasibleSolution: Needed to create artificial vars. System with artificial vars (in Tableau form) "
-          <> showT systemWithBasicVars
-      mPhase1Dict <- simplexPivot artificialPivotObjective systemWithBasicVarsAsDictionary
+        "findFeasibleSolution: Needed to create "
+          <> showT (length artificialVars)
+          <> " artificial vars for "
+          <> showT (length systemWithBasicVars)
+          <> " rows"
+      logMsg LevelDebug $ "findFeasibleSolution: System in tableau form " <> showT systemWithBasicVars
+      mPhase1Dict <- simplexPivot 1 artificialPivotObjective systemWithBasicVarsAsDictionary
       case mPhase1Dict of
         Just phase1Dict -> do
-          logMsg LevelInfo $
-            "findFeasibleSolution: System after pivoting with objective"
-              <> showT artificialPivotObjective
-              <> ": "
-              <> showT phase1Dict
+          logMsg LevelDebug $
+            "findFeasibleSolution: System after pivoting with objective "
+              <> Text.pack (prettyShowPivotObjective artificialPivotObjective)
+              <> ":\n"
+              <> Text.pack (prettyShowDict phase1Dict)
           let eliminateArtificialVarsFromPhase1Tableau =
                 M.map
                   ( \DictValue {..} ->
@@ -162,8 +175,10 @@ runPhaseOne reservedVars unsimplifiedSystem = do
           if row.constant == 0
             then do
               logMsg LevelInfo $
-                "findFeasibleSolution: Objective RHS is zero after pivoting, thus original tableau is feasible. feasible system (in Dict form) "
-                  <> showT eliminateArtificialVarsFromPhase1Tableau
+                "findFeasibleSolution: Objective RHS is zero after pivoting, thus original tableau is feasible"
+              logMsg LevelDebug $
+                "findFeasibleSolution: Feasible system (in Dict form):\n"
+                  <> Text.pack (prettyShowDict eliminateArtificialVarsFromPhase1Tableau)
               pure . Just $
                 FeasibleSystem
                   { dict = removeArtificialBasics phase1Dict
@@ -179,15 +194,18 @@ runPhaseOne reservedVars unsimplifiedSystem = do
                 logMsg LevelError $ Text.pack errMsg
                 error errMsg
               logMsg LevelInfo $
-                "findFeasibleSolution: Objective RHS not zero after phase 1, thus original tableau is infeasible. System without artificial vars (in Dict form) "
-                  <> showT eliminateArtificialVarsFromPhase1Tableau
+                "findFeasibleSolution: Objective RHS not zero after phase 1, thus original tableau is infeasible"
+              logMsg LevelDebug $
+                "findFeasibleSolution: System without artificial vars (in Dict form):\n"
+                  <> Text.pack (prettyShowDict eliminateArtificialVarsFromPhase1Tableau)
               pure Nothing
         Nothing -> do
           logMsg LevelInfo $
             "findFeasibleSolution: Infeasible solution found, could not pivot with objective "
-              <> showT artificialPivotObjective
-              <> " over system (in Dict form) "
-              <> showT systemWithBasicVarsAsDictionary
+              <> Text.pack (prettyShowPivotObjective artificialPivotObjective)
+          logMsg LevelDebug $
+            "findFeasibleSolution: System that could not be pivoted (in Dict form):\n"
+              <> Text.pack (prettyShowDict systemWithBasicVarsAsDictionary)
           pure Nothing
   where
     -- Called only after the phase-one optimum has been verified to be zero.
@@ -341,26 +359,25 @@ runPhaseOne reservedVars unsimplifiedSystem = do
 --  We first pass an 'ObjectiveFunction'.
 --  Then, the feasible system in 'Dict' form as well as a list of slack variables, a list artificial variables, and the objective variable.
 --  Returns 'Optimal' with variable values if an optimal solution is found, or 'Unbounded' if the objective is unbounded.
-optimizeFeasibleSystem :: (MonadIO m, MonadLogger m) => ObjectiveFunction -> FeasibleSystem -> m OptimisationOutcome
-optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..}) = do
+optimizeFeasibleSystem :: (MonadLogger m) => ObjectiveFunction -> FeasibleSystem -> m OptimisationOutcome
+optimizeFeasibleSystem objFunction (FeasibleSystem {dict = phase1Dict, ..}) = do
   logMsg LevelInfo $
-    "optimizeFeasibleSystem: Optimizing feasible system " <> showT fsys <> " with objective " <> showT objFunction
+    "optimizeFeasibleSystem: Optimizing with objective " <> Text.pack (prettyShowObjectiveFunction objFunction)
+  logMsg LevelDebug $ "optimizeFeasibleSystem: Feasible system (in Dict form):\n" <> Text.pack (prettyShowDict phase1Dict)
   mResult <-
     if null artificialVars
       then do
-        logMsg LevelInfo $
-          "optimizeFeasibleSystem: No artificial vars, system is feasible. Pivoting system (in dict form) "
-            <> showT phase1Dict
-            <> " with objective "
-            <> showT normalObjective
-        simplexPivot normalObjective phase1Dict
+        logMsg LevelInfo "optimizeFeasibleSystem: No artificial vars, system is feasible"
+        logMsg LevelDebug $
+          "optimizeFeasibleSystem: Pivoting with objective "
+            <> Text.pack (prettyShowPivotObjective normalObjective)
+        simplexPivot 1 normalObjective phase1Dict
       else do
-        logMsg LevelInfo $
-          "optimizeFeasibleSystem: Artificial vars present. Pivoting system (in dict form) "
-            <> showT phase1Dict
-            <> " with objective "
-            <> showT adjustedObjective
-        simplexPivot adjustedObjective phase1Dict
+        logMsg LevelInfo "optimizeFeasibleSystem: Artificial vars present"
+        logMsg LevelDebug $
+          "optimizeFeasibleSystem: Pivoting with adjusted objective "
+            <> Text.pack (prettyShowPivotObjective adjustedObjective)
+        simplexPivot 1 adjustedObjective phase1Dict
   case mResult of
     Nothing -> do
       logMsg LevelInfo "optimizeFeasibleSystem: Objective is unbounded (ratio test failed)"
@@ -448,14 +465,22 @@ optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..})
 --   * The feasible system (Nothing if infeasible)
 --   * Results for each objective function (empty if infeasible)
 twoPhaseSimplex ::
-  (MonadIO m, MonadLogger m) => VarDomainMap -> [ObjectiveFunction] -> [PolyConstraint] -> m SimplexResult
+  (MonadLogger m) => VarDomainMap -> [ObjectiveFunction] -> [PolyConstraint] -> m SimplexResult
 twoPhaseSimplex domainMap objFunctions constraints = do
   logMsg LevelInfo $
+    "twoPhaseSimplex: Solving system with "
+      <> showT (length objFunctions)
+      <> " objectives and "
+      <> showT (length constraints)
+      <> " constraints"
+  logMsg LevelDebug $
     "twoPhaseSimplex: Solving system with domain map " <> showT domainMap
   -- Collect original variables before any transformations
   let originalVars = collectAllVars objFunctions constraints
   let (transformedObjs, transformedConstraints, transforms) = preprocess objFunctions domainMap constraints
   logMsg LevelInfo $
+    "twoPhaseSimplex: Applied " <> showT (length transforms) <> " variable transforms"
+  logMsg LevelDebug $
     "twoPhaseSimplex: Applied transforms "
       <> showT transforms
       <> "; Transformed objectives: "
@@ -472,18 +497,19 @@ twoPhaseSimplex domainMap objFunctions constraints = do
       logMsg LevelInfo "twoPhaseSimplex: No feasible solution found in phase 1"
       pure $ SimplexResult Nothing []
     Just feasibleSystem -> do
-      logMsg LevelInfo $
-        "twoPhaseSimplex: Feasible system found for transformed system; Feasible system: "
-          <> showT feasibleSystem
+      logMsg LevelInfo "twoPhaseSimplex: Feasible system found for transformed system"
+      logMsg LevelDebug $
+        "twoPhaseSimplex: Feasible system (in Dict form):\n"
+          <> Text.pack (prettyShowDict feasibleSystem.dict)
       objResults <- optimizeAllObjectives originalVars transforms feasibleSystem (zip objFunctions transformedObjs)
-      logMsg LevelInfo $ "twoPhaseSimplex: All objective results: " <> showT objResults
+      logMsg LevelDebug $ "twoPhaseSimplex: All objective results: " <> showT objResults
       pure $ SimplexResult (Just feasibleSystem) objResults
 
 -- | Optimize all objective functions over the given feasible system.
 -- Returns a list of ObjectiveResult, one for each objective function.
 -- The originalVars set is used to filter the result to only include original decision variables.
 optimizeAllObjectives ::
-  (MonadIO m, MonadLogger m) =>
+  (MonadLogger m) =>
   -- | Original decision variables
   Set.Set Var ->
   [VarTransform] ->
@@ -699,53 +725,63 @@ unapplyTransformToVarMap transform valMap =
 -- basic variable among minimum-ratio ties. The fixed 'Var' ordering and exact
 -- rational arithmetic ensure degenerate pivots cannot cycle. The objective row
 -- is not a nonnegative basic variable and must not constrain the ratio test.
-simplexPivot :: (MonadIO m, MonadLogger m) => PivotObjective -> Dict -> m (Maybe Dict)
-simplexPivot objective@(PivotObjective {variable = objectiveVar, function = objectiveFunc, constant = objectiveConstant}) dictionary = do
-  logMsg LevelInfo $
-    "simplexPivot: Pivoting with objective " <> showT objective <> " over system (in Dict form) " <> showT dictionary
+--
+-- The 'Int' is the pivot number. Callers start it at 1 and each recursive pivot
+-- increments it, so a trace can be followed by pivot instead of by wall-clock
+-- time. 'LevelInfo' gets exactly one line per pivot; the objective constant on
+-- that line is the value the pivot starts from.
+simplexPivot :: (MonadLogger m) => Int -> PivotObjective -> Dict -> m (Maybe Dict)
+simplexPivot pivotNumber objective@(PivotObjective {variable = objectiveVar, function = objectiveFunc, constant = objectiveConstant}) dictionary = do
+  logMsg LevelDebug $
+    "simplexPivot: pivot "
+      <> showT pivotNumber
+      <> " starting from objective "
+      <> Text.pack (prettyShowPivotObjective objective)
+      <> " over system (in Dict form):\n"
+      <> Text.pack (prettyShowDict dictionary)
   case M.lookupMin (M.filter (> 0) objectiveFunc) of
     Nothing -> do
       logMsg LevelInfo $
-        "simplexPivot: Pivoting complete as no positive variables found in objective "
-          <> showT objective
-          <> " over system (in Dict form) "
-          <> showT dictionary
+        "simplexPivot: pivot "
+          <> showT pivotNumber
+          <> ": no positive objective coefficient left, optimal with objective constant "
+          <> Text.pack (prettyShowRational objectiveConstant)
       pure $ Just (insertPivotObjectiveToDict objective dictionary)
     Just (pivotNonBasicVar, _) -> do
-      logMsg LevelInfo $
-        "simplexPivot: Non-basic pivoting variable in objective, determined by Bland's least-index rule = "
-          <> showT pivotNonBasicVar
       let mPivotBasicVar = ratioTest dictionary pivotNonBasicVar
       case mPivotBasicVar of
         Nothing -> do
           logMsg LevelInfo $
-            "simplexPivot: Ratio test failed with non-basic variable "
+            "simplexPivot: pivot "
+              <> showT pivotNumber
+              <> ": entering "
               <> showT pivotNonBasicVar
-              <> " over system (in Dict form) "
-              <> showT dictionary
+              <> ", ratio test failed, objective is unbounded"
           pure Nothing
         Just pivotBasicVar -> do
-          logMsg LevelInfo $ "simplexPivot: Basic pivoting variable determined by ratio test " <> showT pivotBasicVar
           logMsg LevelInfo $
-            "simplexPivot: Pivoting with basic var "
-              <> showT pivotBasicVar
-              <> ", non-basic var "
+            "simplexPivot: pivot "
+              <> showT pivotNumber
+              <> ": entering "
               <> showT pivotNonBasicVar
-              <> ", objective "
-              <> showT objective
-              <> " over system (in Dict form) "
-              <> showT dictionary
+              <> ", leaving "
+              <> showT pivotBasicVar
+              <> ", objective constant "
+              <> Text.pack (prettyShowRational objectiveConstant)
           let pivotResult = pivot pivotBasicVar pivotNonBasicVar (insertPivotObjectiveToDict objective dictionary)
               pivotedObj =
                 let pivotedObjEntry = fromMaybe (error "simplexPivot: Can't find objective after pivoting") $ M.lookup objectiveVar pivotResult
                 in  objective & #function .~ pivotedObjEntry.varMapSum & #constant .~ pivotedObjEntry.constant
               pivotedDict = M.delete objectiveVar pivotResult
-          logMsg LevelInfo $
-            "simplexPivot: Pivoted, Recursing with new pivoting objective "
-              <> showT pivotedObj
-              <> " for new pivoted system (in Dict form) "
-              <> showT pivotedDict
+          logMsg LevelDebug $
+            "simplexPivot: pivot "
+              <> showT (pivotNumber + 1)
+              <> " continuing from objective "
+              <> Text.pack (prettyShowPivotObjective pivotedObj)
+              <> " over pivoted system (in Dict form):\n"
+              <> Text.pack (prettyShowDict pivotedDict)
           simplexPivot
+            (pivotNumber + 1)
             pivotedObj
             pivotedDict
   where
