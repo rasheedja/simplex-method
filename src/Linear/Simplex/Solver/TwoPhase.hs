@@ -51,7 +51,6 @@ import GHC.Real (Ratio)
 import Linear.Simplex.Prettify
   ( prettyShowDict
   , prettyShowObjectiveFunction
-  , prettyShowPivotObjective
   , prettyShowRational
   )
 import Linear.Simplex.Types
@@ -61,7 +60,6 @@ import Linear.Simplex.Types
   , ObjectiveFunction (..)
   , ObjectiveResult (..)
   , OptimisationOutcome (..)
-  , PivotObjective (..)
   , PolyConstraint (..)
   , SimplexNum
   , SimplexResult (..)
@@ -79,7 +77,6 @@ import Linear.Simplex.Types
 import Linear.Simplex.Util
   ( combineVarLitMapSums
   , foldVarLitMap
-  , insertPivotObjectiveToDict
   , isMax
   , logMsg
   , showT
@@ -149,13 +146,15 @@ runPhaseOne reservedVars unsimplifiedSystem = do
           <> showT (length systemWithBasicVars)
           <> " rows"
       logMsg LevelDebug $ "findFeasibleSolution: System in tableau form " <> showT systemWithBasicVars
-      mPhase1Dict <- simplexPivot 1 artificialPivotObjective systemWithBasicVarsAsDictionary
+      -- The phase-one objective is an ordinary row of the dictionary, inserted
+      -- once here so 'simplexPivot' never has to take it back out and put it
+      -- back in on every iteration.
+      let phase1System = M.insert objectiveVar artificialObjectiveRow systemWithBasicVarsAsDictionary
+      mPhase1Dict <- simplexPivot 1 objectiveVar phase1System
       case mPhase1Dict of
         Just phase1Dict -> do
           logMsg LevelDebug $
-            "findFeasibleSolution: System after pivoting with objective "
-              <> Text.pack (prettyShowPivotObjective artificialPivotObjective)
-              <> ":\n"
+            "findFeasibleSolution: System after pivoting (in Dict form, objective row included):\n"
               <> Text.pack (prettyShowDict phase1Dict)
           let eliminateArtificialVarsFromPhase1Tableau =
                 M.map
@@ -166,8 +165,8 @@ runPhaseOne reservedVars unsimplifiedSystem = do
                         }
                   )
                   phase1Dict
-          -- 'simplexPivot' always inserts the objective row, and the 'M.map' above
-          -- preserves keys, so the objective row is guaranteed to be present here.
+          -- 'simplexPivot' returns the objective row it was given, and the 'M.map'
+          -- above preserves keys, so the objective row is guaranteed to be present here.
           let row =
                 fromMaybe
                   (error "findFeasibleSolution: objective row missing after phase one")
@@ -201,11 +200,11 @@ runPhaseOne reservedVars unsimplifiedSystem = do
               pure Nothing
         Nothing -> do
           logMsg LevelInfo $
-            "findFeasibleSolution: Infeasible solution found, could not pivot with objective "
-              <> Text.pack (prettyShowPivotObjective artificialPivotObjective)
+            "findFeasibleSolution: Infeasible solution found, could not pivot with objective row x"
+              <> showT objectiveVar
           logMsg LevelDebug $
             "findFeasibleSolution: System that could not be pivoted (in Dict form):\n"
-              <> Text.pack (prettyShowDict systemWithBasicVarsAsDictionary)
+              <> Text.pack (prettyShowDict phase1System)
           pure Nothing
   where
     -- Called only after the phase-one optimum has been verified to be zero.
@@ -251,7 +250,7 @@ runPhaseOne reservedVars unsimplifiedSystem = do
 
     systemWithBasicVarsAsDictionary = tableauInDictionaryForm systemWithBasicVars
 
-    artificialPivotObjective = createArtificialPivotObjective systemWithBasicVarsAsDictionary artificialVars
+    artificialObjectiveRow = createArtificialObjectiveRow systemWithBasicVarsAsDictionary artificialVars
 
     objectiveVar = finalMaxVar + 1
 
@@ -326,18 +325,18 @@ runPhaseOne reservedVars unsimplifiedSystem = do
         (newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar) = systemWithArtificialVars pcs maxVar
     systemWithArtificialVars _ _ = error "systemWithArtificialVars: given system includes non-EQ constraints"
 
-    -- \| Takes a 'Dict' and a '[Var]' as input and returns a 'PivotObjective'.
+    -- \| Takes a 'Dict' and a '[Var]' as input and returns the phase-one
+    -- objective row, to be inserted into that 'Dict' under 'objectiveVar'.
     -- The 'Dict' represents the tableau of a linear program with artificial
     -- variables, and '[Var]' represents the artificial variables.
 
     -- The function first filters out the rows of the tableau that correspond
     -- to the artificial variables, and negates them. It then computes the sum
-    -- of the negated rows, which represents the 'PivotObjective'.
-    createArtificialPivotObjective :: Dict -> [Var] -> PivotObjective
-    createArtificialPivotObjective rows artificialVars =
-      PivotObjective
-        { variable = objectiveVar
-        , function = foldVarLitMap $ map (.varMapSum) negatedRowsWithoutArtificialVars
+    -- of the negated rows, which is the objective row.
+    createArtificialObjectiveRow :: Dict -> [Var] -> DictValue
+    createArtificialObjectiveRow rows artificialVars =
+      DictValue
+        { varMapSum = foldVarLitMap $ map (.varMapSum) negatedRowsWithoutArtificialVars
         , constant = sum $ map (.constant) negatedRowsWithoutArtificialVars
         }
       where
@@ -364,20 +363,21 @@ optimizeFeasibleSystem objFunction (FeasibleSystem {dict = phase1Dict, ..}) = do
   logMsg LevelInfo $
     "optimizeFeasibleSystem: Optimizing with objective " <> Text.pack (prettyShowObjectiveFunction objFunction)
   logMsg LevelDebug $ "optimizeFeasibleSystem: Feasible system (in Dict form):\n" <> Text.pack (prettyShowDict phase1Dict)
+  let phase2System =
+        M.insert
+          objectiveVar
+          (if null artificialVars then normalObjectiveRow else adjustedObjectiveRow)
+          phase1Dict
   mResult <-
     if null artificialVars
       then do
         logMsg LevelInfo "optimizeFeasibleSystem: No artificial vars, system is feasible"
-        logMsg LevelDebug $
-          "optimizeFeasibleSystem: Pivoting with objective "
-            <> Text.pack (prettyShowPivotObjective normalObjective)
-        simplexPivot 1 normalObjective phase1Dict
+        logMsg LevelDebug "optimizeFeasibleSystem: Pivoting with the original objective row"
+        simplexPivot 1 objectiveVar phase2System
       else do
         logMsg LevelInfo "optimizeFeasibleSystem: Artificial vars present"
-        logMsg LevelDebug $
-          "optimizeFeasibleSystem: Pivoting with adjusted objective "
-            <> Text.pack (prettyShowPivotObjective adjustedObjective)
-        simplexPivot 1 adjustedObjective phase1Dict
+        logMsg LevelDebug "optimizeFeasibleSystem: Pivoting with the adjusted objective row"
+        simplexPivot 1 objectiveVar phase2System
   case mResult of
     Nothing -> do
       logMsg LevelInfo "optimizeFeasibleSystem: Objective is unbounded (ratio test failed)"
@@ -403,11 +403,10 @@ optimizeFeasibleSystem objFunction (FeasibleSystem {dict = phase1Dict, ..}) = do
     -- variables were necessary in the first phase. It is essentially the original
     -- objective function, with a potential change of sign based on the type of
     -- problem (Maximization or Minimization).
-    normalObjective :: PivotObjective
-    normalObjective =
-      PivotObjective
-        { variable = objectiveVar
-        , function = if isMax objFunction then objFunction.objective else M.map negate objFunction.objective
+    normalObjectiveRow :: DictValue
+    normalObjectiveRow =
+      DictValue
+        { varMapSum = if isMax objFunction then objFunction.objective else M.map negate objFunction.objective
         , constant = 0
         }
 
@@ -415,11 +414,10 @@ optimizeFeasibleSystem objFunction (FeasibleSystem {dict = phase1Dict, ..}) = do
     -- variables were necessary in the first phase. It is an adjustment to the
     -- original objective function, where the linear coefficients are modified
     -- by back-substitution of the values of the artificial variables.
-    adjustedObjective :: PivotObjective
-    adjustedObjective =
-      PivotObjective
-        { variable = objectiveVar
-        , function = calcVarMap
+    adjustedObjectiveRow :: DictValue
+    adjustedObjectiveRow =
+      DictValue
+        { varMapSum = calcVarMap
         , constant = calcConstants
         }
       where
@@ -726,18 +724,20 @@ unapplyTransformToVarMap transform valMap =
 -- rational arithmetic ensure degenerate pivots cannot cycle. The objective row
 -- is not a nonnegative basic variable and must not constrain the ratio test.
 --
+-- The first 'Var' is the objective variable. Its row must already be in the
+-- dictionary: the objective is an ordinary row that is read, pivoted and
+-- returned like any other, so the caller inserts it once before pivoting.
+--
 -- The 'Int' is the pivot number. Callers start it at 1 and each recursive pivot
 -- increments it, so a trace can be followed by pivot instead of by wall-clock
 -- time. 'LevelInfo' gets exactly one line per pivot; the objective constant on
 -- that line is the value the pivot starts from.
-simplexPivot :: (MonadLogger m) => Int -> PivotObjective -> Dict -> m (Maybe Dict)
-simplexPivot pivotNumber objective@(PivotObjective {variable = objectiveVar, function = objectiveFunc, constant = objectiveConstant}) dictionary = do
+simplexPivot :: (MonadLogger m) => Int -> Var -> Dict -> m (Maybe Dict)
+simplexPivot pivotNumber objectiveVar dictionary = do
   logMsg LevelDebug $
     "simplexPivot: pivot "
       <> showT pivotNumber
-      <> " starting from objective "
-      <> Text.pack (prettyShowPivotObjective objective)
-      <> " over system (in Dict form):\n"
+      <> " starting from system (in Dict form, objective row included):\n"
       <> Text.pack (prettyShowDict dictionary)
   case M.lookupMin (M.filter (> 0) objectiveFunc) of
     Nothing -> do
@@ -746,10 +746,9 @@ simplexPivot pivotNumber objective@(PivotObjective {variable = objectiveVar, fun
           <> showT pivotNumber
           <> ": no positive objective coefficient left, optimal with objective constant "
           <> Text.pack (prettyShowRational objectiveConstant)
-      pure $ Just (insertPivotObjectiveToDict objective dictionary)
-    Just (pivotNonBasicVar, _) -> do
-      let mPivotBasicVar = ratioTest dictionary pivotNonBasicVar
-      case mPivotBasicVar of
+      pure $ Just dictionary
+    Just (pivotNonBasicVar, _) ->
+      case ratioTest dictionary pivotNonBasicVar of
         Nothing -> do
           logMsg LevelInfo $
             "simplexPivot: pivot "
@@ -768,23 +767,26 @@ simplexPivot pivotNumber objective@(PivotObjective {variable = objectiveVar, fun
               <> showT pivotBasicVar
               <> ", objective constant "
               <> Text.pack (prettyShowRational objectiveConstant)
-          let pivotResult = pivot pivotBasicVar pivotNonBasicVar (insertPivotObjectiveToDict objective dictionary)
-              pivotedObj =
-                let pivotedObjEntry = fromMaybe (error "simplexPivot: Can't find objective after pivoting") $ M.lookup objectiveVar pivotResult
-                in  objective & #function .~ pivotedObjEntry.varMapSum & #constant .~ pivotedObjEntry.constant
-              pivotedDict = M.delete objectiveVar pivotResult
+          let pivotedDict = pivot pivotBasicVar pivotNonBasicVar dictionary
           logMsg LevelDebug $
             "simplexPivot: pivot "
               <> showT (pivotNumber + 1)
-              <> " continuing from objective "
-              <> Text.pack (prettyShowPivotObjective pivotedObj)
-              <> " over pivoted system (in Dict form):\n"
+              <> " continuing from pivoted system (in Dict form, objective row included):\n"
               <> Text.pack (prettyShowDict pivotedDict)
           simplexPivot
             (pivotNumber + 1)
-            pivotedObj
+            objectiveVar
             pivotedDict
   where
+    objectiveRow =
+      fromMaybe
+        (error "simplexPivot: objective row missing from the dictionary")
+        (M.lookup objectiveVar dictionary)
+
+    objectiveFunc = objectiveRow.varMapSum
+
+    objectiveConstant = objectiveRow.constant
+
     ratioTest :: Dict -> Var -> Maybe Var
     ratioTest dict enteringVar =
       case ratios of

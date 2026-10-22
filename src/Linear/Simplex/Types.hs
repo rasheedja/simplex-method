@@ -109,16 +109,6 @@ data DictValue = DictValue
 --   deriving (Show, Read, Eq, Generic)
 type Dict = M.Map Var DictValue
 
--- | Objective row representation used during pivoting.
--- 'variable' is the objective basic variable and 'function'/'constant' encode
--- the objective in dictionary form.
-data PivotObjective = PivotObjective
-  { variable :: Var
-  , function :: VarLitMapSum
-  , constant :: SimplexNum
-  }
-  deriving (Show, Read, Eq, Generic)
-
 -- | Domain specification for a variable's bounds.
 -- Variables not in the VarDomainMap are assumed to be Unbounded (both bounds Nothing).
 --

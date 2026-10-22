@@ -1,0 +1,40 @@
+      converts an empty dictionary to empty tableau [✔]
+      converts a simple tableau entry to dictionary form [✔]
+      converts an empty tableau to empty dictionary [✔]
+    Round-trip properties
+      tableauInDictionaryForm . dictionaryFormToTableau is identity [✔]
+        +++ OK, passed 100 tests.
+      dictionaryFormToTableau . tableauInDictionaryForm is identity for well-formed tableaux [✔]
+        +++ OK, passed 100 tests.
+  combineVarLitMapSums
+    Unit tests
+      combines two disjoint maps [✔]
+      sums values for overlapping keys [✔]
+      returns other map when one is empty [✔]
+      returns empty for two empty maps [✔]
+    Properties
+      is commutative [✔]
+        +++ OK, passed 100 tests.
+      has empty map as identity [✔]
+        +++ OK, passed 100 tests.
+      is associative [✔]
+        +++ OK, passed 100 tests.
+  foldVarLitMap
+    Unit tests
+      returns the single map for a singleton list [✔]
+      combines two maps [✔]
+      combines three maps [✔]
+      returns the zero expression for an empty list [✔]
+    Properties
+      folding a singleton list is identity [✔]
+        +++ OK, passed 100 tests.
+      folding two maps equals combineVarLitMapSums [✔]
+        +++ OK, passed 100 tests.
+
+Finished in 0.1112 seconds
+320 examples, 0 failures
+
+
+
+simplex-method> Test suite simplex-haskell-test passed
+Completed 2 action(s).

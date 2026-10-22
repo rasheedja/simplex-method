@@ -29,7 +29,6 @@ import Linear.Simplex.Types
   ( Dict
   , DictValue (..)
   , ObjectiveFunction (..)
-  , PivotObjective (..)
   , PolyConstraint (..)
   , SimplexNum
   , Tableau
@@ -129,9 +128,6 @@ combineVarLitMapSums = Map.unionWith (+)
 -- | Sum coefficient maps, treating an empty list as the zero expression.
 foldVarLitMap :: [VarLitMap] -> VarLitMap
 foldVarLitMap = Map.unionsWith (+)
-
-insertPivotObjectiveToDict :: PivotObjective -> Dict -> Dict
-insertPivotObjectiveToDict objective = Map.insert objective.variable (DictValue {varMapSum = objective.function, constant = objective.constant})
 
 showT :: (Show a) => a -> T.Text
 showT = T.pack . show

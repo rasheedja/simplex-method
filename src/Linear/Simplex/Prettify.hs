@@ -20,7 +20,6 @@ import Linear.Simplex.Types
   ( Dict
   , DictValue (..)
   , ObjectiveFunction (..)
-  , PivotObjective (..)
   , PolyConstraint (..)
   , SimplexNum
   , VarLitMapSum
@@ -56,13 +55,6 @@ prettyShowDict = intercalate "\n" . map prettyShowRow . M.toList
             ++ " = "
             ++ constantTerm
             ++ if null terms then "" else " + " ++ terms
-
--- | Convert a 'PivotObjective' into a human-readable 'String': the single
--- dictionary row @x<variable> = <constant> + <function>@ it represents.
-prettyShowPivotObjective :: PivotObjective -> String
-prettyShowPivotObjective objective =
-  prettyShowDict $
-    M.singleton objective.variable (DictValue {varMapSum = objective.function, constant = objective.constant})
 
 -- | Convert a 'PolyConstraint' into a human-readable 'String'
 prettyShowPolyConstraint :: PolyConstraint -> String
