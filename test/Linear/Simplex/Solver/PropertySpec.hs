@@ -104,17 +104,20 @@ spec = describe "solver answers on small bounded linear programs" $ do
   describe "feasibility of the answer" $
     modifyMaxSuccess (const 300) $
       it "every Optimal answer is a feasible point inside every domain" $
-        property $ \(lp :: GeneratedLP) -> propFeasibleAnswer lp
+        property $
+          \(lp :: GeneratedLP) -> propFeasibleAnswer lp
 
   describe "optimality against brute force" $
     modifyMaxSuccess (const 300) $
       it "matches the brute-force optimum and agrees on feasibility" $
-        property $ \(lp :: GeneratedLP) -> propOptimalValue lp
+        property $
+          \(lp :: GeneratedLP) -> propOptimalValue lp
 
   describe "per-objective independence" $
     modifyMaxSuccess (const 300) $
       it "an objective's result does not depend on the other requested objectives" $
-        property $ \(kase :: IndependenceCase) -> propObjectiveIndependence kase
+        property $
+          \(kase :: IndependenceCase) -> propObjectiveIndependence kase
 
 -- Properties -----------------------------------------------------------------
 
@@ -295,7 +298,7 @@ hyperplanes lp = nub (constraintHyperplanes ++ boundHyperplanes)
     boundHyperplanes =
       concat
         [ maybe [] (\l -> [(M.singleton v 1, l)]) mLower
-            ++ maybe [] (\u -> [(M.singleton v 1, u)]) mUpper
+          ++ maybe [] (\u -> [(M.singleton v 1, u)]) mUpper
         | (v, Bounded mLower mUpper) <- M.toList domainMap
         ]
 
