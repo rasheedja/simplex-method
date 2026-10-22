@@ -25,6 +25,8 @@ module Linear.Simplex.Solver.TwoPhase
   , getTransform
   , applyTransforms
   , applyTransform
+  , applyTransformToObjective
+  , applyTransformToConstraints
   , applyShiftToObjective
   , applyShiftToConstraint
   , applySplitToObjective
@@ -440,9 +442,11 @@ twoPhaseSimplex domainMap objFunctions constraints = do
       <> " constraints"
   logMsg LevelDebug $
     "twoPhaseSimplex: Solving system with domain map " <> showT domainMap
-  -- Collect original variables before any transformations
+  -- Collect original variables before any transformations. They are needed both
+  -- to generate the transforms and to filter the results afterwards, so they are
+  -- collected once here and handed to 'preprocess'.
   let originalVars = collectAllVars objFunctions constraints
-  let (transformedObjs, transformedConstraints, transforms) = preprocess objFunctions domainMap constraints
+  let (transformedObjs, transformedConstraints, transforms) = preprocess originalVars objFunctions domainMap constraints
   logMsg LevelInfo $
     "twoPhaseSimplex: Applied " <> showT (length transforms) <> " variable transforms"
   logMsg LevelDebug $
@@ -509,31 +513,28 @@ computeObjective objFunction varVals =
   sum $ map (\(var, coeff) -> coeff * M.findWithDefault 0 var varVals) (M.toList objFunction.objective)
 
 -- | Preprocess the system by applying variable transformations based on domain information.
+-- The variables of the system are passed in already collected, because the caller
+-- needs the same set for postprocessing.
 -- Returns the transformed objectives, constraints, and the list of transforms applied.
 preprocess ::
+  -- | All variables of the system ('collectAllVars' of the objectives and constraints)
+  Set Var ->
   [ObjectiveFunction] ->
   VarDomainMap ->
   [PolyConstraint] ->
   ([ObjectiveFunction], [PolyConstraint], [VarTransform])
-preprocess objFunctions (VarDomainMap domainMap) constraints =
-  let -- Collect all variables in the system (from all objectives and constraints)
-      allVars = collectAllVars objFunctions constraints
-      -- Find the maximum variable to generate fresh variables
+preprocess allVars objFunctions (VarDomainMap domainMap) constraints =
+  let -- Find the maximum variable to generate fresh variables
       maxVar = if Set.null allVars then 0 else Set.findMax allVars
       -- Generate transforms for each variable based on its domain
       -- Variables not in domainMap are treated as Unbounded
       (transforms, _) = foldr (generateTransform domainMap) ([], maxVar + 1) (Set.toList allVars)
-      -- Apply transforms to get the transformed system
-      transformedObjs = map (\obj -> fst $ applyTransforms transforms obj constraints) objFunctions
-      (_, transformedConstraints) = case objFunctions of
-        [] -> (Max M.empty, applyTransformsToConstraints transforms constraints)
-        (obj : _) -> applyTransforms transforms obj constraints
+      -- Each transform is applied to every objective and to the constraints once.
+      -- Both use the same fold over the transforms, so the constraint list is
+      -- built exactly as it was when it was folded along with an objective.
+      transformedObjs = map (\obj -> foldr applyTransformToObjective obj transforms) objFunctions
+      transformedConstraints = foldr applyTransformToConstraints constraints transforms
   in  (transformedObjs, transformedConstraints, transforms)
-
--- | Apply transforms to constraints only (used when there are no objectives)
-applyTransformsToConstraints :: [VarTransform] -> [PolyConstraint] -> [PolyConstraint]
-applyTransformsToConstraints transforms constraints =
-  snd $ applyTransforms transforms (Max M.empty) constraints
 
 -- | Collect all variables appearing in the objective functions and constraints
 collectAllVars :: [ObjectiveFunction] -> [PolyConstraint] -> Set Var
@@ -555,60 +556,69 @@ generateTransform domainMap var (transforms, nextFreshVar) =
 -- Returns a list of transforms and the number of fresh variables consumed.
 getTransform :: Var -> Var -> VarDomain -> ([VarTransform], Var)
 getTransform nextFreshVar var (Bounded mLower mUpper) =
-  let -- Handle lower bound
-      -- Any nonzero lower bound is handled by a shift, so the bound becomes the
-      -- implicit shiftedVar >= 0: an upper bound then stays a LEQ row, whose
-      -- slack is feasible at the origin, and no artificial variable is needed.
-      (lowerTransforms, varOffset) = case mLower of
-        Nothing -> ([], 0) -- No lower bound: will need Split
-        Just l
-          | l == 0 -> ([], 0) -- NonNegative: no transform needed
-          | otherwise -> ([Shift var nextFreshVar l], 1) -- Nonzero lower bound: shift
-
-      -- Handle upper bound (if present)
+  let -- An upper bound is a LEQ row on the variable, added before the lower bound
+      -- is handled so that a Shift rewrites that row onto the fresh variable.
       upperTransforms = case mUpper of
         Nothing -> []
         Just u -> [AddUpperBound var u]
-
-      -- If no lower bound (Nothing), we need Split transformation
-      -- Split replaces the variable, so upper bound would apply to the original var
-      -- which gets expressed as posVar - negVar
-      (finalTransforms, finalOffset) = case mLower of
-        Nothing ->
-          -- Unbounded: split the variable
-          -- Note: upperTransforms will still be added and will apply to the original variable
-          -- expression (posVar - negVar) via the constraint system
-          (Split var nextFreshVar (nextFreshVar + 1) : upperTransforms, 2)
-        Just _ ->
-          (lowerTransforms ++ upperTransforms, varOffset)
-  in  (finalTransforms, finalOffset)
+  in  case mLower of
+        -- Unbounded below: split into posVar - negVar. The upper bound row stays
+        -- on the original variable, which the Split then expresses as
+        -- posVar - negVar.
+        Nothing -> (Split var nextFreshVar (nextFreshVar + 1) : upperTransforms, 2)
+        -- NonNegative: the bound is already implicit, no transform needed.
+        Just 0 -> (upperTransforms, 0)
+        -- Any nonzero lower bound is handled by a shift, so the bound becomes the
+        -- implicit shiftedVar >= 0: an upper bound then stays a LEQ row, whose
+        -- slack is feasible at the origin, and no artificial variable is needed.
+        Just l -> (Shift var nextFreshVar l : upperTransforms, 1)
 
 -- | Apply all transforms to the objective function and constraints.
+-- Kept for tests; the solver applies the two halves separately.
 applyTransforms :: [VarTransform] -> ObjectiveFunction -> [PolyConstraint] -> (ObjectiveFunction, [PolyConstraint])
 applyTransforms transforms objFunction constraints =
-  foldr applyTransform (objFunction, constraints) transforms
+  ( foldr applyTransformToObjective objFunction transforms
+  , foldr applyTransformToConstraints constraints transforms
+  )
 
--- | Apply a single transform to the objective function and constraints.
+-- | Apply a single transform to an objective function and a constraint list.
+-- Kept for tests; the solver applies the two halves separately.
 applyTransform :: VarTransform -> (ObjectiveFunction, [PolyConstraint]) -> (ObjectiveFunction, [PolyConstraint])
 applyTransform transform (objFunction, constraints) =
+  ( applyTransformToObjective transform objFunction
+  , applyTransformToConstraints transform constraints
+  )
+
+-- | Apply a single transform to an objective function.
+applyTransformToObjective :: VarTransform -> ObjectiveFunction -> ObjectiveFunction
+applyTransformToObjective transform objFunction =
+  case transform of
+    -- AddUpperBound: only adds a constraint, the objective is untouched
+    AddUpperBound {} -> objFunction
+    -- Shift: originalVar = shiftedVar + shiftBy (where shiftBy /= 0)
+    Shift origVar shiftedVar shiftBy ->
+      applyShiftToObjective origVar shiftedVar shiftBy objFunction
+    -- Split: originalVar = posVar - negVar
+    Split origVar posVar negVar ->
+      applySplitToObjective origVar posVar negVar objFunction
+
+-- | Apply a single transform to the constraint list.
+applyTransformToConstraints :: VarTransform -> [PolyConstraint] -> [PolyConstraint]
+applyTransformToConstraints transform constraints =
   case transform of
     -- AddUpperBound: Add a LEQ constraint for the variable
     AddUpperBound v bound ->
-      (objFunction, LEQ (M.singleton v 1) bound : constraints)
+      LEQ (M.singleton v 1) bound : constraints
     -- Shift: originalVar = shiftedVar + shiftBy (where shiftBy /= 0)
     -- Substitute: wherever we see originalVar, replace with shiftedVar
     -- and adjust the RHS by -coeff * shiftBy
     Shift origVar shiftedVar shiftBy ->
-      ( applyShiftToObjective origVar shiftedVar shiftBy objFunction
-      , map (applyShiftToConstraint origVar shiftedVar shiftBy) constraints
-      )
+      map (applyShiftToConstraint origVar shiftedVar shiftBy) constraints
     -- Split: originalVar = posVar - negVar
     -- Substitute: wherever we see originalVar with coeff c,
     -- replace with posVar with coeff c and negVar with coeff -c
     Split origVar posVar negVar ->
-      ( applySplitToObjective origVar posVar negVar objFunction
-      , map (applySplitToConstraint origVar posVar negVar) constraints
-      )
+      map (applySplitToConstraint origVar posVar negVar) constraints
 
 -- | Apply shift transformation to objective function.
 -- originalVar = shiftedVar + shiftBy

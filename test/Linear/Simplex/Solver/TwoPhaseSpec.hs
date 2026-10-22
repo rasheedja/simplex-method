@@ -2985,7 +2985,8 @@ spec = do
         let obj = Max (M.fromList [(1, 1), (2, 1)])
             constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 10]
             domainMap = VarDomainMap $ M.fromList [(1, nonNegative), (2, nonNegative)]
-        let ([newObj], newConstraints, transforms) = preprocess [obj] domainMap constraints
+        let ([newObj], newConstraints, transforms) =
+              preprocess (collectAllVars [obj] constraints) [obj] domainMap constraints
         transforms `shouldBe` []
         newObj `shouldBe` obj
         newConstraints `shouldBe` constraints
@@ -2994,7 +2995,8 @@ spec = do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 10]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
-        let ([newObj], newConstraints, transforms) = preprocess [obj] domainMap constraints
+        let ([newObj], newConstraints, transforms) =
+              preprocess (collectAllVars [obj] constraints) [obj] domainMap constraints
         transforms `shouldBe` [Shift 1 2 5]
         newObj `shouldBe` Max (M.fromList [(2, 1)])
         newConstraints `shouldBe` [LEQ (M.fromList [(2, 1)]) 5] -- shifted original only, no GEQ row
@@ -3002,7 +3004,8 @@ spec = do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 10]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
-        let ([newObj], newConstraints, transforms) = preprocess [obj] domainMap constraints
+        let ([newObj], newConstraints, transforms) =
+              preprocess (collectAllVars [obj] constraints) [obj] domainMap constraints
         length transforms `shouldBe` 1
         case head transforms of
           Shift {..} -> do
@@ -3014,7 +3017,8 @@ spec = do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 10]
             domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
-        let (_, _, transforms) = preprocess [obj] domainMap constraints
+        let (_, _, transforms) =
+              preprocess (collectAllVars [obj] constraints) [obj] domainMap constraints
         length transforms `shouldBe` 1
         case head transforms of
           Split {..} -> originalVar `shouldBe` 1
@@ -3027,7 +3031,8 @@ spec = do
               VarDomainMap $
                 M.fromList
                   [(1, nonNegative), (2, lowerBoundOnly 5), (3, lowerBoundOnly (-3))]
-        let (_, _, transforms) = preprocess [obj] domainMap constraints
+        let (_, _, transforms) =
+              preprocess (collectAllVars [obj] constraints) [obj] domainMap constraints
         -- Should have Shift for var 2, Shift for var 3
         length transforms `shouldBe` 2
       it "assigns fresh variables strictly greater than maxVar (no collision)" $ do
@@ -3040,7 +3045,8 @@ spec = do
         let obj = Max (M.fromList [(1, 3), (2, -1)])
             constraints = [LEQ (M.fromList [(1, 3), (2, -1)]) 0]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-1)), (2, nonNegative)]
-            ([_newObj], _newConstraints, transforms) = preprocess [obj] domainMap constraints
+            ([_newObj], _newConstraints, transforms) =
+              preprocess (collectAllVars [obj] constraints) [obj] domainMap constraints
             originalVars = Set.fromList [1, 2]
             freshVarIds =
               [shiftedVar | Shift _ shiftedVar _ <- transforms]
@@ -3060,10 +3066,45 @@ spec = do
         let obj = Max (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange 2 5)]
-            ([newObj], newConstraints, transforms) = preprocess [obj] domainMap constraints
+            ([newObj], newConstraints, transforms) =
+              preprocess (collectAllVars [obj] constraints) [obj] domainMap constraints
         transforms `shouldBe` [Shift 1 2 2, AddUpperBound 1 5]
         newObj `shouldBe` Max (M.fromList [(2, 1)])
         newConstraints `shouldBe` [LEQ (M.fromList [(2, 1)]) 3]
+
+      it "transforms the constraints independently of the number of objectives" $ do
+        -- LPPaver2 passes two objectives per variable. The constraints must be
+        -- transformed once and must not depend on how many objectives are solved
+        -- over them.
+        let constraints =
+              [ LEQ (M.fromList [(1, 1), (2, 1)]) 10
+              , GEQ (M.fromList [(2, 1), (3, -1)]) (-2)
+              ]
+            objectives =
+              [ Max (M.fromList [(1, 1)])
+              , Min (M.fromList [(2, 1)])
+              , Max (M.fromList [(1, 1), (2, -1)])
+              ]
+            domainMap =
+              VarDomainMap $
+                M.fromList [(1, boundedRange 1 5), (2, unbounded), (3, lowerBoundOnly (-2))]
+            (_, transformedWithOne, transformsWithOne) =
+              preprocess
+                (collectAllVars (take 1 objectives) constraints)
+                (take 1 objectives)
+                domainMap
+                constraints
+            (_, transformedWithThree, transformsWithThree) =
+              preprocess
+                (collectAllVars objectives constraints)
+                objectives
+                domainMap
+                constraints
+        -- The extra objectives add no variable that the first one does not already
+        -- reach through the constraints, so the transforms and the transformed rows
+        -- are identical.
+        transformsWithThree `shouldBe` transformsWithOne
+        transformedWithThree `shouldBe` transformedWithOne
 
   describe "positive lower bounds are shifted instead of bounded by a GEQ row" $ do
     let -- A three-variable box with one real constraint. Every lower bound is
@@ -3079,7 +3120,8 @@ spec = do
         objectives = [Min (M.fromList [(1, 1)]), Max (M.fromList [(1, 1)])]
 
     it "do not create artificial variables" $ do
-      let (_, transformedConstraints, _) = preprocess objectives domainMap constraints
+      let (_, transformedConstraints, _) =
+            preprocess (collectAllVars objectives constraints) objectives domainMap constraints
       mFeasibleSystem <- runNoLoggingT $ findFeasibleSolution transformedConstraints
       case mFeasibleSystem of
         Nothing -> expectationFailure "Expected the shifted system to be feasible"
@@ -3200,7 +3242,8 @@ spec = do
                 domainMap = VarDomainMap $ M.fromList domainEntries
                 obj = Max (M.fromList [(v, 1) | v <- allVars])
                 constraints = [LEQ (M.fromList [(v, 1) | v <- allVars]) 100]
-                ([_], _, transforms) = preprocess [obj] domainMap constraints
+                ([_], _, transforms) =
+                  preprocess (collectAllVars [obj] constraints) [obj] domainMap constraints
                 origVarSet = Set.fromList allVars
                 freshVarIds =
                   [v | Shift _ v _ <- transforms]
