@@ -3064,6 +3064,31 @@ spec = do
           computeObjective maxObj maxVals `shouldBe` (1 % 2)
         _ -> expectationFailure "Expected optimal results for both objectives"
 
+  describe "artificial variable construction" $ do
+    -- One rule decides whether a standard-form row needs an artificial variable:
+    -- it is needed when the row has no basic variable, or when the basic variable
+    -- cannot be non-negative there. A GEQ row gets a slack with coefficient -1,
+    -- which no non-negative slack value can satisfy against a positive rhs; a LEQ
+    -- row's slack satisfies it; an EQ row has no basic variable at all.
+    -- 'findFeasibleSolution' assumes every variable is non-negative.
+    it "creates exactly one artificial variable for a GEQ row" $ do
+      mfs <- runNoLoggingT $ findFeasibleSolution [GEQ (M.singleton 1 1) 2]
+      case mfs of
+        Nothing -> expectationFailure "x1 >= 2 is feasible for a non-negative x1"
+        Just feasible -> length feasible.artificialVars `shouldBe` 1
+
+    it "creates no artificial variable for a LEQ row" $ do
+      mfs <- runNoLoggingT $ findFeasibleSolution [LEQ (M.singleton 1 1) 2]
+      case mfs of
+        Nothing -> expectationFailure "x1 <= 2 is feasible for a non-negative x1"
+        Just feasible -> feasible.artificialVars `shouldBe` []
+
+    it "creates exactly one artificial variable for an EQ row" $ do
+      mfs <- runNoLoggingT $ findFeasibleSolution [EQ (M.singleton 1 1) 2]
+      case mfs of
+        Nothing -> expectationFailure "x1 = 2 is feasible for a non-negative x1"
+        Just feasible -> length feasible.artificialVars `shouldBe` 1
+
   -- ===========================================================================
   -- Property-based tests
   -- ===========================================================================

@@ -41,6 +41,7 @@ import Control.Lens ((%~), (&), (.~), (<&>))
 import Control.Monad (unless)
 import Control.Monad.Logger (LogLevel (LevelDebug, LevelError, LevelInfo), MonadLogger)
 import Data.Bifunctor (second)
+import Data.List (mapAccumL)
 import qualified Data.Map as M
 import Data.Maybe (fromJust, fromMaybe, mapMaybe)
 import Data.Ratio (denominator, numerator, (%))
@@ -238,7 +239,7 @@ runPhaseOne reservedVars unsimplifiedSystem = do
     -- every variable id in the system, including the reserved ids that may only occur in an objective.
     maxVar = fromMaybe 0 $ Set.lookupMax $ reservedVars <> collectAllVars [] variableConstraints
 
-    (systemWithSlackVars, slackVars) = systemInStandardForm variableConstraints maxVar []
+    (systemWithSlackVars, slackVars) = systemInStandardForm variableConstraints maxVar
 
     maxVarWithSlackVars = if null slackVars then maxVar else maximum slackVars
 
@@ -260,70 +261,73 @@ runPhaseOne reservedVars unsimplifiedSystem = do
     -- If a constraint is already EQ, set the basic var to Nothing.
     -- Final system is a list of equalities for the given system.
     -- To be feasible, all vars must be >= 0.
-    systemInStandardForm :: [PolyConstraint] -> Var -> [Var] -> ([(Maybe Var, PolyConstraint)], [Var])
-    systemInStandardForm [] _ sVars = ([], sVars)
-    systemInStandardForm (EQ v r : xs) maxVar sVars = ((Nothing, EQ v r) : newSystem, newSlackVars)
+    -- Slack vars are allocated in constraint order from the id above 'maxVar'.
+    -- They are returned in reverse creation order, which is the order this
+    -- function has always returned and which the 'FeasibleSystem' field exposes.
+    systemInStandardForm :: [PolyConstraint] -> Var -> ([(Maybe Var, PolyConstraint)], [Var])
+    systemInStandardForm constraints maxVar = (equations, reverse slackVars)
       where
-        (newSystem, newSlackVars) = systemInStandardForm xs maxVar sVars
-    systemInStandardForm (LEQ v r : xs) maxVar sVars = ((Just newSlackVar, EQ (M.insert newSlackVar 1 v) r) : newSystem, newSlackVars)
-      where
-        newSlackVar = maxVar + 1
-        (newSystem, newSlackVars) = systemInStandardForm xs newSlackVar (newSlackVar : sVars)
-    systemInStandardForm (GEQ v r : xs) maxVar sVars = ((Just newSlackVar, EQ (M.insert newSlackVar (-1) v) r) : newSystem, newSlackVars)
-      where
-        newSlackVar = maxVar + 1
-        (newSystem, newSlackVars) = systemInStandardForm xs newSlackVar (newSlackVar : sVars)
+        (_, equations) = mapAccumL toStandardEquation maxVar constraints
 
-    -- Add artificial vars to a system of 'PolyConstraint's.
-    -- Artificial vars are added when:
-    --  Basic var is Nothing (When the original constraint was already an EQ).
-    --  Slack var is equal to a negative value (this is infeasible, all vars need to be >= 0).
-    --  Final system will be a feasible artificial system.
+        -- The basic var of a slack row is its slack var, so the equations carry
+        -- the slack vars in creation order.
+        slackVars = [slackVar | (Just slackVar, _) <- equations]
+
+        -- An equation needs no slack var and starts with no basic var.
+        -- A slack var with coefficient 1 (LEQ) or -1 (GEQ) turns the constraint into an equation.
+        toStandardEquation :: Var -> PolyConstraint -> (Var, (Maybe Var, PolyConstraint))
+        toStandardEquation nextFreshId (EQ v r) = (nextFreshId, (Nothing, EQ v r))
+        toStandardEquation nextFreshId (LEQ v r) = withSlackVar nextFreshId 1 v r
+        toStandardEquation nextFreshId (GEQ v r) = withSlackVar nextFreshId (-1) v r
+
+        withSlackVar :: Var -> SimplexNum -> VarLitMapSum -> SimplexNum -> (Var, (Maybe Var, PolyConstraint))
+        withSlackVar nextFreshId coeff v r =
+          let slackVar = nextFreshId + 1
+          in  (slackVar, (Just slackVar, EQ (M.insert slackVar coeff v) r))
+
+    -- Add artificial vars to a system of equations in standard form.
+    -- One rule decides each row: an artificial var is needed when the row has no
+    -- basic var, or when its basic var cannot be non-negative there, i.e. when
+    -- r /= 0 and the basic coefficient has the opposite sign to r. (In standard
+    -- form that coefficient is always 1 or -1, so the signum comparison never
+    -- sees a zero.) The artificial gets coefficient 1 when r >= 0 and -1 when
+    -- r < 0, so it can be basic and non-negative; the row is then keyed by the
+    -- artificial instead of by the basic var.
+    -- Artificials are allocated in constraint order, one id per row that needs
+    -- one, and are returned in creation order.
+    -- Final system will be a feasible artificial system.
     -- We keep track of artificial vars in the second item of the returned pair so they can be eliminated once phase 1 is complete.
-    -- If an artificial var would normally be negative, we negate the row so we can keep artificial variables equal to 1
     systemWithArtificialVars :: [(Maybe Var, PolyConstraint)] -> Var -> (Tableau, [Var])
-    systemWithArtificialVars [] _ = (M.empty, [])
-    systemWithArtificialVars ((mVar, EQ v r) : pcs) maxVar =
-      case mVar of
-        Nothing ->
-          if r >= 0
-            then
-              ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar 1 v, rhs = r}) newSystemWithNewMaxVar
-              , newArtificialVar : artificialVarsWithNewMaxVar
-              )
-            else
-              ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar (-1) v, rhs = r}) newSystemWithNewMaxVar
-              , newArtificialVar : artificialVarsWithNewMaxVar
-              )
-        Just basicVar ->
-          case M.lookup basicVar v of
-            Just basicVarCoeff ->
-              if r == 0
-                then (M.insert basicVar (TableauRow {lhs = v, rhs = r}) newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
-                else
-                  if r > 0
-                    then
-                      if basicVarCoeff >= 0 -- Should only be 1 in the standard call path
-                        then (M.insert basicVar (TableauRow {lhs = v, rhs = r}) newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
-                        else
-                          ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar 1 v, rhs = r}) newSystemWithNewMaxVar
-                          , newArtificialVar : artificialVarsWithNewMaxVar -- Slack var is negative, r is positive (when original constraint was GEQ)
-                          )
-                    else -- r < 0
-                      if basicVarCoeff <= 0 -- Should only be -1 in the standard call path
-                        then (M.insert basicVar (TableauRow {lhs = v, rhs = r}) newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
-                        else
-                          ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar (-1) v, rhs = r}) newSystemWithNewMaxVar
-                          , newArtificialVar : artificialVarsWithNewMaxVar -- Slack var is negative, r is negative (when original constraint was LEQ)
-                          )
-            Nothing -> error "1" -- undefined
+    systemWithArtificialVars equations maxVar =
+      (M.fromList [(rowVar, row) | (rowVar, _, row) <- builtRows], [artificialVar | (_, Just artificialVar, _) <- builtRows])
       where
-        newArtificialVar = maxVar + 1
+        (_, builtRows) = mapAccumL toTableauRow maxVar equations
 
-        (newSystemWithNewMaxVar, artificialVarsWithNewMaxVar) = systemWithArtificialVars pcs newArtificialVar
+        -- One row of the tableau: the var it is keyed by, the artificial var it
+        -- needed (if any), and the row itself.
+        toTableauRow :: Var -> (Maybe Var, PolyConstraint) -> (Var, (Var, Maybe Var, TableauRow))
+        toTableauRow nextFreshId (mBasicVar, EQ v r) = case mBasicVar of
+          Nothing -> artificialRow nextFreshId v r
+          Just basicVar -> case M.lookup basicVar v of
+            Nothing ->
+              error $
+                "systemWithArtificialVars: basic variable "
+                  <> show basicVar
+                  <> " does not appear in its own row"
+            Just basicVarCoeff
+              | r /= 0 && signum basicVarCoeff /= signum r -> artificialRow nextFreshId v r
+              | otherwise -> (nextFreshId, (basicVar, Nothing, TableauRow {lhs = v, rhs = r}))
+        toTableauRow _ (_, constraint) =
+          error $ "systemWithArtificialVars: expected only equations, got " <> show constraint
 
-        (newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar) = systemWithArtificialVars pcs maxVar
-    systemWithArtificialVars _ _ = error "systemWithArtificialVars: given system includes non-EQ constraints"
+        artificialRow :: Var -> VarLitMapSum -> SimplexNum -> (Var, (Var, Maybe Var, TableauRow))
+        artificialRow nextFreshId v r =
+          ( artificialVar
+          , (artificialVar, Just artificialVar, TableauRow {lhs = M.insert artificialVar coeff v, rhs = r})
+          )
+          where
+            artificialVar = nextFreshId + 1
+            coeff = if r >= 0 then 1 else -1
 
     -- \| Takes a 'Dict' and a '[Var]' as input and returns the phase-one
     -- objective row, to be inserted into that 'Dict' under 'objectiveVar'.
