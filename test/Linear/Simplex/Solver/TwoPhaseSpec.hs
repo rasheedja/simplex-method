@@ -130,10 +130,12 @@ spec = do
         Nothing -> expectationFailure "Separate solver phases timed out after five seconds on the cycling LP"
         Just result -> expectationFailure $ "Expected an optimum from the separate solver phases, got " ++ show result
 
-    it "chooses the least entering index and least tied leaving index during phase one" $ do
+    it "chooses the largest entering coefficient and least tied leaving index during phase one" $ do
       -- The artificial objective has coefficients 3 for x1 and 6 for x2.
-      -- Both artificial rows (x3 and x4) have ratio zero. Bland chooses
-      -- x1 to enter and x3 to leave. Cleanup then removes redundant x4.
+      -- Dantzig takes the larger one, so x2 enters. Both artificial rows (x3
+      -- and x4) have ratio zero, so the leaving tie is still broken by least
+      -- index and x3 leaves. Cleanup then removes redundant x4, which leaves
+      -- x2 as the only basic variable.
       -- Observe the pivot choices before cleanup removes that basis evidence.
       pivotLines <- newIORef []
       actual <-
@@ -154,13 +156,52 @@ spec = do
             )
       pivots <- readIORef pivotLines
       length pivots `shouldBe` 1
-      pivots `shouldSatisfy` all (Text.isPrefixOf "simplexPivot: pivot 1: entering 1, leaving 3, objective constant ")
+      pivots
+        `shouldSatisfy` all
+          (Text.isPrefixOf "simplexPivot: pivot 1: entering 2, leaving 3, objective constant 0, rule=dantzig")
       case actual of
         Just (Just feasible) -> do
-          M.keys (M.delete feasible.objectiveVar feasible.dict) `shouldBe` [1]
+          M.keys (M.delete feasible.objectiveVar feasible.dict) `shouldBe` [2]
           feasible.artificialVars `shouldBe` [3, 4]
         Nothing -> expectationFailure "Degenerate phase one timed out after five seconds"
         Just Nothing -> expectationFailure "The origin satisfies both degenerate equalities"
+
+    it "switches to Bland's rule after the first degenerate pivot" $ do
+      -- Both equalities have a zero right-hand side, so every pivot away from
+      -- the origin is degenerate. The phase-one objective is x1 + 4*x2 + 3*x3,
+      -- so Dantzig enters x2 first (the largest coefficient, ties by least
+      -- index). Pivoting x2 in leaves x1 + 3*x3: Dantzig would enter x3 next,
+      -- but the first pivot was degenerate, so this solve continues with Bland
+      -- and enters the least index x1 instead.
+      let (actual, logs) =
+            runIdentity $
+              runWriterLoggingT $
+                findFeasibleSolution
+                  [ EQ (M.singleton 2 1) 0
+                  , EQ (M.fromList [(1, 1), (2, 3), (3, 3)]) 0
+                  ]
+          pivotLines =
+            [ text
+            | (_, _, level, message) <- logs
+            , level == LevelInfo
+            , let text = decodeUtf8 (fromLogStr message)
+            , "simplexPivot: pivot " `Text.isInfixOf` text
+            , "entering " `Text.isInfixOf` text
+            ]
+          pivotLine pivotNumber (entering, leaving, rule) =
+            "simplexPivot: pivot "
+              <> pivotNumber
+              <> ": entering "
+              <> entering
+              <> ", leaving "
+              <> leaving
+              <> ", objective constant 0, rule="
+              <> rule
+      zipWith pivotLine ["1", "2"] [("2", "4", "dantzig"), ("1", "5", "bland")]
+        `shouldBe` pivotLines
+      case actual of
+        Just _ -> pure ()
+        Nothing -> expectationFailure "The origin satisfies both degenerate equalities"
 
     it "excludes a retained objective row from the leaving-variable ratio test" $ do
       -- x2 = 1 - x1 is the constraint; the retained objective x3 = -x1
