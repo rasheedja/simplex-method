@@ -44,12 +44,10 @@ import Control.Monad (unless)
 import Control.Monad.Logger (LogLevel (LevelDebug, LevelError, LevelInfo), MonadLogger)
 import Data.List (mapAccumL)
 import qualified Data.Map as M
-import Data.Maybe (fromJust, fromMaybe, mapMaybe)
-import Data.Ratio (denominator, numerator, (%))
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
-import GHC.Real (Ratio)
 import Linear.Simplex.Prettify
   ( prettyShowDict
   , prettyShowObjectiveFunction
@@ -73,7 +71,6 @@ import Linear.Simplex.Types
   , VarLitMap
   , VarLitMapSum
   , VarTransform (..)
-  , nonNegative
   , unbounded
   )
 import Linear.Simplex.Util
@@ -262,17 +259,17 @@ runPhaseOne reservedVars unsimplifiedSystem = do
     -- If a constraint is already EQ, set the basic var to Nothing.
     -- Final system is a list of equalities for the given system.
     -- To be feasible, all vars must be >= 0.
-    -- Slack vars are allocated in constraint order from the id above 'maxVar'.
+    -- Slack vars are allocated in constraint order from the id above 'maxSystemVar'.
     -- They are returned in reverse creation order, which is the order this
     -- function has always returned and which the 'FeasibleSystem' field exposes.
     systemInStandardForm :: [PolyConstraint] -> Var -> ([(Maybe Var, PolyConstraint)], [Var])
-    systemInStandardForm constraints maxVar = (equations, reverse slackVars)
+    systemInStandardForm constraints maxSystemVar = (equations, reverse slackVarsInCreationOrder)
       where
-        (_, equations) = mapAccumL toStandardEquation maxVar constraints
+        (_, equations) = mapAccumL toStandardEquation maxSystemVar constraints
 
         -- The basic var of a slack row is its slack var, so the equations carry
         -- the slack vars in creation order.
-        slackVars = [slackVar | (Just slackVar, _) <- equations]
+        slackVarsInCreationOrder = [slackVar | (Just slackVar, _) <- equations]
 
         -- An equation needs no slack var and starts with no basic var.
         -- A slack var with coefficient 1 (LEQ) or -1 (GEQ) turns the constraint into an equation.
@@ -299,10 +296,10 @@ runPhaseOne reservedVars unsimplifiedSystem = do
     -- Final system will be a feasible artificial system.
     -- We keep track of artificial vars in the second item of the returned pair so they can be eliminated once phase 1 is complete.
     systemWithArtificialVars :: [(Maybe Var, PolyConstraint)] -> Var -> (Tableau, [Var])
-    systemWithArtificialVars equations maxVar =
+    systemWithArtificialVars equations maxSystemVar =
       (M.fromList [(rowVar, row) | (rowVar, _, row) <- builtRows], [artificialVar | (_, Just artificialVar, _) <- builtRows])
       where
-        (_, builtRows) = mapAccumL toTableauRow maxVar equations
+        (_, builtRows) = mapAccumL toTableauRow maxSystemVar equations
 
         -- One row of the tableau: the var it is keyed by, the artificial var it
         -- needed (if any), and the row itself.
@@ -339,21 +336,21 @@ runPhaseOne reservedVars unsimplifiedSystem = do
     -- to the artificial variables, and negates them. It then computes the sum
     -- of the negated rows, which is the objective row.
     createArtificialObjectiveRow :: Dict -> [Var] -> DictValue
-    createArtificialObjectiveRow rows artificialVars =
+    createArtificialObjectiveRow rows artificialVarsToRemove =
       DictValue
         { varMapSum = foldVarLitMap $ map (.varMapSum) negatedRowsWithoutArtificialVars
         , constant = sum $ map (.constant) negatedRowsWithoutArtificialVars
         }
       where
         -- Filter out non-artificial entries
-        artificialVarSet = Set.fromList artificialVars
-        rowsToAdd = M.restrictKeys rows artificialVarSet
+        artificialVarsToRemoveSet = Set.fromList artificialVarsToRemove
+        rowsToAdd = M.restrictKeys rows artificialVarsToRemoveSet
         -- Negate rows, discard keys and artificial vars since the pivot objective does not care about them
         negatedRowsWithoutArtificialVars =
           map
             ( \(_, DictValue {..}) ->
                 DictValue
-                  { varMapSum = M.map negate $ M.withoutKeys varMapSum artificialVarSet
+                  { varMapSum = M.map negate $ M.withoutKeys varMapSum artificialVarsToRemoveSet
                   , constant = negate constant
                   }
             )
