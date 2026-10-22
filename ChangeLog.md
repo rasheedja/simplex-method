@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+- Remove an unreachable objective-row lookup branch in `findFeasibleSolution` and correct its inverted phase-one objective RHS error message. ([#26](https://github.com/rasheedja/simplex-method/pull/26))
+
 - Prevent degenerate simplex pivot cycles by using Bland's least-index entering and leaving rules in both phases. Tied optimal solutions may select different variable values while preserving the objective optimum.
 - Remove zero-valued artificial basic variables before phase two, preserving the original constraints when a degenerate phase-one optimum leaves artificials in the basis.
 - Support zero objectives after the artificial-variable phase and replace custom coefficient-map merging with standard Data.Map operations. ([#18](https://github.com/rasheedja/simplex-method/pull/18))
