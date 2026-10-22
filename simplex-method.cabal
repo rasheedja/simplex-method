@@ -71,6 +71,7 @@ test-suite simplex-haskell-test
   main-is: Spec.hs
   other-modules:
       Linear.Simplex.Solver.PropertySpec
+      Linear.Simplex.Solver.SpecSupport
       Linear.Simplex.Solver.TwoPhaseSpec
       Linear.Simplex.UtilSpec
       Paths_simplex_method
