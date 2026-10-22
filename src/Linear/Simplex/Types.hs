@@ -7,7 +7,6 @@
 -- Stability   : experimental
 module Linear.Simplex.Types where
 
-import Data.Generics.Labels ()
 import qualified Data.Map as M
 import GHC.Generics (Generic)
 

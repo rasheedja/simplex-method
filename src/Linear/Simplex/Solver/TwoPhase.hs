@@ -39,7 +39,6 @@ module Linear.Simplex.Solver.TwoPhase
 
 import Prelude hiding (EQ)
 
-import Control.Lens ((%~), (&), (.~), (<&>))
 import Control.Monad (unless)
 import Control.Monad.Logger (LogLevel (LevelDebug, LevelError, LevelInfo), MonadLogger)
 import Data.List (mapAccumL)
@@ -213,7 +212,7 @@ runPhaseOne reservedVars unsimplifiedSystem = do
     -- A row with no such coefficient is redundant once artificials are zero.
     removeArtificialBasics :: Dict -> Dict
     removeArtificialBasics dictionary =
-      M.map (\row -> row & #varMapSum %~ (`M.withoutKeys` artificialVarSet)) $
+      M.map (\row -> row {varMapSum = M.withoutKeys row.varMapSum artificialVarSet}) $
         foldl removeBasic dictionary artificialVars
       where
         removeBasic dict artificialVar =
@@ -625,6 +624,20 @@ applyShiftToObjective :: Var -> Var -> SimplexNum -> ObjectiveFunction -> Object
 applyShiftToObjective origVar shiftedVar _shiftBy objFunction =
   objFunction {objective = fst $ shiftVarInMap origVar shiftedVar 0 objFunction.objective}
 
+-- | Replace the left-hand side of a constraint, keeping its relation and right-hand side.
+--  The field is shared with 'TableauRow', so the constructor is matched instead.
+withLhs :: VarLitMapSum -> PolyConstraint -> PolyConstraint
+withLhs newLhs (LEQ _ r) = LEQ newLhs r
+withLhs newLhs (GEQ _ r) = GEQ newLhs r
+withLhs newLhs (EQ _ r) = EQ newLhs r
+
+-- | Replace the right-hand side of a constraint, keeping its relation and left-hand side.
+--  The field is shared with 'TableauRow', so the constructor is matched instead.
+withRhs :: SimplexNum -> PolyConstraint -> PolyConstraint
+withRhs newRhs (LEQ v _) = LEQ v newRhs
+withRhs newRhs (GEQ v _) = GEQ v newRhs
+withRhs newRhs (EQ v _) = EQ v newRhs
+
 -- | Apply shift transformation to a constraint.
 -- originalVar = shiftedVar + shiftBy
 -- For constraint: sum(c_i * x_i) REL rhs
@@ -634,7 +647,7 @@ applyShiftToObjective origVar shiftedVar _shiftBy objFunction =
 applyShiftToConstraint :: Var -> Var -> SimplexNum -> PolyConstraint -> PolyConstraint
 applyShiftToConstraint origVar shiftedVar shiftBy constraint =
   let (newMap, rhsAdjust) = shiftVarInMap origVar shiftedVar shiftBy constraint.lhs
-  in  constraint & #lhs .~ newMap & #rhs %~ subtract rhsAdjust
+  in  withRhs (subtract rhsAdjust constraint.rhs) (withLhs newMap constraint)
 
 -- | Apply split transformation to objective function.
 -- originalVar = posVar - negVar
@@ -648,7 +661,7 @@ applySplitToObjective origVar posVar negVar objFunction =
 -- coefficient c of originalVar becomes c for posVar and -c for negVar
 applySplitToConstraint :: Var -> Var -> Var -> PolyConstraint -> PolyConstraint
 applySplitToConstraint origVar posVar negVar constraint =
-  constraint & #lhs %~ splitVarInMap origVar posVar negVar
+  withLhs (splitVarInMap origVar posVar negVar constraint.lhs) constraint
 
 -- | Substitute a shifted variable and return the constant offset introduced.
 -- The replacement variable must be fresh.
@@ -792,19 +805,17 @@ pivot leavingVariable enteringVariable dict =
         -- Move entering variable to basis, update other variables in row appropriately
         pivotEnteringRow :: DictValue
         pivotEnteringRow =
-          dictEntertingRow
-            & #varMapSum
-              %~ ( \basicEquation ->
-                    -- uncurry
-                    M.insert
+          DictValue
+            { varMapSum =
+                M.map
+                  divideByNegatedEnteringVariableCoeff
+                  ( M.insert
                       leavingVariable
                       (-1)
-                      (filterOutEnteringVarTerm basicEquation)
-                      & traverse
-                        %~ divideByNegatedEnteringVariableCoeff
-                 )
-            & #constant
-              %~ divideByNegatedEnteringVariableCoeff
+                      (filterOutEnteringVarTerm dictEntertingRow.varMapSum)
+                  )
+            , constant = divideByNegatedEnteringVariableCoeff dictEntertingRow.constant
+            }
           where
             divideByNegatedEnteringVariableCoeff = (/ negate enteringVariableCoeff)
 
@@ -820,13 +831,13 @@ pivot leavingVariable enteringVariable dict =
                 else case M.lookup enteringVariable (entryVal.varMapSum) of
                   Just subsCoeff ->
                     ( entryVar
-                    , entryVal
-                        & #varMapSum
-                          .~ combineVarLitMapSums
-                            (pivotEnteringRow.varMapSum <&> (subsCoeff *))
-                            (filterOutEnteringVarTerm (entryVal.varMapSum))
-                        & #constant
-                          .~ ((subsCoeff * (pivotEnteringRow.constant)) + entryVal.constant)
+                    , DictValue
+                        { varMapSum =
+                            combineVarLitMapSums
+                              (M.map (subsCoeff *) pivotEnteringRow.varMapSum)
+                              (filterOutEnteringVarTerm entryVal.varMapSum)
+                        , constant = (subsCoeff * pivotEnteringRow.constant) + entryVal.constant
+                        }
                     )
                   Nothing -> (entryVar, entryVal)
     Nothing -> error "pivot: non basic variable not found in basic row"
