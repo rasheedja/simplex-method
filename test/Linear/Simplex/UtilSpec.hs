@@ -4,9 +4,10 @@ module Linear.Simplex.UtilSpec where
 
 import Prelude hiding (EQ)
 
+import Data.List (nub, (\\))
 import qualified Data.Map as M
 import Test.Hspec (Spec, describe, expectationFailure, it, shouldBe)
-import Test.QuickCheck (Positive (..), property)
+import Test.QuickCheck (Gen, Positive (..), choose, forAll, listOf, property, resize, withMaxSuccess)
 
 import Linear.Simplex.Types
   ( Dict
@@ -39,6 +40,72 @@ dictionaryFormToTableau =
           , rhs = constant
           }
     )
+
+-- | The reference implementation of 'simplifySystem': reduce every constraint
+--  against the constraints that follow it, then remove duplicates with 'nub'.
+--
+--  The quadratic scan was replaced by the grouping implementation under test, and
+--  this copy remains as the oracle for the equivalence property below.
+simplifySystemReference :: [PolyConstraint] -> [PolyConstraint]
+simplifySystemReference = nub . reduceSystem
+  where
+    reduceSystem :: [PolyConstraint] -> [PolyConstraint]
+    reduceSystem [] = []
+    -- Reduce LEQ with matching GEQ and EQ into EQ
+    reduceSystem ((LEQ lhs rhs) : pcs) =
+      let matchingConstraints =
+            filter
+              ( \case
+                  GEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+                  EQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+                  _ -> False
+              )
+              pcs
+      in  if null matchingConstraints
+            then LEQ lhs rhs : reduceSystem pcs
+            else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
+    -- Reduce GEQ with matching LEQ and EQ into EQ
+    reduceSystem ((GEQ lhs rhs) : pcs) =
+      let matchingConstraints =
+            filter
+              ( \case
+                  LEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+                  EQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+                  _ -> False
+              )
+              pcs
+      in  if null matchingConstraints
+            then GEQ lhs rhs : reduceSystem pcs
+            else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
+    -- Reduce EQ with matching LEQ and GEQ into EQ
+    reduceSystem ((EQ lhs rhs) : pcs) =
+      let matchingConstraints =
+            filter
+              ( \case
+                  LEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+                  GEQ lhs' rhs' -> lhs == lhs' && rhs == rhs'
+                  _ -> False
+              )
+              pcs
+      in  if null matchingConstraints
+            then EQ lhs rhs : reduceSystem pcs
+            else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
+
+-- | Constraint systems drawn from a deliberately tiny alphabet, so that
+--  constraints share an @(lhs, rhs)@ key and every relation meets every other one.
+genSmallSystem :: Gen [PolyConstraint]
+genSmallSystem = resize 8 $ listOf genConstraint
+  where
+    genConstraint = do
+      lhsVar <- choose (1, 2)
+      rhsOffset <- choose (0, 1)
+      kindTag <- choose (0, 2)
+      let lhs = M.fromList [(lhsVar, 1)]
+          rhs = fromIntegral rhsOffset
+      pure $ case kindTag of
+        0 -> LEQ lhs rhs
+        1 -> GEQ lhs rhs
+        _ -> EQ lhs rhs
 
 spec :: Spec
 spec = do
@@ -141,6 +208,11 @@ spec = do
           \(coeff :: Rational, rhs :: Rational) ->
             let lhs = M.fromList [(1, coeff)]
             in  simplifySystem [LEQ lhs rhs, GEQ lhs rhs] == [EQ lhs rhs]
+
+      it "equals the reference implementation, order included, on random small systems" $
+        withMaxSuccess 500 $
+          forAll genSmallSystem $ \system ->
+            simplifySystem system == simplifySystemReference system
 
   describe "dictionaryFormToTableau and tableauInDictionaryForm" $ do
     describe "Unit tests" $ do
