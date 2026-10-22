@@ -24,7 +24,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # macOS is pinned to macos-15 instead of following macos-latest: the
+        # macos-26-arm64 image that macos-latest maps to (20261013.0424.1)
+        # ships Command Line Tools 27.0 with the macOS 27 SDK but keeps Xcode
+        # 26.6 as the default toolchain, and GHC's link line points at the
+        # Command Line Tools SDK, so Xcode's older ld has to read the newer
+        # SDK's stubs, which list an `arm64e.x1` architecture it cannot parse.
+        # macos-15 ships a matching Xcode/Command Line Tools pair.
+        # Revert to macos-latest once actions/runner-images#14940 is fixed.
+        os: [ubuntu-latest, macos-15, windows-latest]
         ghc-version: ['9.12', '9.10', '9.8', '9.6', '9.4', '9.2']
 
     steps:
