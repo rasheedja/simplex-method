@@ -4,4 +4,5 @@ dist-*/
 .vscode/*
 .direnv/*
 .envrc
+.pi/
 cabal.project.local
