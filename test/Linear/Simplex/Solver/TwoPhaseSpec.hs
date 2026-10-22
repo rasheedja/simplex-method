@@ -1484,6 +1484,35 @@ spec = do
       )
       [Max M.empty, Min M.empty]
 
+  describe "objective over a variable that is basic after phase one" $ do
+    -- The equality makes x1 basic in the phase-one dict (x1 = 4 - x2) and the
+    -- GEQ row needs an artificial too, so phase two has to back-substitute x1
+    -- before pivoting: 2x1 + x2 becomes 8 - x2 with x2 >= 1.
+    let constraints = [EQ (M.fromList [(1, 1), (2, 1)]) 4, GEQ (M.singleton 2 1) 1]
+        obj = M.fromList [(1, 2), (2, 1)]
+        cases =
+          [ (Max obj, 7, (3, 1))
+          , (Min obj, 4, (0, 4))
+          ]
+    mapM_
+      ( \(objFunction, expected, (expectedX1, expectedX2)) ->
+          it (show objFunction ++ ": obj=" ++ show expected) $ do
+            mFeasibleSystem <- runNoLoggingT $ findFeasibleSolution constraints
+            case mFeasibleSystem of
+              Nothing -> expectationFailure "The feasible region contains (3, 1)"
+              Just feasibleSystem -> do
+                -- The premise of the test: x1 is basic after phase one.
+                feasibleSystem.dict `shouldSatisfy` M.member 1
+                outcome <- runNoLoggingT $ optimizeFeasibleSystem objFunction feasibleSystem
+                case outcome of
+                  Optimal values -> do
+                    M.findWithDefault 0 1 values `shouldBe` expectedX1
+                    M.findWithDefault 0 2 values `shouldBe` expectedX2
+                    computeObjective objFunction values `shouldBe` expected
+                  Unbounded -> expectationFailure "x2 >= 1 bounds the back-substituted objective"
+      )
+      cases
+
   describe "constant constraints" $ do
     describe "accepts constant tautologies" $ do
       mapM_
