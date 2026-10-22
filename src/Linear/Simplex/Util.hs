@@ -30,10 +30,8 @@ import Linear.Simplex.Types
   , DictValue (..)
   , ObjectiveFunction (..)
   , PolyConstraint (..)
-  , SimplexNum
   , Tableau
   , TableauRow (..)
-  , Var
   , VarLitMap
   , VarLitMapSum
   )
@@ -92,18 +90,6 @@ simplifySystem = nub . reduceSystem
       in  if null matchingConstraints
             then EQ lhs rhs : reduceSystem pcs
             else EQ lhs rhs : reduceSystem (pcs \\ matchingConstraints)
-
--- | Converts a 'Dict' to a 'Tableau'.
---  FIXME: maybe remove this line. The basic variables will have a coefficient of 1 in the 'Tableau'.
-dictionaryFormToTableau :: Dict -> Tableau
-dictionaryFormToTableau =
-  Map.mapWithKey
-    ( \basicVar (DictValue {..}) ->
-        TableauRow
-          { lhs = Map.insert basicVar 1 $ negate <$> varMapSum
-          , rhs = constant
-          }
-    )
 
 -- | Converts a 'Tableau' to a 'Dict'.
 --  We do this by isolating the basic variable on the LHS, ending up with all non basic variables and a 'SimplexNum' constant on the RHS.

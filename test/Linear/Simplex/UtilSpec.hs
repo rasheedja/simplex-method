@@ -9,20 +9,36 @@ import Test.Hspec (Spec, describe, expectationFailure, it, shouldBe)
 import Test.QuickCheck (Positive (..), property)
 
 import Linear.Simplex.Types
-  ( DictValue (..)
+  ( Dict
+  , DictValue (..)
   , ObjectiveFunction (..)
   , PolyConstraint (..)
+  , Tableau
   , TableauRow (..)
   , VarLitMapSum
   )
 import Linear.Simplex.Util
   ( combineVarLitMapSums
-  , dictionaryFormToTableau
   , foldVarLitMap
   , isMax
   , simplifySystem
   , tableauInDictionaryForm
   )
+
+-- | Converts a 'Dict' to a 'Tableau'.
+--  FIXME: maybe remove this line. The basic variables will have a coefficient of 1 in the 'Tableau'.
+--
+--  This is the inverse of 'tableauInDictionaryForm' and exists only to test that
+--  round trip, so it lives with the tests rather than in the library.
+dictionaryFormToTableau :: Dict -> Tableau
+dictionaryFormToTableau =
+  M.mapWithKey
+    ( \basicVar (DictValue {..}) ->
+        TableauRow
+          { lhs = M.insert basicVar 1 $ negate <$> varMapSum
+          , rhs = constant
+          }
+    )
 
 spec :: Spec
 spec = do

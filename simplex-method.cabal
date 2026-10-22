@@ -30,6 +30,12 @@ library
       Paths_simplex_method
   hs-source-dirs:
       src
+  ghc-options:
+      -Wall
+      -Wcompat
+      -Wincomplete-record-updates
+      -Wincomplete-uni-patterns
+      -Wredundant-constraints
   default-extensions:
       DataKinds
       DeriveFunctor
@@ -70,6 +76,12 @@ test-suite simplex-haskell-test
       Paths_simplex_method
   hs-source-dirs:
       test
+  ghc-options:
+      -Wall
+      -Wcompat
+      -Wincomplete-record-updates
+      -Wincomplete-uni-patterns
+      -Wredundant-constraints
   default-extensions:
       DataKinds
       DeriveFunctor
