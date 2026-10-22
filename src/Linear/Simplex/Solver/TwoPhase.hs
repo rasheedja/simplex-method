@@ -40,7 +40,7 @@ module Linear.Simplex.Solver.TwoPhase
 import Prelude hiding (EQ)
 
 import Control.Lens ((%~), (&), (.~), (<&>))
-import Control.Monad (unless)
+import Control.Monad (foldM, unless)
 import Control.Monad.Logger (LogLevel (LevelDebug, LevelError, LevelInfo), MonadLogger)
 import Data.List (mapAccumL)
 import qualified Data.Map as M
@@ -361,7 +361,23 @@ runPhaseOne reservedVars unsimplifiedSystem = do
 --  Then, the feasible system in 'Dict' form as well as a list of slack variables, a list artificial variables, and the objective variable.
 --  Returns 'Optimal' with variable values if an optimal solution is found, or 'Unbounded' if the objective is unbounded.
 optimizeFeasibleSystem :: (MonadLogger m) => ObjectiveFunction -> FeasibleSystem -> m OptimisationOutcome
-optimizeFeasibleSystem objFunction (FeasibleSystem {dict = phase1Dict, ..}) = do
+optimizeFeasibleSystem objFunction = fmap fst . optimizeFeasibleSystemWithDict objFunction
+
+-- | 'optimizeFeasibleSystem', also returning the system whose 'dict' is the final
+--  dictionary with the objective row removed, i.e. a plain feasible dictionary again.
+--  That dictionary is what 'optimizeAllObjectives' warm-starts the next objective from.
+--
+--  The returned dictionary is feasible for the same system: phase two only pivots
+--  between feasible dictionaries, so every basic value is still non-negative and
+--  every row still defines its basic variable in terms of non-basic ones. A
+--  different basis is all that changed.
+--
+--  When the objective is 'Unbounded' the pivoting stopped in a state that is not an
+--  optimum, so the input system is returned unchanged; the caller decides whether
+--  the basis it started from is still worth reusing.
+optimizeFeasibleSystemWithDict ::
+  (MonadLogger m) => ObjectiveFunction -> FeasibleSystem -> m (OptimisationOutcome, FeasibleSystem)
+optimizeFeasibleSystemWithDict objFunction feasibleSystem@(FeasibleSystem {dict = phase1Dict, ..}) = do
   logMsg LevelInfo $
     "optimizeFeasibleSystem: Optimizing with objective " <> Text.pack (prettyShowObjectiveFunction objFunction)
   logMsg LevelDebug $ "optimizeFeasibleSystem: Feasible system (in Dict form):\n" <> Text.pack (prettyShowDict phase1Dict)
@@ -370,11 +386,13 @@ optimizeFeasibleSystem objFunction (FeasibleSystem {dict = phase1Dict, ..}) = do
   case mResult of
     Nothing -> do
       logMsg LevelInfo "optimizeFeasibleSystem: Objective is unbounded (ratio test failed)"
-      pure Unbounded
+      pure (Unbounded, feasibleSystem)
     Just resultDict -> do
       let result = displayResults resultDict
       logMsg LevelInfo $ "optimizeFeasibleSystem: Found optimal solution: " <> showT result
-      pure result
+      -- Drop the objective row: the next objective inserts its own, and the
+      -- remaining rows are the feasible dictionary it starts from.
+      pure (result, feasibleSystem {dict = M.delete objectiveVar resultDict})
   where
     -- Extract basic-variable values directly from the final dictionary.
     -- Omit slack/artificial variables and restore the minimization objective sign.
@@ -474,6 +492,19 @@ twoPhaseSimplex domainMap objFunctions constraints = do
 -- | Optimize all objective functions over the given feasible system.
 -- Returns a list of ObjectiveResult, one for each objective function.
 -- The originalVars set is used to filter the result to only include original decision variables.
+--
+-- The objectives are solved in a left fold that threads the feasible system, so each
+-- objective warm-starts from the dictionary the previous one finished in. Any optimal
+-- dictionary is itself a feasible basis, and a related objective such as the @Max@ of
+-- a variable whose @Min@ was just solved usually starts much closer to its own optimum
+-- than the phase-one dictionary does, which saves pivots.
+--
+-- This cannot change any objective's optimal value. The feasible dictionaries of a
+-- system all describe the same feasible region, so the set of optimum values of an
+-- objective over that region does not depend on which one it starts from; the simplex
+-- method stops exactly when no non-basic variable improves the objective, which is a
+-- property of the basis and the objective alone. Only the starting basis - and hence
+-- the pivot count, and which of several tied optimal bases the run lands on - differs.
 optimizeAllObjectives ::
   (MonadLogger m) =>
   -- | Original decision variables
@@ -483,13 +514,14 @@ optimizeAllObjectives ::
   -- | (original, transformed) objective pairs
   [(ObjectiveFunction, ObjectiveFunction)] ->
   m [ObjectiveResult]
-optimizeAllObjectives originalVars transforms feasibleSystem objPairs =
-  mapM optimizeOne objPairs
+optimizeAllObjectives originalVars transforms feasibleSystem objPairs = do
+  (results, _) <- foldM optimizeOne ([], feasibleSystem) objPairs
+  pure $ reverse results
   where
-    optimizeOne (origObj, transformedObj) = do
-      outcome <- optimizeFeasibleSystem transformedObj feasibleSystem
+    optimizeOne (results, system) (origObj, transformedObj) = do
+      (outcome, finalSystem) <- optimizeFeasibleSystemWithDict transformedObj system
       let postprocessedOutcome = postprocess originalVars transforms outcome
-      pure $ ObjectiveResult origObj postprocessedOutcome
+      pure (ObjectiveResult origObj postprocessedOutcome : results, finalSystem)
 
 -- | Postprocess the optimisation outcome by unapplying variable transformations
 -- and filtering to only include the original decision variables.
