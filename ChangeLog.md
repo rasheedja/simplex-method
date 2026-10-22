@@ -2,6 +2,7 @@
 
 ## Unreleased changes
 
+- Decide constant constraints, whose left-hand side has only zero coefficients, before phase one: a contradiction returns infeasible instead of crashing on an empty variable list, and tautologies are dropped. ([#28](https://github.com/rasheedja/simplex-method/pull/28))
 - Prevent degenerate simplex pivot cycles by using Bland's least-index entering and leaving rules in both phases. Tied optimal solutions may select different variable values while preserving the objective optimum.
 - Remove zero-valued artificial basic variables before phase two, preserving the original constraints when a degenerate phase-one optimum leaves artificials in the basis.
 - Support zero objectives after the artificial-variable phase and replace custom coefficient-map merging with standard Data.Map operations. ([#18](https://github.com/rasheedja/simplex-method/pull/18))
