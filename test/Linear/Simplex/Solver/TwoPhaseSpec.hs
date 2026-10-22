@@ -2735,6 +2735,48 @@ spec = do
         ]
         result
 
+  describe "warm-starting an objective from the previous objective's dictionary" $ do
+    -- The region is x1 + x2 >= 5/2 and 3 <= x1 + 2x2 <= 4, with the
+    -- quadrilateral vertices (1, 3/2), (2, 1/2), (3, 0) and (4, 0). It never
+    -- reaches the x1 = 0 axis, so Min x1 has to pivot to (1, 3/2) instead of
+    -- starting out optimal, and Max x1 is 4 at (4, 0) - a neighbour of (1, 3/2)
+    -- along x1 + 2x2 = 4. One pivot therefore separates Min x1's final
+    -- dictionary from the Max x1 optimum, while the phase-one dictionary is
+    -- two pivots away from it.
+    let constraints =
+          [ GEQ (M.fromList [(1, 2), (2, 2)]) 5
+          , GEQ (M.fromList [(1, 1), (2, 2)]) 3
+          , LEQ (M.fromList [(1, 1), (2, 2)]) 4
+          ]
+        domainMap = VarDomainMap $ M.fromList [(1, nonNegative), (2, nonNegative)]
+        minX1 = Min (M.singleton 1 1)
+        maxX1 = Max (M.singleton 1 1)
+        -- The objective value of every optimal result, in objective order.
+        objectiveValues result =
+          [ computeObjective objectiveFunction values
+          | ObjectiveResult {objectiveFunction, outcome = Optimal values} <- result.objectiveResults
+          ]
+
+    it "solves the Max x1 phase in fewer pivots after Min x1" $ do
+      let (warmMaxPivots, coldMaxPivots) =
+            ( lastPhasePivots domainMap [minX1, maxX1] constraints
+            , lastPhasePivots domainMap [maxX1] constraints
+            )
+      (warmMaxPivots, coldMaxPivots) `shouldSatisfy` uncurry (<)
+      -- The warm start cannot cost anything either: solving both objectives is
+      -- never more work than the two separate runs put together.
+      ( totalPivots domainMap [minX1, maxX1] constraints
+        , totalPivots domainMap [minX1] constraints + totalPivots domainMap [maxX1] constraints
+        )
+        `shouldSatisfy` uncurry (<=)
+
+    it "keeps both optima when the later objective is warm-started" $ do
+      warmBoth <- solveWith domainMap [minX1, maxX1] constraints
+      coldMin <- solveWith domainMap [minX1] constraints
+      coldMax <- solveWith domainMap [maxX1] constraints
+      (objectiveValues warmBoth, objectiveValues coldMin, objectiveValues coldMax)
+        `shouldBe` ([1, 4], [1], [4])
+
   describe "objective-only variable allocation" $ do
     -- Slack and artificial variables must not reuse an id that belongs to a
     -- variable appearing only in an objective. Otherwise the objective reads a
@@ -2783,3 +2825,44 @@ spec = do
       case mfs of
         Just feasible -> feasible.slackVars `shouldSatisfy` (\vars -> not (null vars) && all (> 5) vars)
         Nothing -> expectationFailure "A single constraint x₁ <= 1 is feasible"
+
+-- Pivot counting -------------------------------------------------------------
+
+-- | The number of pivots in each 'simplexPivot' run of one solve, in the order the
+-- runs happen: phase one first, then one run per objective.
+--
+-- Pivot numbering restarts at 1 for every run, and only a line that names an
+-- entering variable reports a pivot: the line that ends a run reports the optimum
+-- or the failed ratio test instead.
+solvePivotRuns :: VarDomainMap -> [ObjectiveFunction] -> [PolyConstraint] -> [Int]
+solvePivotRuns domainMap objectives constraints =
+  map (length . filter (Text.isInfixOf "entering ")) (splitPivotRuns pivotLines)
+  where
+    pivotLines =
+      [ messageText
+      | (_, _, _, message) <- snd (runIdentity $ runWriterLoggingT $ twoPhaseSimplex domainMap objectives constraints)
+      , let messageText = decodeUtf8 (fromLogStr message)
+      , "simplexPivot: pivot " `Text.isInfixOf` messageText
+      ]
+
+-- | Split pivot lines into one list per 'simplexPivot' run. A run always starts
+-- by naming pivot 1, and within a run the pivot number only grows.
+splitPivotRuns :: [Text.Text] -> [[Text.Text]]
+splitPivotRuns = go . dropWhile (not . startsRun)
+  where
+    startsRun = Text.isInfixOf "simplexPivot: pivot 1:"
+    go [] = []
+    go (line : rest) =
+      let (thisRun, remaining) = break startsRun rest
+      in  (line : thisRun) : go remaining
+
+-- | Pivots of the last run, i.e. of the final objective's phase two.
+lastPhasePivots :: VarDomainMap -> [ObjectiveFunction] -> [PolyConstraint] -> Int
+lastPhasePivots domainMap objectives constraints =
+  case reverse (solvePivotRuns domainMap objectives constraints) of
+    (pivots : _) -> pivots
+    [] -> 0
+
+-- | Total pivots of a whole solve, phase one included.
+totalPivots :: VarDomainMap -> [ObjectiveFunction] -> [PolyConstraint] -> Int
+totalPivots domainMap objectives constraints = sum (solvePivotRuns domainMap objectives constraints)
