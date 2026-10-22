@@ -81,106 +81,129 @@ import Linear.Simplex.Util
   , tableauInDictionaryForm
   )
 
+-- | Is the given 'PolyConstraint' constant, i.e. does it involve no variable at all?
+--  A constant constraint has only zero coefficients on its left-hand side (an
+--  empty left-hand side included), so it is either a tautology like 0 <= 1 or a
+--  contradiction like 0 <= -1.
+isConstantConstraint :: PolyConstraint -> Bool
+isConstantConstraint constraint = all (== 0) (M.elems constraint.lhs)
+
+-- | Can the given constant constraint never hold?
+isContradiction :: PolyConstraint -> Bool
+isContradiction (LEQ _ r) = 0 > r
+isContradiction (GEQ _ r) = 0 < r
+isContradiction (EQ _ r) = 0 /= r
+
+-- | The constant constraints of the given system that cannot hold for any
+--  variable assignment.
+contradictingConstantConstraints :: [PolyConstraint] -> [PolyConstraint]
+contradictingConstantConstraints =
+  filter isContradiction . filter isConstantConstraint . simplifySystem
+
 -- | Find a feasible solution for the given system of 'PolyConstraint's by performing the first phase of the two-phase simplex method
 --  All variables in the 'PolyConstraint' must be positive.
 --  If the system is infeasible, return 'Nothing'
 --  Otherwise, return the feasible system in 'Dict' as well as a list of slack variables, a list artificial variables, and the objective variable.
 findFeasibleSolution :: (MonadIO m, MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
-findFeasibleSolution unsimplifiedSystem = do
+findFeasibleSolution unsimplifiedSystem = case contradictingConstantConstraints unsimplifiedSystem of
+  contradicting : _ -> do
+    logMsg LevelInfo $
+      "findFeasibleSolution: Constant constraint "
+        <> showT contradicting
+        <> " cannot hold for any variable assignment, thus original system is infeasible"
+    pure Nothing
+  [] -> runPhaseOne unsimplifiedSystem
+
+-- | Perform phase one for a system whose constant constraints have been decided
+--  by 'findFeasibleSolution'.
+runPhaseOne :: (MonadIO m, MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
+runPhaseOne unsimplifiedSystem = do
   logMsg LevelInfo $ "findFeasibleSolution: Looking for solution for " <> showT unsimplifiedSystem
-  case contradictingConstraints of
-    contradicting : _ -> do
+  if null artificialVars -- No artificial vars, we have a feasible system
+    then do
+      logMsg LevelInfo "findFeasibleSolution: Feasible solution found with no artificial vars"
+      pure . Just $ FeasibleSystem systemWithBasicVarsAsDictionary slackVars artificialVars objectiveVar
+    else do
       logMsg LevelInfo $
-        "findFeasibleSolution: Constant constraint "
-          <> showT contradicting
-          <> " cannot hold for any variable assignment, thus original system is infeasible"
-      pure Nothing
-    [] ->
-      if null artificialVars -- No artificial vars, we have a feasible system
-        then do
-          logMsg LevelInfo "findFeasibleSolution: Feasible solution found with no artificial vars"
-          pure . Just $ FeasibleSystem systemWithBasicVarsAsDictionary slackVars artificialVars objectiveVar
-        else do
+        "findFeasibleSolution: Needed to create artificial vars. System with artificial vars (in Tableau form) "
+          <> showT systemWithBasicVars
+      mPhase1Dict <- simplexPivot artificialPivotObjective systemWithBasicVarsAsDictionary
+      case mPhase1Dict of
+        Just phase1Dict -> do
           logMsg LevelInfo $
-            "findFeasibleSolution: Needed to create artificial vars. System with artificial vars (in Tableau form) "
-              <> showT systemWithBasicVars
-          mPhase1Dict <- simplexPivot artificialPivotObjective systemWithBasicVarsAsDictionary
-          case mPhase1Dict of
-            Just phase1Dict -> do
-              logMsg LevelInfo $
-                "findFeasibleSolution: System after pivoting with objective"
-                  <> showT artificialPivotObjective
-                  <> ": "
-                  <> showT phase1Dict
-              let eliminateArtificialVarsFromPhase1Tableau =
-                    M.map
-                      ( \DictValue {..} ->
-                          DictValue
-                            { varMapSum = M.withoutKeys varMapSum artificialVarSet
-                            , ..
-                            }
-                      )
-                      phase1Dict
-              case M.lookup objectiveVar eliminateArtificialVarsFromPhase1Tableau of
-                Nothing -> do
-                  logMsg LevelWarn $
-                    "findFeasibleSolution: Objective row not found after eliminatiing artificial vars. This is unexpected. System without artificial vars (in Dict form) "
-                      <> showT eliminateArtificialVarsFromPhase1Tableau
-                  -- If the objecitve row is not found, the system is feasible iff
-                  -- the artificial vars sum to zero. The value of an artificial
-                  -- variable is 0 if non-basic, and the RHS of the row if basic
-                  let artificialVarsVals = map (\v -> maybe 0 (.constant) (M.lookup v eliminateArtificialVarsFromPhase1Tableau)) artificialVars
-                  let artificialVarsValsSum = sum artificialVarsVals
-                  if artificialVarsValsSum == 0
-                    then do
-                      logMsg LevelInfo $
-                        "findFeasibleSolution: Artifical variables sum up to 0, thus original tableau is feasible. System without artificial vars (in Dict form) "
-                          <> showT eliminateArtificialVarsFromPhase1Tableau
-                      pure . Just $
-                        FeasibleSystem
-                          { dict = removeArtificialBasics phase1Dict
-                          , slackVars = slackVars
-                          , artificialVars = artificialVars
-                          , objectiveVar = objectiveVar
-                          }
-                    else do
-                      logMsg LevelInfo $
-                        "findFeasibleSolution: Artifical variables sum up to "
-                          <> showT artificialVarsValsSum
-                          <> ", thus original tableau is infeasible. System without artificial vars (in Dict form) "
-                          <> showT eliminateArtificialVarsFromPhase1Tableau
-                      pure Nothing
-                Just row ->
-                  if row.constant == 0
-                    then do
-                      logMsg LevelInfo $
-                        "findFeasibleSolution: Objective RHS is zero after pivoting, thus original tableau is feasible. feasible system (in Dict form) "
-                          <> showT eliminateArtificialVarsFromPhase1Tableau
-                      pure . Just $
-                        FeasibleSystem
-                          { dict = removeArtificialBasics phase1Dict
-                          , slackVars = slackVars
-                          , artificialVars = artificialVars
-                          , objectiveVar = objectiveVar
-                          }
-                    else do
-                      unless (row.constant < 0) $ do
-                        let errMsg =
-                              "findFeasibleSolution: Objective RHS is negative after pivoting. This should be impossible. System without artificial vars (in Dict form) "
-                                <> show eliminateArtificialVarsFromPhase1Tableau
-                        logMsg LevelError $ Text.pack errMsg
-                        error errMsg
-                      logMsg LevelInfo $
-                        "findFeasibleSolution: Objective RHS not zero after phase 1, thus original tableau is infeasible. System without artificial vars (in Dict form) "
-                          <> showT eliminateArtificialVarsFromPhase1Tableau
-                      pure Nothing
+            "findFeasibleSolution: System after pivoting with objective"
+              <> showT artificialPivotObjective
+              <> ": "
+              <> showT phase1Dict
+          let eliminateArtificialVarsFromPhase1Tableau =
+                M.map
+                  ( \DictValue {..} ->
+                      DictValue
+                        { varMapSum = M.withoutKeys varMapSum artificialVarSet
+                        , ..
+                        }
+                  )
+                  phase1Dict
+          case M.lookup objectiveVar eliminateArtificialVarsFromPhase1Tableau of
             Nothing -> do
-              logMsg LevelInfo $
-                "findFeasibleSolution: Infeasible solution found, could not pivot with objective "
-                  <> showT artificialPivotObjective
-                  <> " over system (in Dict form) "
-                  <> showT systemWithBasicVarsAsDictionary
-              pure Nothing
+              logMsg LevelWarn $
+                "findFeasibleSolution: Objective row not found after eliminatiing artificial vars. This is unexpected. System without artificial vars (in Dict form) "
+                  <> showT eliminateArtificialVarsFromPhase1Tableau
+              -- If the objecitve row is not found, the system is feasible iff
+              -- the artificial vars sum to zero. The value of an artificial
+              -- variable is 0 if non-basic, and the RHS of the row if basic
+              let artificialVarsVals = map (\v -> maybe 0 (.constant) (M.lookup v eliminateArtificialVarsFromPhase1Tableau)) artificialVars
+              let artificialVarsValsSum = sum artificialVarsVals
+              if artificialVarsValsSum == 0
+                then do
+                  logMsg LevelInfo $
+                    "findFeasibleSolution: Artifical variables sum up to 0, thus original tableau is feasible. System without artificial vars (in Dict form) "
+                      <> showT eliminateArtificialVarsFromPhase1Tableau
+                  pure . Just $
+                    FeasibleSystem
+                      { dict = removeArtificialBasics phase1Dict
+                      , slackVars = slackVars
+                      , artificialVars = artificialVars
+                      , objectiveVar = objectiveVar
+                      }
+                else do
+                  logMsg LevelInfo $
+                    "findFeasibleSolution: Artifical variables sum up to "
+                      <> showT artificialVarsValsSum
+                      <> ", thus original tableau is infeasible. System without artificial vars (in Dict form) "
+                      <> showT eliminateArtificialVarsFromPhase1Tableau
+                  pure Nothing
+            Just row ->
+              if row.constant == 0
+                then do
+                  logMsg LevelInfo $
+                    "findFeasibleSolution: Objective RHS is zero after pivoting, thus original tableau is feasible. feasible system (in Dict form) "
+                      <> showT eliminateArtificialVarsFromPhase1Tableau
+                  pure . Just $
+                    FeasibleSystem
+                      { dict = removeArtificialBasics phase1Dict
+                      , slackVars = slackVars
+                      , artificialVars = artificialVars
+                      , objectiveVar = objectiveVar
+                      }
+                else do
+                  unless (row.constant < 0) $ do
+                    let errMsg =
+                          "findFeasibleSolution: Objective RHS is negative after pivoting. This should be impossible. System without artificial vars (in Dict form) "
+                            <> show eliminateArtificialVarsFromPhase1Tableau
+                    logMsg LevelError $ Text.pack errMsg
+                    error errMsg
+                  logMsg LevelInfo $
+                    "findFeasibleSolution: Objective RHS not zero after phase 1, thus original tableau is infeasible. System without artificial vars (in Dict form) "
+                      <> showT eliminateArtificialVarsFromPhase1Tableau
+                  pure Nothing
+        Nothing -> do
+          logMsg LevelInfo $
+            "findFeasibleSolution: Infeasible solution found, could not pivot with objective "
+              <> showT artificialPivotObjective
+              <> " over system (in Dict form) "
+              <> showT systemWithBasicVarsAsDictionary
+          pure Nothing
   where
     -- Called only after the phase-one optimum has been verified to be zero.
     -- A remaining artificial basic must stay zero in the original problem.
@@ -203,21 +226,6 @@ findFeasibleSolution unsimplifiedSystem = do
                     Just (enteringVar, _) -> pivot artificialVar enteringVar dict
 
     system = simplifySystem unsimplifiedSystem
-
-    -- A constraint is constant when every coefficient on its left-hand side is
-    -- zero (an empty left-hand side included). Such a constraint does not
-    -- involve any variable, so it is either a tautology like 0 <= 1 or a
-    -- contradiction like 0 <= -1, and it can be decided before phase one.
-    isConstantConstraint :: PolyConstraint -> Bool
-    isConstantConstraint constraint = all (== 0) (M.elems constraint.lhs)
-
-    contradicts :: PolyConstraint -> Bool
-    contradicts (LEQ _ r) = 0 > r
-    contradicts (GEQ _ r) = 0 < r
-    contradicts (EQ _ r) = 0 /= r
-
-    contradictingConstraints :: [PolyConstraint]
-    contradictingConstraints = filter contradicts (filter isConstantConstraint system)
 
     -- Constant tautologies are dropped: they constrain nothing, and keeping
     -- them would leave slack variables for rows without any variable.
