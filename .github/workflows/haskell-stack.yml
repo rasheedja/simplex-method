@@ -14,7 +14,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # Pinned for the same reason as haskell.yml: macos-latest is the
+        # macos-26-arm64 image, whose Command Line Tools 27.0 / macOS 27 SDK
+        # does not match its Xcode 26.6 ld, so GHC fails to link.
+        # See actions/runner-images#14940.
+        os: [ubuntu-latest, macos-15]
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
