@@ -1438,6 +1438,54 @@ spec = do
       )
       [Max M.empty, Min M.empty]
 
+  describe "constant constraints" $ do
+    describe "accepts constant tautologies" $ do
+      mapM_
+        ( \constraint ->
+            it (show constraint ++ " is feasible") $ do
+              result <- runNoLoggingT $ twoPhaseSimplex (VarDomainMap M.empty) [] [constraint]
+              result.feasibleSystem `shouldSatisfy` isJust
+        )
+        [LEQ M.empty 1, LEQ M.empty 0, GEQ M.empty (-1), GEQ M.empty 0, EQ M.empty 0]
+
+    describe "rejects constant contradictions" $ do
+      mapM_
+        ( \constraint ->
+            it (show constraint ++ " is infeasible") $ do
+              result <- runNoLoggingT $ twoPhaseSimplex (VarDomainMap M.empty) [] [constraint]
+              result `shouldBe` SimplexResult Nothing []
+        )
+        [LEQ M.empty (-1), GEQ M.empty 1, EQ M.empty 1, EQ M.empty (-1)]
+
+    it "optimises variable constraints alongside constant tautologies" $ do
+      let tautologies =
+            [LEQ M.empty 1, LEQ M.empty 0, GEQ M.empty (-1), GEQ M.empty 0, EQ M.empty 0]
+          obj = Max (M.singleton 1 1)
+          domainMap = VarDomainMap $ M.singleton 1 (boundedRange 0 3)
+          constraints = LEQ (M.singleton 1 1) 2 : tautologies
+      result <- runNoLoggingT $ twoPhaseSimplex domainMap [obj] constraints
+      result.feasibleSystem `shouldSatisfy` isJust
+      case result.objectiveResults of
+        [ObjectiveResult _ (Optimal varMap)] -> do
+          M.findWithDefault 0 1 varMap `shouldBe` 2
+          computeObjective obj varMap `shouldBe` 2
+        _ -> expectationFailure $ "Unexpected result: " ++ show result
+
+    it "treats an explicit zero coefficient as a constant constraint" $ do
+      let domainMap = VarDomainMap $ M.singleton 1 nonNegative
+      result <- runNoLoggingT $ twoPhaseSimplex domainMap [] [LEQ (M.singleton 1 0) (-1)]
+      result `shouldBe` SimplexResult Nothing []
+
+    it "finds a feasible system for a single constant tautology without throwing" $ do
+      actual <- runNoLoggingT $ findFeasibleSolution [LEQ M.empty 1]
+      case actual of
+        Just feasible -> do
+          feasible.dict `shouldBe` M.empty
+          feasible.slackVars `shouldBe` []
+          feasible.artificialVars `shouldBe` []
+          feasible.objectiveVar `shouldBe` 1
+        Nothing -> expectationFailure "0 <= 1 holds for every variable assignment"
+
   describe "twoPhaseSimplex with empty constraint system" $ do
     describe "Single variable with boundedRange" $ do
       it "Max x₁ with 0 ≤ x₁ ≤ 10: optimal at x₁=10" $ do
