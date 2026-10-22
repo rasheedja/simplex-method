@@ -35,6 +35,7 @@ module Linear.Simplex.Solver.TwoPhase
   , splitVarInMap
   , unapplyTransformsToVarMap
   , unapplyTransformToVarMap
+  , pivot
   ) where
 
 import Prelude hiding (EQ)
@@ -819,27 +820,31 @@ pivot leavingVariable enteringVariable dict =
           where
             divideByNegatedEnteringVariableCoeff = (/ negate enteringVariableCoeff)
 
-        -- Substitute pivot equation into other rows
+        -- Substitute the pivot equation into one row. A row that does not
+        -- mention the entering variable is already in the new dictionary.
+        substitute :: DictValue -> DictValue
+        substitute row =
+          case M.lookup enteringVariable row.varMapSum of
+            Just subsCoeff ->
+              DictValue
+                { varMapSum =
+                    combineVarLitMapSums
+                      (M.map (subsCoeff *) pivotEnteringRow.varMapSum)
+                      (filterOutEnteringVarTerm row.varMapSum)
+                , constant = subsCoeff * pivotEnteringRow.constant + row.constant
+                }
+            Nothing -> row
+
+        -- Substitute the pivot equation into every other row. 'M.map' rewrites
+        -- the values in place, so the dictionary's tree shape is kept instead
+        -- of being rebuilt from a list; the leaving row is dropped and the
+        -- pivot row is inserted once, keyed by the entering variable.
         updatedRows :: Dict
         updatedRows =
-          M.fromList $ map (uncurry updateRow) $ M.toList dict
-          where
-            updateRow :: Var -> DictValue -> (Var, DictValue)
-            updateRow entryVar entryVal =
-              if leavingVariable == entryVar
-                then (enteringVariable, pivotEnteringRow)
-                else case M.lookup enteringVariable (entryVal.varMapSum) of
-                  Just subsCoeff ->
-                    ( entryVar
-                    , DictValue
-                        { varMapSum =
-                            combineVarLitMapSums
-                              (M.map (subsCoeff *) pivotEnteringRow.varMapSum)
-                              (filterOutEnteringVarTerm entryVal.varMapSum)
-                        , constant = (subsCoeff * pivotEnteringRow.constant) + entryVal.constant
-                        }
-                    )
-                  Nothing -> (entryVar, entryVal)
+          M.insert
+            enteringVariable
+            pivotEnteringRow
+            (M.map substitute (M.delete leavingVariable dict))
     Nothing -> error "pivot: non basic variable not found in basic row"
   where
     -- \| The entering row, i.e., the row in the dict which is the value of
