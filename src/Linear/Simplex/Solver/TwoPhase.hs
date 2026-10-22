@@ -40,7 +40,6 @@ import Prelude hiding (EQ)
 import Control.Lens ((%~), (&), (.~), (<&>))
 import Control.Monad (unless)
 import Control.Monad.Logger (LogLevel (LevelDebug, LevelError, LevelInfo), MonadLogger)
-import Data.Bifunctor (second)
 import Data.List (mapAccumL)
 import qualified Data.Map as M
 import Data.Maybe (fromJust, fromMaybe, mapMaybe)
@@ -367,21 +366,8 @@ optimizeFeasibleSystem objFunction (FeasibleSystem {dict = phase1Dict, ..}) = do
   logMsg LevelInfo $
     "optimizeFeasibleSystem: Optimizing with objective " <> Text.pack (prettyShowObjectiveFunction objFunction)
   logMsg LevelDebug $ "optimizeFeasibleSystem: Feasible system (in Dict form):\n" <> Text.pack (prettyShowDict phase1Dict)
-  let phase2System =
-        M.insert
-          objectiveVar
-          (if null artificialVars then normalObjectiveRow else adjustedObjectiveRow)
-          phase1Dict
-  mResult <-
-    if null artificialVars
-      then do
-        logMsg LevelInfo "optimizeFeasibleSystem: No artificial vars, system is feasible"
-        logMsg LevelDebug "optimizeFeasibleSystem: Pivoting with the original objective row"
-        simplexPivot 1 objectiveVar phase2System
-      else do
-        logMsg LevelInfo "optimizeFeasibleSystem: Artificial vars present"
-        logMsg LevelDebug "optimizeFeasibleSystem: Pivoting with the adjusted objective row"
-        simplexPivot 1 objectiveVar phase2System
+  logMsg LevelDebug "optimizeFeasibleSystem: Pivoting with the back-substituted objective row"
+  mResult <- simplexPivot 1 objectiveVar (M.insert objectiveVar phase2ObjectiveRow phase1Dict)
   case mResult of
     Nothing -> do
       logMsg LevelInfo "optimizeFeasibleSystem: Objective is unbounded (ratio test failed)"
@@ -394,71 +380,48 @@ optimizeFeasibleSystem objFunction (FeasibleSystem {dict = phase1Dict, ..}) = do
     -- Extract basic-variable values directly from the final dictionary.
     -- Omit slack/artificial variables and restore the minimization objective sign.
     displayResults :: Dict -> OptimisationOutcome
-    displayResults resultDict =
-      Optimal $ M.mapWithKey valueOf originalRows
+    displayResults resultDict = Optimal $ M.mapWithKey valueOf originalRows
       where
-        originalRows = M.filterWithKey (\var _ -> var `notElem` slackVars ++ artificialVars) resultDict
-        valueOf var row =
-          if not (isMax objFunction) && var == objectiveVar
-            then negate row.constant
-            else row.constant
+        originalRows = M.withoutKeys resultDict excludedVars
 
-    -- \| Objective to use when optimising the linear program if no artificial
-    -- variables were necessary in the first phase. It is essentially the original
-    -- objective function, with a potential change of sign based on the type of
-    -- problem (Maximization or Minimization).
-    normalObjectiveRow :: DictValue
-    normalObjectiveRow =
-      DictValue
-        { varMapSum = if isMax objFunction then objFunction.objective else M.map negate objFunction.objective
-        , constant = 0
-        }
+        excludedVars = Set.fromList (slackVars ++ artificialVars)
 
-    -- \| Objective to use when optimising the linear program if artificial
-    -- variables were necessary in the first phase. It is an adjustment to the
-    -- original objective function, where the linear coefficients are modified
-    -- by back-substitution of the values of the artificial variables.
-    adjustedObjectiveRow :: DictValue
-    adjustedObjectiveRow =
-      DictValue
-        { varMapSum = calcVarMap
-        , constant = calcConstants
-        }
+        -- The objective is optimised negated for a minimization, so undo that
+        -- once here, for the objective row only.
+        restoreSign = if isMax objFunction then id else negate
+
+        valueOf var row
+          | var == objectiveVar = restoreSign row.constant
+          | otherwise = row.constant
+
+    -- \| The phase-two objective, as a row of the phase-one 'Dict'.
+    --
+    -- The objective is first sign-normalised for the direction of
+    -- optimisation, then every variable that is basic in the phase-one dict is
+    -- back-substituted out of it: a basic variable is replaced by the row that
+    -- defines it, contributing its coefficients to the constant term and to the
+    -- remaining non-basic variables. A variable that is not basic contributes
+    -- itself, so when no objective variable is basic every lookup misses and the
+    -- row is the sign-normalised objective with a zero constant.
+    phase2ObjectiveRow :: DictValue
+    phase2ObjectiveRow = M.foldrWithKey substitute (DictValue M.empty 0) signedObjective
       where
-        -- \| Compute the adjustment to the constant term of the objective
-        -- function. It adds up the products of the original coefficients and
-        -- the corresponding constant term (rhs) of each artificial variable
-        -- in the phase 1 'Dict'.
-        calcConstants :: SimplexNum
-        calcConstants =
-          sum
-            $ map
-              ( \(var, coeff) ->
-                  let multiplyWith = if isMax objFunction then coeff else -coeff
-                  in  case M.lookup var phase1Dict of
-                        Nothing -> 0
-                        Just row -> row.constant * multiplyWith
-              )
-            $ M.toList objFunction.objective
+        signedObjective = if isMax objFunction then objFunction.objective else M.map negate objFunction.objective
 
-        -- \| Compute the adjustment to the coefficients of the original
-        -- variables in the objective function. It performs back-substitution
-        -- of the variables in the original objective function using the
-        -- current value of each artificial variable in the phase 1 'Dict'.
-        calcVarMap :: VarLitMapSum
-        calcVarMap =
-          foldVarLitMap $
-            map
-              ( M.fromList
-                  . ( \(var, coeff) ->
-                        let multiplyWith = if isMax objFunction then coeff else -coeff
-                        in  case M.lookup var phase1Dict of
-                              Nothing ->
-                                [(var, multiplyWith)]
-                              Just row -> map (second (* multiplyWith)) (M.toList $ row.varMapSum)
-                    )
-              )
-              (M.toList objFunction.objective)
+        -- Replace one objective term 'coeff * var' by its contribution to the
+        -- objective row.
+        substitute var coeff (DictValue accVarMapSum accConstant) =
+          case M.lookup var phase1Dict of
+            Nothing ->
+              DictValue
+                { varMapSum = M.insertWith (+) var coeff accVarMapSum
+                , constant = accConstant
+                }
+            Just row ->
+              DictValue
+                { varMapSum = M.unionWith (+) accVarMapSum (M.map (* coeff) row.varMapSum)
+                , constant = accConstant + coeff * row.constant
+                }
 
 -- | Perform the two phase simplex method with variable domain information.
 -- Variables not in the VarDomainMap are assumed to be Unbounded (no lower bound).
