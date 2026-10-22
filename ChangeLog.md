@@ -2,6 +2,7 @@
 
 ## Unreleased changes
 
+- Reserve every variable that appears in an objective when allocating slack and artificial variable ids in phase one, so a variable that appears only in an objective no longer shares an id with a slack variable and silently returns a wrong optimum. ([#27](https://github.com/rasheedja/simplex-method/pull/27))
 - Prevent degenerate simplex pivot cycles by using Bland's least-index entering and leaving rules in both phases. Tied optimal solutions may select different variable values while preserving the objective optimum.
 - Remove zero-valued artificial basic variables before phase two, preserving the original constraints when a degenerate phase-one optimum leaves artificials in the basis.
 - Support zero objectives after the artificial-variable phase and replace custom coefficient-map merging with standard Data.Map operations. ([#18](https://github.com/rasheedja/simplex-method/pull/18))
