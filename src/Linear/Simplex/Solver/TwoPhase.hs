@@ -35,11 +35,11 @@ module Linear.Simplex.Solver.TwoPhase
   , splitVarInMap
   , unapplyTransformsToVarMap
   , unapplyTransformToVarMap
+  , pivot
   ) where
 
 import Prelude hiding (EQ)
 
-import Control.Lens ((%~), (&), (.~), (<&>))
 import Control.Monad (unless)
 import Control.Monad.Logger (LogLevel (LevelDebug, LevelError, LevelInfo), MonadLogger)
 import Data.List (mapAccumL)
@@ -212,7 +212,7 @@ runPhaseOne reservedVars unsimplifiedSystem = do
     -- A row with no such coefficient is redundant once artificials are zero.
     removeArtificialBasics :: Dict -> Dict
     removeArtificialBasics dictionary =
-      M.map (\row -> row & #varMapSum %~ (`M.withoutKeys` artificialVarSet)) $
+      M.map (\row -> row {varMapSum = M.withoutKeys row.varMapSum artificialVarSet}) $
         foldl removeBasic dictionary artificialVars
       where
         removeBasic dict artificialVar =
@@ -455,8 +455,12 @@ twoPhaseSimplex domainMap objFunctions constraints = do
   -- Reserve every variable that appears in an objective, including variables that
   -- appear in no constraint and variables introduced by the transforms, so the
   -- slack and artificial ids allocated in phase one cannot collide with them.
+  -- A fixed variable is substituted out of both the objectives and the
+  -- constraints, but its id still belongs to an original decision variable, so
+  -- reserve that too and keep it out of the slack ids.
   let objectiveVars = Set.unions $ map (M.keysSet . (.objective)) transformedObjs
-  mFeasibleSystem <- findFeasibleSolutionReserving objectiveVars transformedConstraints
+      fixedVars = Set.fromList [fixedVar | Fix fixedVar _ <- transforms]
+  mFeasibleSystem <- findFeasibleSolutionReserving (objectiveVars <> fixedVars) transformedConstraints
   case mFeasibleSystem of
     Nothing -> do
       logMsg LevelInfo "twoPhaseSimplex: No feasible solution found in phase 1"
@@ -550,23 +554,27 @@ generateTransform domainMap var (transforms, nextFreshVar) =
 -- | Determine what transforms are needed for a variable given its domain.
 -- Returns a list of transforms and the number of fresh variables consumed.
 getTransform :: Var -> Var -> VarDomain -> ([VarTransform], Var)
-getTransform nextFreshVar var (Bounded mLower mUpper) =
-  let -- An upper bound is a LEQ row on the variable, added before the lower bound
-      -- is handled so that a Shift rewrites that row onto the fresh variable.
-      upperTransforms = case mUpper of
-        Nothing -> []
-        Just u -> [AddUpperBound var u]
-  in  case mLower of
-        -- Unbounded below: split into posVar - negVar. The upper bound row stays
-        -- on the original variable, which the Split then expresses as
-        -- posVar - negVar.
-        Nothing -> (Split var nextFreshVar (nextFreshVar + 1) : upperTransforms, 2)
-        -- NonNegative: the bound is already implicit, no transform needed.
-        Just 0 -> (upperTransforms, 0)
-        -- Any nonzero lower bound is handled by a shift, so the bound becomes the
-        -- implicit shiftedVar >= 0: an upper bound then stays a LEQ row, whose
-        -- slack is feasible at the origin, and no artificial variable is needed.
-        Just l -> (Shift var nextFreshVar l : upperTransforms, 1)
+getTransform nextFreshVar var (Bounded mLower mUpper) = case (mLower, mUpper) of
+  -- Coincident bounds make the variable a constant, so substitute it out before
+  -- phase one. That consumes no fresh variable and adds no bound row.
+  (Just l, Just u) | l == u -> ([Fix var l], 0)
+  _ ->
+    let -- An upper bound is a LEQ row on the variable, added before the lower bound
+        -- is handled so that a Shift rewrites that row onto the fresh variable.
+        upperTransforms = case mUpper of
+          Nothing -> []
+          Just u -> [AddUpperBound var u]
+    in  case mLower of
+          -- Unbounded below: split into posVar - negVar. The upper bound row stays
+          -- on the original variable, which the Split then expresses as
+          -- posVar - negVar.
+          Nothing -> (Split var nextFreshVar (nextFreshVar + 1) : upperTransforms, 2)
+          -- NonNegative: the bound is already implicit, no transform needed.
+          Just 0 -> (upperTransforms, 0)
+          -- Any nonzero lower bound is handled by a shift, so the bound becomes the
+          -- implicit shiftedVar >= 0: an upper bound then stays a LEQ row, whose
+          -- slack is feasible at the origin, and no artificial variable is needed.
+          Just l -> (Shift var nextFreshVar l : upperTransforms, 1)
 
 -- | Apply all transforms to the objective function and constraints.
 -- Kept for tests; the solver applies the two halves separately.
@@ -596,6 +604,11 @@ applyTransformToObjective transform objFunction =
     -- Split: originalVar = posVar - negVar
     Split origVar posVar negVar ->
       applySplitToObjective origVar posVar negVar objFunction
+    -- Fix: the variable is a constant, so its objective term is a constant too.
+    -- Callers evaluate 'computeObjective' on the unapplied value map, which has
+    -- the fixed variable back in it, so the objective value stays correct.
+    Fix fixedVar _ ->
+      objFunction {objective = M.delete fixedVar objFunction.objective}
 
 -- | Apply a single transform to the constraint list.
 applyTransformToConstraints :: VarTransform -> [PolyConstraint] -> [PolyConstraint]
@@ -614,6 +627,13 @@ applyTransformToConstraints transform constraints =
     -- replace with posVar with coeff c and negVar with coeff -c
     Split origVar posVar negVar ->
       map (applySplitToConstraint origVar posVar negVar) constraints
+    -- Fix: originalVar = value
+    -- Substitute: wherever we see originalVar with coeff c, drop the term and
+    -- subtract the constant c * value from the right-hand side. A constraint
+    -- left with only zero coefficients is decided by the constant-constraint
+    -- handling in phase one.
+    Fix fixedVar value ->
+      map (applyFixToConstraint fixedVar value) constraints
 
 -- | Apply shift transformation to objective function.
 -- originalVar = shiftedVar + shiftBy
@@ -622,6 +642,20 @@ applyTransformToConstraints transform constraints =
 applyShiftToObjective :: Var -> Var -> SimplexNum -> ObjectiveFunction -> ObjectiveFunction
 applyShiftToObjective origVar shiftedVar _shiftBy objFunction =
   objFunction {objective = fst $ shiftVarInMap origVar shiftedVar 0 objFunction.objective}
+
+-- | Replace the left-hand side of a constraint, keeping its relation and right-hand side.
+--  Record update syntax would be ambiguous: the field is shared with 'TableauRow'.
+withLhs :: VarLitMapSum -> PolyConstraint -> PolyConstraint
+withLhs newLhs (LEQ _ r) = LEQ newLhs r
+withLhs newLhs (GEQ _ r) = GEQ newLhs r
+withLhs newLhs (EQ _ r) = EQ newLhs r
+
+-- | Replace the right-hand side of a constraint, keeping its relation and left-hand side.
+--  Record update syntax would be ambiguous: the field is shared with 'TableauRow'.
+withRhs :: SimplexNum -> PolyConstraint -> PolyConstraint
+withRhs newRhs (LEQ v _) = LEQ v newRhs
+withRhs newRhs (GEQ v _) = GEQ v newRhs
+withRhs newRhs (EQ v _) = EQ v newRhs
 
 -- | Apply shift transformation to a constraint.
 -- originalVar = shiftedVar + shiftBy
@@ -632,7 +666,7 @@ applyShiftToObjective origVar shiftedVar _shiftBy objFunction =
 applyShiftToConstraint :: Var -> Var -> SimplexNum -> PolyConstraint -> PolyConstraint
 applyShiftToConstraint origVar shiftedVar shiftBy constraint =
   let (newMap, rhsAdjust) = shiftVarInMap origVar shiftedVar shiftBy constraint.lhs
-  in  constraint & #lhs .~ newMap & #rhs %~ subtract rhsAdjust
+  in  withRhs (subtract rhsAdjust constraint.rhs) (withLhs newMap constraint)
 
 -- | Apply split transformation to objective function.
 -- originalVar = posVar - negVar
@@ -646,7 +680,18 @@ applySplitToObjective origVar posVar negVar objFunction =
 -- coefficient c of originalVar becomes c for posVar and -c for negVar
 applySplitToConstraint :: Var -> Var -> Var -> PolyConstraint -> PolyConstraint
 applySplitToConstraint origVar posVar negVar constraint =
-  constraint & #lhs %~ splitVarInMap origVar posVar negVar
+  withLhs (splitVarInMap origVar posVar negVar constraint.lhs) constraint
+
+-- | Apply fixed-variable substitution to a constraint.
+-- originalVar = value, so the term @coeff * originalVar@ is the constant
+-- @coeff * value@, which moves to the right-hand side.
+applyFixToConstraint :: Var -> SimplexNum -> PolyConstraint -> PolyConstraint
+applyFixToConstraint fixedVar value constraint =
+  case M.lookup fixedVar constraint.lhs of
+    Nothing -> constraint
+    Just coeff ->
+      withLhs (M.delete fixedVar constraint.lhs) $
+        withRhs (constraint.rhs - coeff * value) constraint
 
 -- | Substitute a shifted variable and return the constant offset introduced.
 -- The replacement variable must be fresh.
@@ -689,6 +734,8 @@ unapplyTransformToVarMap transform valMap =
           negVal = M.findWithDefault 0 negVar valMap
           origVal = posVal - negVal
       in  M.insert origVar origVal (M.delete posVar (M.delete negVar valMap))
+    -- Fix: originalVar was substituted by a constant, so its value is known
+    Fix fixedVar value -> M.insert fixedVar value valMap
 
 -- | Pivot a feasible dictionary using Bland's anti-cycling rule in both phases.
 -- Choose the least-index improving non-basic variable, then the least-index
@@ -790,43 +837,43 @@ pivot leavingVariable enteringVariable dict =
         -- Move entering variable to basis, update other variables in row appropriately
         pivotEnteringRow :: DictValue
         pivotEnteringRow =
-          dictEntertingRow
-            & #varMapSum
-              %~ ( \basicEquation ->
-                    -- uncurry
-                    M.insert
+          DictValue
+            { varMapSum =
+                M.map
+                  divideByNegatedEnteringVariableCoeff
+                  ( M.insert
                       leavingVariable
                       (-1)
-                      (filterOutEnteringVarTerm basicEquation)
-                      & traverse
-                        %~ divideByNegatedEnteringVariableCoeff
-                 )
-            & #constant
-              %~ divideByNegatedEnteringVariableCoeff
+                      (filterOutEnteringVarTerm dictEntertingRow.varMapSum)
+                  )
+            , constant = divideByNegatedEnteringVariableCoeff dictEntertingRow.constant
+            }
           where
             divideByNegatedEnteringVariableCoeff = (/ negate enteringVariableCoeff)
 
-        -- Substitute pivot equation into other rows
+        -- Substitute the pivot equation into one row. A row that does not
+        -- mention the entering variable is already in the new dictionary.
+        substitute :: DictValue -> DictValue
+        substitute row =
+          case M.lookup enteringVariable row.varMapSum of
+            Just subsCoeff ->
+              DictValue
+                { varMapSum =
+                    combineVarLitMapSums
+                      (M.map (subsCoeff *) pivotEnteringRow.varMapSum)
+                      (filterOutEnteringVarTerm row.varMapSum)
+                , constant = subsCoeff * pivotEnteringRow.constant + row.constant
+                }
+            Nothing -> row
+
+        -- Substitute the pivot equation into every other row, then swap the
+        -- leaving row for the pivot row.
         updatedRows :: Dict
         updatedRows =
-          M.fromList $ map (uncurry updateRow) $ M.toList dict
-          where
-            updateRow :: Var -> DictValue -> (Var, DictValue)
-            updateRow entryVar entryVal =
-              if leavingVariable == entryVar
-                then (enteringVariable, pivotEnteringRow)
-                else case M.lookup enteringVariable (entryVal.varMapSum) of
-                  Just subsCoeff ->
-                    ( entryVar
-                    , entryVal
-                        & #varMapSum
-                          .~ combineVarLitMapSums
-                            (pivotEnteringRow.varMapSum <&> (subsCoeff *))
-                            (filterOutEnteringVarTerm (entryVal.varMapSum))
-                        & #constant
-                          .~ ((subsCoeff * (pivotEnteringRow.constant)) + entryVal.constant)
-                    )
-                  Nothing -> (entryVar, entryVal)
+          M.insert
+            enteringVariable
+            pivotEnteringRow
+            (M.map substitute (M.delete leavingVariable dict))
     Nothing -> error "pivot: non basic variable not found in basic row"
   where
     -- \| The entering row, i.e., the row in the dict which is the value of
