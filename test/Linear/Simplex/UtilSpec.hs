@@ -28,8 +28,7 @@ import Linear.Simplex.Util
 -- | Converts a 'Dict' to a 'Tableau'.
 --  FIXME: maybe remove this line. The basic variables will have a coefficient of 1 in the 'Tableau'.
 --
---  This is the inverse of 'tableauInDictionaryForm' and exists only to test that
---  round trip, so it lives with the tests rather than in the library.
+--  This is the inverse of 'tableauInDictionaryForm', used to test that round trip.
 dictionaryFormToTableau :: Dict -> Tableau
 dictionaryFormToTableau =
   M.mapWithKey
