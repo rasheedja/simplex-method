@@ -48,7 +48,6 @@ library
       GeneralizedNewtypeDeriving
       LambdaCase
       NamedFieldPuns
-      OverloadedLabels
       OverloadedRecordDot
       OverloadedStrings
       RecordWildCards
@@ -59,8 +58,6 @@ library
   build-depends:
       base >=4.14 && <5
     , containers >= 0.6.5.1 && < 0.8
-    , generic-lens >= 2.2 && < 2.3
-    , lens >= 5.2.2 && < 5.4
     , text >= 2.0.2 && < 2.2
     , time >= 1.12.2 && < 1.15
     , monad-logger >= 0.3.40 && < 0.4
@@ -95,7 +92,6 @@ test-suite simplex-haskell-test
       GeneralizedNewtypeDeriving
       LambdaCase
       NamedFieldPuns
-      OverloadedLabels
       OverloadedRecordDot
       OverloadedStrings
       RecordWildCards
@@ -107,8 +103,6 @@ test-suite simplex-haskell-test
       base >=4.14 && <5
     , simplex-method
     , containers >= 0.6.5.1 && < 0.8
-    , generic-lens >= 2.2 && < 2.3
-    , lens >= 5.2.2 && < 5.4
     , text >= 2.0.2 && < 2.2
     , time >= 1.12.2 && < 1.15
     , monad-logger >= 0.3.40 && < 0.4

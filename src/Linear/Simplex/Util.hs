@@ -18,7 +18,6 @@ import Control.Monad.Logger
   , runLoggingT
   , toLogStr
   )
-import Data.Generics.Labels ()
 import Data.List (nub, (\\))
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
