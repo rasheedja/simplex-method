@@ -96,8 +96,8 @@ genSmallSystem = resize 8 $ listOf genConstraint
   where
     genConstraint = do
       lhsVar <- choose (1, 2)
-      rhsOffset <- choose (0, 1)
-      kindTag <- choose (0, 2)
+      rhsOffset <- choose (0, 1 :: Int)
+      kindTag <- choose (0, 2 :: Int)
       let lhs = M.fromList [(lhsVar, 1)]
           rhs = fromIntegral rhsOffset
       pure $ case kindTag of
