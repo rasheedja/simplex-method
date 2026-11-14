@@ -623,14 +623,14 @@ applyShiftToObjective origVar shiftedVar _shiftBy objFunction =
   objFunction {objective = fst $ shiftVarInMap origVar shiftedVar 0 objFunction.objective}
 
 -- | Replace the left-hand side of a constraint, keeping its relation and right-hand side.
---  The field is shared with 'TableauRow', so the constructor is matched instead.
+--  Record update syntax would be ambiguous: the field is shared with 'TableauRow'.
 withLhs :: VarLitMapSum -> PolyConstraint -> PolyConstraint
 withLhs newLhs (LEQ _ r) = LEQ newLhs r
 withLhs newLhs (GEQ _ r) = GEQ newLhs r
 withLhs newLhs (EQ _ r) = EQ newLhs r
 
 -- | Replace the right-hand side of a constraint, keeping its relation and left-hand side.
---  The field is shared with 'TableauRow', so the constructor is matched instead.
+--  Record update syntax would be ambiguous: the field is shared with 'TableauRow'.
 withRhs :: SimplexNum -> PolyConstraint -> PolyConstraint
 withRhs newRhs (LEQ v _) = LEQ v newRhs
 withRhs newRhs (GEQ v _) = GEQ v newRhs
