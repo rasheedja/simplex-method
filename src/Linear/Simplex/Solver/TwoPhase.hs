@@ -833,10 +833,8 @@ pivot leavingVariable enteringVariable dict =
                 }
             Nothing -> row
 
-        -- Substitute the pivot equation into every other row. 'M.map' rewrites
-        -- the values in place, so the dictionary's tree shape is kept instead
-        -- of being rebuilt from a list; the leaving row is dropped and the
-        -- pivot row is inserted once, keyed by the entering variable.
+        -- Substitute the pivot equation into every other row, then swap the
+        -- leaving row for the pivot row.
         updatedRows :: Dict
         updatedRows =
           M.insert
