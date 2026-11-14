@@ -50,6 +50,7 @@ import Linear.Simplex.Solver.TwoPhase
   , generateTransform
   , getTransform
   , optimizeFeasibleSystem
+  , pivot
   , postprocess
   , preprocess
   , shiftVarInMap
@@ -59,7 +60,8 @@ import Linear.Simplex.Solver.TwoPhase
   , unapplyTransformsToVarMap
   )
 import Linear.Simplex.Types
-  ( DictValue (..)
+  ( Dict
+  , DictValue (..)
   , FeasibleSystem (..)
   , ObjectiveFunction (..)
   , ObjectiveResult (..)
@@ -2271,6 +2273,50 @@ spec = do
       case mfs of
         Nothing -> expectationFailure "x1 = 2 is feasible for a non-negative x1"
         Just feasible -> length feasible.artificialVars `shouldBe` 1
+
+  describe "pivot" $ do
+    -- A three-row dictionary over the non-basic variables x1, x2 and x3, with
+    -- basic variables x4, x5 and x6 and an objective row z:
+    --
+    --   x4 = 2 - x1 - x2 + x3
+    --   x5 = 5 + x1 - 2x2
+    --   x6 = 4 - x1 + 2x3
+    --   z  = 2 + 3x1 + 4x2 - x3
+    let dictionary :: Dict
+        dictionary =
+          M.fromList
+            [ (4, DictValue (M.fromList [(1, -1), (2, -1), (3, 1)]) 2)
+            , (5, DictValue (M.fromList [(1, 1), (2, -2)]) 5)
+            , (6, DictValue (M.fromList [(1, -1), (3, 2)]) 4)
+            , (7, DictValue (M.fromList [(1, 3), (2, 4), (3, -1)]) 2)
+            ]
+
+    it "replaces the leaving row with the solved entering row and substitutes it into the rest" $ do
+      let pivoted = pivot 6 1 dictionary
+      -- x1 leaves the non-basics: x6 = 4 - x1 + 2x3, so x1 = 4 + 2x3 - x6.
+      -- Substituting that into each other row gives the hand-computed rows:
+      --
+      --   x4 = 2 - (4 + 2x3 - x6) - x2 + x3 = -2 - x2 - x3 + x6
+      --   x5 = 5 + (4 + 2x3 - x6) - 2x2     = 9 - 2x2 + 2x3 - x6
+      --   z  = 2 + 3(4 + 2x3 - x6) + 4x2 - x3 = 14 + 4x2 + 5x3 - 3x6
+      M.keys pivoted `shouldBe` [1, 4, 5, 7]
+      pivoted
+        `shouldBe` M.fromList
+          [ (1, DictValue (M.fromList [(3, 2), (6, -1)]) 4)
+          , (4, DictValue (M.fromList [(2, -1), (3, -1), (6, 1)]) (-2))
+          , (5, DictValue (M.fromList [(2, -2), (3, 2), (6, -1)]) 9)
+          , (7, DictValue (M.fromList [(2, 4), (3, 5), (6, -3)]) 14)
+          ]
+      -- Whatever the rows look like, the pivot must not change the solution
+      -- the dictionary defines: at non-basics zero a row keyed by b reads
+      -- x_b = constant + sum of coeff * variable, and the pivoted values must
+      -- satisfy every equation of the original dictionary.
+      let solution = M.map (.constant) pivoted
+          rowValue DictValue {varMapSum, constant} =
+            constant + sum [coeff * M.findWithDefault 0 var solution | (var, coeff) <- M.toList varMapSum]
+      mapM_
+        (\(basicVar, row) -> rowValue row `shouldBe` M.findWithDefault 0 basicVar solution)
+        (M.toList dictionary)
 
   -- ===========================================================================
   -- Property-based tests
