@@ -383,7 +383,7 @@ maxGeneratedConstraints = 4
 -- towards simple coefficients such as 1 and 1/3.
 smallRationals :: [SimplexNum]
 smallRationals =
-  nub (sortOn abs [fromIntegral n % fromIntegral d | n <- [-5 .. 5], n /= 0, d <- [1 .. 3]])
+  nub (sortOn abs [fromIntegral n % fromIntegral d | n <- [-5 .. 5 :: Int], n /= 0, d <- [1 .. 3 :: Int]])
 
 genCoefficient :: Gen SimplexNum
 genCoefficient = elements smallRationals

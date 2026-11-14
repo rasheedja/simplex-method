@@ -8,7 +8,6 @@
 module Linear.Simplex.Types where
 
 import Data.Generics.Labels ()
-import Data.List (sort)
 import qualified Data.Map as M
 import GHC.Generics (Generic)
 

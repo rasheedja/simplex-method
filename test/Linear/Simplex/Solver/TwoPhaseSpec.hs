@@ -2985,26 +2985,26 @@ spec = do
         let obj = Max (M.fromList [(1, 1), (2, 1)])
             constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 10]
             domainMap = VarDomainMap $ M.fromList [(1, nonNegative), (2, nonNegative)]
-        let ([newObj], newConstraints, transforms) =
+        let (newObjs, newConstraints, transforms) =
               preprocess (collectAllVars [obj] constraints) [obj] domainMap constraints
         transforms `shouldBe` []
-        newObj `shouldBe` obj
+        newObjs `shouldBe` [obj]
         newConstraints `shouldBe` constraints
 
       it "generates Shift for positive lower bounds" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 10]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
-        let ([newObj], newConstraints, transforms) =
+        let (newObjs, newConstraints, transforms) =
               preprocess (collectAllVars [obj] constraints) [obj] domainMap constraints
         transforms `shouldBe` [Shift 1 2 5]
-        newObj `shouldBe` Max (M.fromList [(2, 1)])
+        newObjs `shouldBe` [Max (M.fromList [(2, 1)])]
         newConstraints `shouldBe` [LEQ (M.fromList [(2, 1)]) 5] -- shifted original only, no GEQ row
       it "generates Shift for negative lower bounds" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 10]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
-        let ([newObj], newConstraints, transforms) =
+        let (_, _, transforms) =
               preprocess (collectAllVars [obj] constraints) [obj] domainMap constraints
         length transforms `shouldBe` 1
         case head transforms of
@@ -3045,7 +3045,7 @@ spec = do
         let obj = Max (M.fromList [(1, 3), (2, -1)])
             constraints = [LEQ (M.fromList [(1, 3), (2, -1)]) 0]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-1)), (2, nonNegative)]
-            ([_newObj], _newConstraints, transforms) =
+            (_, _, transforms) =
               preprocess (collectAllVars [obj] constraints) [obj] domainMap constraints
             originalVars = Set.fromList [1, 2]
             freshVarIds =
@@ -3066,10 +3066,10 @@ spec = do
         let obj = Max (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange 2 5)]
-            ([newObj], newConstraints, transforms) =
+            (newObjs, newConstraints, transforms) =
               preprocess (collectAllVars [obj] constraints) [obj] domainMap constraints
         transforms `shouldBe` [Shift 1 2 2, AddUpperBound 1 5]
-        newObj `shouldBe` Max (M.fromList [(2, 1)])
+        newObjs `shouldBe` [Max (M.fromList [(2, 1)])]
         newConstraints `shouldBe` [LEQ (M.fromList [(2, 1)]) 3]
 
       it "transforms the constraints independently of the number of objectives" $ do
@@ -3242,7 +3242,7 @@ spec = do
                 domainMap = VarDomainMap $ M.fromList domainEntries
                 obj = Max (M.fromList [(v, 1) | v <- allVars])
                 constraints = [LEQ (M.fromList [(v, 1) | v <- allVars]) 100]
-                ([_], _, transforms) =
+                (_, _, transforms) =
                   preprocess (collectAllVars [obj] constraints) [obj] domainMap constraints
                 origVarSet = Set.fromList allVars
                 freshVarIds =
@@ -3265,7 +3265,7 @@ spec = do
             coeff
               /= 0
               ==> let constraint = LEQ (M.fromList [(1, coeff)]) oldRHS
-                      LEQ _ newRHS = applyShiftToConstraint 1 10 shiftBy constraint
+                      newRHS = (applyShiftToConstraint 1 10 shiftBy constraint).rhs
                   in  newRHS == oldRHS - coeff * shiftBy
 
       it "preserves constraint type (LEQ stays LEQ)" $
@@ -3295,7 +3295,7 @@ spec = do
             coeff
               /= 0
               ==> let constraint = LEQ (M.fromList [(1, coeff)]) rhs
-                      LEQ _ newRHS = applySplitToConstraint 1 10 11 constraint
+                      newRHS = (applySplitToConstraint 1 10 11 constraint).rhs
                   in  newRHS == rhs
 
       it "negVar coefficient is negation of posVar coefficient" $
@@ -3304,7 +3304,7 @@ spec = do
             coeff
               /= 0
               ==> let constraint = LEQ (M.fromList [(1, coeff)]) rhs
-                      LEQ m _ = applySplitToConstraint 1 10 11 constraint
+                      m = (applySplitToConstraint 1 10 11 constraint).lhs
                       posCoeff = M.findWithDefault 0 10 m
                       negCoeff = M.findWithDefault 0 11 m
                   in  negCoeff == negate posCoeff
