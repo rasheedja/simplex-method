@@ -87,6 +87,25 @@ import Linear.Simplex.Util
 findFeasibleSolution :: (MonadIO m, MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
 findFeasibleSolution = findFeasibleSolutionReserving Set.empty
 
+-- | Is the given 'PolyConstraint' constant, i.e. does it involve no variable at all?
+--  A constant constraint has only zero coefficients on its left-hand side (an
+--  empty left-hand side included), so it is either a tautology like 0 <= 1 or a
+--  contradiction like 0 <= -1.
+isConstantConstraint :: PolyConstraint -> Bool
+isConstantConstraint constraint = all (== 0) (M.elems constraint.lhs)
+
+-- | Can the given constant constraint never hold?
+isContradiction :: PolyConstraint -> Bool
+isContradiction (LEQ _ r) = 0 > r
+isContradiction (GEQ _ r) = 0 < r
+isContradiction (EQ _ r) = 0 /= r
+
+-- | The constant constraints of the given system that cannot hold for any
+--  variable assignment.
+contradictingConstantConstraints :: [PolyConstraint] -> [PolyConstraint]
+contradictingConstantConstraints =
+  filter isContradiction . filter isConstantConstraint . simplifySystem
+
 -- | Find a feasible solution for the given system of 'PolyConstraint's by performing the first phase of the two-phase simplex method
 --  All variables in the 'PolyConstraint' must be positive.
 --  Slack and artificial variables are allocated above every variable in the given reserved set as well as every variable
@@ -94,7 +113,20 @@ findFeasibleSolution = findFeasibleSolutionReserving Set.empty
 --  If the system is infeasible, return 'Nothing'
 --  Otherwise, return the feasible system in 'Dict' as well as a list of slack variables, a list artificial variables, and the objective variable.
 findFeasibleSolutionReserving :: (MonadIO m, MonadLogger m) => Set Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
-findFeasibleSolutionReserving reservedVars unsimplifiedSystem = do
+findFeasibleSolutionReserving reservedVars unsimplifiedSystem = case contradictingConstantConstraints unsimplifiedSystem of
+  contradicting : _ -> do
+    logMsg LevelInfo $
+      "findFeasibleSolution: Constant constraint "
+        <> showT contradicting
+        <> " cannot hold for any variable assignment, thus original system is infeasible"
+    pure Nothing
+  [] -> runPhaseOne reservedVars unsimplifiedSystem
+
+-- | Perform phase one for a system whose constant constraints have been decided
+--  by 'findFeasibleSolutionReserving'. Slack and artificial ids are allocated above
+--  every reserved id and every constraint variable.
+runPhaseOne :: (MonadIO m, MonadLogger m) => Set Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
+runPhaseOne reservedVars unsimplifiedSystem = do
   logMsg LevelInfo $ "findFeasibleSolution: Looking for solution for " <> showT unsimplifiedSystem
   if null artificialVars -- No artificial vars, we have a feasible system
     then do
@@ -180,29 +212,16 @@ findFeasibleSolutionReserving reservedVars unsimplifiedSystem = do
 
     system = simplifySystem unsimplifiedSystem
 
+    -- Constant tautologies are dropped: they constrain nothing, and keeping
+    -- them would leave slack variables for rows without any variable.
+    variableConstraints :: [PolyConstraint]
+    variableConstraints = filter (not . isConstantConstraint) system
+
     -- Slack and artificial variables are allocated from 'maxVar' upwards, so 'maxVar' must be at least
     -- every variable id in the system, including the reserved ids that may only occur in an objective.
-    maxVar = case (Set.lookupMax reservedVars, maxConstraintVar) of
-      (Just reservedMax, Just systemMax) -> max reservedMax systemMax
-      (Just reservedMax, Nothing) -> reservedMax
-      (Nothing, Just systemMax) -> systemMax
-      (Nothing, Nothing) -> 0
+    maxVar = fromMaybe 0 $ Set.lookupMax $ reservedVars <> collectAllVars [] variableConstraints
 
-    maxConstraintVar :: Maybe Var
-    maxConstraintVar
-      | null system = Nothing
-      | otherwise =
-          Just $
-            maximum $
-              map
-                ( \case
-                    LEQ vcm _ -> maximum (map fst $ M.toList vcm)
-                    GEQ vcm _ -> maximum (map fst $ M.toList vcm)
-                    EQ vcm _ -> maximum (map fst $ M.toList vcm)
-                )
-                system
-
-    (systemWithSlackVars, slackVars) = systemInStandardForm system maxVar []
+    (systemWithSlackVars, slackVars) = systemInStandardForm variableConstraints maxVar []
 
     maxVarWithSlackVars = if null slackVars then maxVar else maximum slackVars
 
