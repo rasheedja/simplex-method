@@ -145,9 +145,8 @@ runPhaseOne reservedVars unsimplifiedSystem = do
           <> showT (length systemWithBasicVars)
           <> " rows"
       logMsg LevelDebug $ "findFeasibleSolution: System in tableau form " <> showT systemWithBasicVars
-      -- The phase-one objective is an ordinary row of the dictionary, inserted
-      -- once here so 'simplexPivot' never has to take it back out and put it
-      -- back in on every iteration.
+      -- The phase-one objective is an ordinary row of the dictionary, which
+      -- 'simplexPivot' expects to be present already.
       let phase1System = M.insert objectiveVar artificialObjectiveRow systemWithBasicVarsAsDictionary
       mPhase1Dict <- simplexPivot 1 objectiveVar phase1System
       case mPhase1Dict of
@@ -260,8 +259,8 @@ runPhaseOne reservedVars unsimplifiedSystem = do
     -- Final system is a list of equalities for the given system.
     -- To be feasible, all vars must be >= 0.
     -- Slack vars are allocated in constraint order from the id above 'maxSystemVar'.
-    -- They are returned in reverse creation order, which is the order this
-    -- function has always returned and which the 'FeasibleSystem' field exposes.
+    -- They are returned in reverse creation order, which is the order the
+    -- 'FeasibleSystem' field exposes.
     systemInStandardForm :: [PolyConstraint] -> Var -> ([(Maybe Var, PolyConstraint)], [Var])
     systemInStandardForm constraints maxSystemVar = (equations, reverse slackVarsInCreationOrder)
       where
@@ -526,9 +525,8 @@ preprocess allVars objFunctions (VarDomainMap domainMap) constraints =
       -- Generate transforms for each variable based on its domain
       -- Variables not in domainMap are treated as Unbounded
       (transforms, _) = foldr (generateTransform domainMap) ([], maxVar + 1) (Set.toList allVars)
-      -- Each transform is applied to every objective and to the constraints once.
-      -- Both use the same fold over the transforms, so the constraint list is
-      -- built exactly as it was when it was folded along with an objective.
+      -- Each transform is applied to every objective and to the constraints once,
+      -- in the same order.
       transformedObjs = map (\obj -> foldr applyTransformToObjective obj transforms) objFunctions
       transformedConstraints = foldr applyTransformToConstraints constraints transforms
   in  (transformedObjs, transformedConstraints, transforms)
@@ -626,14 +624,14 @@ applyShiftToObjective origVar shiftedVar _shiftBy objFunction =
   objFunction {objective = fst $ shiftVarInMap origVar shiftedVar 0 objFunction.objective}
 
 -- | Replace the left-hand side of a constraint, keeping its relation and right-hand side.
---  The field is shared with 'TableauRow', so the constructor is matched instead.
+--  Record update syntax would be ambiguous: the field is shared with 'TableauRow'.
 withLhs :: VarLitMapSum -> PolyConstraint -> PolyConstraint
 withLhs newLhs (LEQ _ r) = LEQ newLhs r
 withLhs newLhs (GEQ _ r) = GEQ newLhs r
 withLhs newLhs (EQ _ r) = EQ newLhs r
 
 -- | Replace the right-hand side of a constraint, keeping its relation and left-hand side.
---  The field is shared with 'TableauRow', so the constructor is matched instead.
+--  Record update syntax would be ambiguous: the field is shared with 'TableauRow'.
 withRhs :: SimplexNum -> PolyConstraint -> PolyConstraint
 withRhs newRhs (LEQ v _) = LEQ v newRhs
 withRhs newRhs (GEQ v _) = GEQ v newRhs
@@ -717,8 +715,8 @@ unapplyTransformToVarMap transform valMap =
 -- returned like any other, so the caller inserts it once before pivoting.
 --
 -- The 'Int' is the pivot number. Callers start it at 1 and each recursive pivot
--- increments it, so a trace can be followed by pivot instead of by wall-clock
--- time. 'LevelInfo' gets exactly one line per pivot; the objective constant on
+-- increments it, so a trace can be followed pivot by pivot.
+-- 'LevelInfo' gets exactly one line per pivot; the objective constant on
 -- that line is the value the pivot starts from.
 simplexPivot :: (MonadLogger m) => Int -> Var -> Dict -> m (Maybe Dict)
 simplexPivot pivotNumber objectiveVar dictionary = do
