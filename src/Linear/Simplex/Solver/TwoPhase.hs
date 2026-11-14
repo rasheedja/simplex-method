@@ -13,6 +13,7 @@
 -- 'twoPhaseSimplex' supports variable domains via its 'VarDomainMap' argument.
 module Linear.Simplex.Solver.TwoPhase
   ( findFeasibleSolution
+  , findFeasibleSolutionReserving
   , optimizeFeasibleSystem
   , twoPhaseSimplex
   -- Internal functions exported for testing
@@ -39,7 +40,7 @@ import Prelude hiding (EQ)
 import Control.Lens ((%~), (&), (.~), (<&>))
 import Control.Monad (unless)
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Logger (LogLevel (LevelError, LevelInfo, LevelWarn), MonadLogger)
+import Control.Monad.Logger (LogLevel (LevelError, LevelInfo), MonadLogger)
 import Data.Bifunctor (second)
 import qualified Data.Map as M
 import Data.Maybe (fromJust, fromMaybe, mapMaybe)
@@ -81,6 +82,11 @@ import Linear.Simplex.Util
   , tableauInDictionaryForm
   )
 
+-- | Find a feasible solution for the given system of 'PolyConstraint's.
+--  No variable ids are reserved beyond those appearing in the constraints.
+findFeasibleSolution :: (MonadIO m, MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
+findFeasibleSolution = findFeasibleSolutionReserving Set.empty
+
 -- | Is the given 'PolyConstraint' constant, i.e. does it involve no variable at all?
 --  A constant constraint has only zero coefficients on its left-hand side (an
 --  empty left-hand side included), so it is either a tautology like 0 <= 1 or a
@@ -102,22 +108,25 @@ contradictingConstantConstraints =
 
 -- | Find a feasible solution for the given system of 'PolyConstraint's by performing the first phase of the two-phase simplex method
 --  All variables in the 'PolyConstraint' must be positive.
+--  Slack and artificial variables are allocated above every variable in the given reserved set as well as every variable
+--  in the constraints, so a variable that only appears in an objective function never shares an id with them.
 --  If the system is infeasible, return 'Nothing'
 --  Otherwise, return the feasible system in 'Dict' as well as a list of slack variables, a list artificial variables, and the objective variable.
-findFeasibleSolution :: (MonadIO m, MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
-findFeasibleSolution unsimplifiedSystem = case contradictingConstantConstraints unsimplifiedSystem of
+findFeasibleSolutionReserving :: (MonadIO m, MonadLogger m) => Set Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
+findFeasibleSolutionReserving reservedVars unsimplifiedSystem = case contradictingConstantConstraints unsimplifiedSystem of
   contradicting : _ -> do
     logMsg LevelInfo $
       "findFeasibleSolution: Constant constraint "
         <> showT contradicting
         <> " cannot hold for any variable assignment, thus original system is infeasible"
     pure Nothing
-  [] -> runPhaseOne unsimplifiedSystem
+  [] -> runPhaseOne reservedVars unsimplifiedSystem
 
 -- | Perform phase one for a system whose constant constraints have been decided
---  by 'findFeasibleSolution'.
-runPhaseOne :: (MonadIO m, MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
-runPhaseOne unsimplifiedSystem = do
+--  by 'findFeasibleSolutionReserving'. Slack and artificial ids are allocated above
+--  every reserved id and every constraint variable.
+runPhaseOne :: (MonadIO m, MonadLogger m) => Set Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
+runPhaseOne reservedVars unsimplifiedSystem = do
   logMsg LevelInfo $ "findFeasibleSolution: Looking for solution for " <> showT unsimplifiedSystem
   if null artificialVars -- No artificial vars, we have a feasible system
     then do
@@ -144,59 +153,35 @@ runPhaseOne unsimplifiedSystem = do
                         }
                   )
                   phase1Dict
-          case M.lookup objectiveVar eliminateArtificialVarsFromPhase1Tableau of
-            Nothing -> do
-              logMsg LevelWarn $
-                "findFeasibleSolution: Objective row not found after eliminatiing artificial vars. This is unexpected. System without artificial vars (in Dict form) "
+          -- 'simplexPivot' always inserts the objective row, and the 'M.map' above
+          -- preserves keys, so the objective row is guaranteed to be present here.
+          let row =
+                fromMaybe
+                  (error "findFeasibleSolution: objective row missing after phase one")
+                  (M.lookup objectiveVar eliminateArtificialVarsFromPhase1Tableau)
+          if row.constant == 0
+            then do
+              logMsg LevelInfo $
+                "findFeasibleSolution: Objective RHS is zero after pivoting, thus original tableau is feasible. feasible system (in Dict form) "
                   <> showT eliminateArtificialVarsFromPhase1Tableau
-              -- If the objecitve row is not found, the system is feasible iff
-              -- the artificial vars sum to zero. The value of an artificial
-              -- variable is 0 if non-basic, and the RHS of the row if basic
-              let artificialVarsVals = map (\v -> maybe 0 (.constant) (M.lookup v eliminateArtificialVarsFromPhase1Tableau)) artificialVars
-              let artificialVarsValsSum = sum artificialVarsVals
-              if artificialVarsValsSum == 0
-                then do
-                  logMsg LevelInfo $
-                    "findFeasibleSolution: Artifical variables sum up to 0, thus original tableau is feasible. System without artificial vars (in Dict form) "
-                      <> showT eliminateArtificialVarsFromPhase1Tableau
-                  pure . Just $
-                    FeasibleSystem
-                      { dict = removeArtificialBasics phase1Dict
-                      , slackVars = slackVars
-                      , artificialVars = artificialVars
-                      , objectiveVar = objectiveVar
-                      }
-                else do
-                  logMsg LevelInfo $
-                    "findFeasibleSolution: Artifical variables sum up to "
-                      <> showT artificialVarsValsSum
-                      <> ", thus original tableau is infeasible. System without artificial vars (in Dict form) "
-                      <> showT eliminateArtificialVarsFromPhase1Tableau
-                  pure Nothing
-            Just row ->
-              if row.constant == 0
-                then do
-                  logMsg LevelInfo $
-                    "findFeasibleSolution: Objective RHS is zero after pivoting, thus original tableau is feasible. feasible system (in Dict form) "
-                      <> showT eliminateArtificialVarsFromPhase1Tableau
-                  pure . Just $
-                    FeasibleSystem
-                      { dict = removeArtificialBasics phase1Dict
-                      , slackVars = slackVars
-                      , artificialVars = artificialVars
-                      , objectiveVar = objectiveVar
-                      }
-                else do
-                  unless (row.constant < 0) $ do
-                    let errMsg =
-                          "findFeasibleSolution: Objective RHS is negative after pivoting. This should be impossible. System without artificial vars (in Dict form) "
-                            <> show eliminateArtificialVarsFromPhase1Tableau
-                    logMsg LevelError $ Text.pack errMsg
-                    error errMsg
-                  logMsg LevelInfo $
-                    "findFeasibleSolution: Objective RHS not zero after phase 1, thus original tableau is infeasible. System without artificial vars (in Dict form) "
-                      <> showT eliminateArtificialVarsFromPhase1Tableau
-                  pure Nothing
+              pure . Just $
+                FeasibleSystem
+                  { dict = removeArtificialBasics phase1Dict
+                  , slackVars = slackVars
+                  , artificialVars = artificialVars
+                  , objectiveVar = objectiveVar
+                  }
+            else do
+              unless (row.constant < 0) $ do
+                let errMsg =
+                      "findFeasibleSolution: Objective RHS is positive after pivoting. This should be impossible. System without artificial vars (in Dict form) "
+                        <> show eliminateArtificialVarsFromPhase1Tableau
+                logMsg LevelError $ Text.pack errMsg
+                error errMsg
+              logMsg LevelInfo $
+                "findFeasibleSolution: Objective RHS not zero after phase 1, thus original tableau is infeasible. System without artificial vars (in Dict form) "
+                  <> showT eliminateArtificialVarsFromPhase1Tableau
+              pure Nothing
         Nothing -> do
           logMsg LevelInfo $
             "findFeasibleSolution: Infeasible solution found, could not pivot with objective "
@@ -232,7 +217,9 @@ runPhaseOne unsimplifiedSystem = do
     variableConstraints :: [PolyConstraint]
     variableConstraints = filter (not . isConstantConstraint) system
 
-    maxVar = fromMaybe 0 $ Set.lookupMax $ collectAllVars [] variableConstraints
+    -- Slack and artificial variables are allocated from 'maxVar' upwards, so 'maxVar' must be at least
+    -- every variable id in the system, including the reserved ids that may only occur in an objective.
+    maxVar = fromMaybe 0 $ Set.lookupMax $ reservedVars <> collectAllVars [] variableConstraints
 
     (systemWithSlackVars, slackVars) = systemInStandardForm variableConstraints maxVar []
 
@@ -475,7 +462,11 @@ twoPhaseSimplex domainMap objFunctions constraints = do
       <> showT transformedObjs
       <> "; Transformed constraints: "
       <> showT transformedConstraints
-  mFeasibleSystem <- findFeasibleSolution transformedConstraints
+  -- Reserve every variable that appears in an objective, including variables that
+  -- appear in no constraint and variables introduced by the transforms, so the
+  -- slack and artificial ids allocated in phase one cannot collide with them.
+  let objectiveVars = Set.unions $ map (M.keysSet . (.objective)) transformedObjs
+  mFeasibleSystem <- findFeasibleSolutionReserving objectiveVars transformedConstraints
   case mFeasibleSystem of
     Nothing -> do
       logMsg LevelInfo "twoPhaseSimplex: No feasible solution found in phase 1"
