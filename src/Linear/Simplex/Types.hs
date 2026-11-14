@@ -109,16 +109,6 @@ data DictValue = DictValue
 --   deriving (Show, Read, Eq, Generic)
 type Dict = M.Map Var DictValue
 
--- | Objective row representation used during pivoting.
--- 'variable' is the objective basic variable and 'function'/'constant' encode
--- the objective in dictionary form.
-data PivotObjective = PivotObjective
-  { variable :: Var
-  , function :: VarLitMapSum
-  , constant :: SimplexNum
-  }
-  deriving (Show, Read, Eq, Generic)
-
 -- | Domain specification for a variable's bounds.
 -- Variables not in the VarDomainMap are assumed to be Unbounded (both bounds Nothing).
 --
@@ -167,17 +157,12 @@ newtype VarDomainMap = VarDomainMap {unVarDomainMap :: M.Map Var VarDomain}
 
 -- | Transformations applied to variables to ensure they satisfy the non-negativity requirement.
 data VarTransform
-  = -- | var >= bound where bound > 0. Adds GEQ constraint to system.
-    AddLowerBound
-      { var :: !Var
-      , bound :: !SimplexNum
-      }
-  | -- | var <= bound. Adds LEQ constraint to system.
+  = -- | var <= bound. Adds LEQ constraint to system.
     AddUpperBound
       { var :: !Var
       , bound :: !SimplexNum
       }
-  | -- | originalVar = shiftedVar + shiftBy, where shiftBy < 0. After solving: originalVar = shiftedVar + shiftBy
+  | -- | originalVar = shiftedVar + shiftBy, where shiftBy /= 0. After solving: originalVar = shiftedVar + shiftBy
     Shift
       { originalVar :: !Var
       , shiftedVar :: !Var

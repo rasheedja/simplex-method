@@ -39,9 +39,9 @@ import Prelude hiding (EQ)
 
 import Control.Lens ((%~), (&), (.~), (<&>))
 import Control.Monad (unless)
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Logger (LogLevel (LevelError, LevelInfo, LevelWarn), MonadLogger)
+import Control.Monad.Logger (LogLevel (LevelDebug, LevelError, LevelInfo), MonadLogger)
 import Data.Bifunctor (second)
+import Data.List (mapAccumL)
 import qualified Data.Map as M
 import Data.Maybe (fromJust, fromMaybe, mapMaybe)
 import Data.Ratio (denominator, numerator, (%))
@@ -49,6 +49,11 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import GHC.Real (Ratio)
+import Linear.Simplex.Prettify
+  ( prettyShowDict
+  , prettyShowObjectiveFunction
+  , prettyShowRational
+  )
 import Linear.Simplex.Types
   ( Dict
   , DictValue (..)
@@ -56,7 +61,6 @@ import Linear.Simplex.Types
   , ObjectiveFunction (..)
   , ObjectiveResult (..)
   , OptimisationOutcome (..)
-  , PivotObjective (..)
   , PolyConstraint (..)
   , SimplexNum
   , SimplexResult (..)
@@ -74,7 +78,6 @@ import Linear.Simplex.Types
 import Linear.Simplex.Util
   ( combineVarLitMapSums
   , foldVarLitMap
-  , insertPivotObjectiveToDict
   , isMax
   , logMsg
   , showT
@@ -84,7 +87,7 @@ import Linear.Simplex.Util
 
 -- | Find a feasible solution for the given system of 'PolyConstraint's.
 --  No variable ids are reserved beyond those appearing in the constraints.
-findFeasibleSolution :: (MonadIO m, MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
+findFeasibleSolution :: (MonadLogger m) => [PolyConstraint] -> m (Maybe FeasibleSystem)
 findFeasibleSolution = findFeasibleSolutionReserving Set.empty
 
 -- | Is the given 'PolyConstraint' constant, i.e. does it involve no variable at all?
@@ -112,7 +115,7 @@ contradictingConstantConstraints =
 --  in the constraints, so a variable that only appears in an objective function never shares an id with them.
 --  If the system is infeasible, return 'Nothing'
 --  Otherwise, return the feasible system in 'Dict' as well as a list of slack variables, a list artificial variables, and the objective variable.
-findFeasibleSolutionReserving :: (MonadIO m, MonadLogger m) => Set Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
+findFeasibleSolutionReserving :: (MonadLogger m) => Set Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
 findFeasibleSolutionReserving reservedVars unsimplifiedSystem = case contradictingConstantConstraints unsimplifiedSystem of
   contradicting : _ -> do
     logMsg LevelInfo $
@@ -125,25 +128,34 @@ findFeasibleSolutionReserving reservedVars unsimplifiedSystem = case contradicti
 -- | Perform phase one for a system whose constant constraints have been decided
 --  by 'findFeasibleSolutionReserving'. Slack and artificial ids are allocated above
 --  every reserved id and every constraint variable.
-runPhaseOne :: (MonadIO m, MonadLogger m) => Set Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
+runPhaseOne :: (MonadLogger m) => Set Var -> [PolyConstraint] -> m (Maybe FeasibleSystem)
 runPhaseOne reservedVars unsimplifiedSystem = do
-  logMsg LevelInfo $ "findFeasibleSolution: Looking for solution for " <> showT unsimplifiedSystem
+  logMsg LevelInfo $
+    "findFeasibleSolution: Looking for a solution for "
+      <> showT (length variableConstraints)
+      <> " constraints"
+  logMsg LevelDebug $ "findFeasibleSolution: Constraints " <> showT variableConstraints
   if null artificialVars -- No artificial vars, we have a feasible system
     then do
       logMsg LevelInfo "findFeasibleSolution: Feasible solution found with no artificial vars"
       pure . Just $ FeasibleSystem systemWithBasicVarsAsDictionary slackVars artificialVars objectiveVar
     else do
       logMsg LevelInfo $
-        "findFeasibleSolution: Needed to create artificial vars. System with artificial vars (in Tableau form) "
-          <> showT systemWithBasicVars
-      mPhase1Dict <- simplexPivot artificialPivotObjective systemWithBasicVarsAsDictionary
+        "findFeasibleSolution: Needed to create "
+          <> showT (length artificialVars)
+          <> " artificial vars for "
+          <> showT (length systemWithBasicVars)
+          <> " rows"
+      logMsg LevelDebug $ "findFeasibleSolution: System in tableau form " <> showT systemWithBasicVars
+      -- The phase-one objective is an ordinary row of the dictionary, which
+      -- 'simplexPivot' expects to be present already.
+      let phase1System = M.insert objectiveVar artificialObjectiveRow systemWithBasicVarsAsDictionary
+      mPhase1Dict <- simplexPivot 1 objectiveVar phase1System
       case mPhase1Dict of
         Just phase1Dict -> do
-          logMsg LevelInfo $
-            "findFeasibleSolution: System after pivoting with objective"
-              <> showT artificialPivotObjective
-              <> ": "
-              <> showT phase1Dict
+          logMsg LevelDebug $
+            "findFeasibleSolution: System after pivoting (in Dict form, objective row included):\n"
+              <> Text.pack (prettyShowDict phase1Dict)
           let eliminateArtificialVarsFromPhase1Tableau =
                 M.map
                   ( \DictValue {..} ->
@@ -153,65 +165,46 @@ runPhaseOne reservedVars unsimplifiedSystem = do
                         }
                   )
                   phase1Dict
-          case M.lookup objectiveVar eliminateArtificialVarsFromPhase1Tableau of
-            Nothing -> do
-              logMsg LevelWarn $
-                "findFeasibleSolution: Objective row not found after eliminatiing artificial vars. This is unexpected. System without artificial vars (in Dict form) "
-                  <> showT eliminateArtificialVarsFromPhase1Tableau
-              -- If the objecitve row is not found, the system is feasible iff
-              -- the artificial vars sum to zero. The value of an artificial
-              -- variable is 0 if non-basic, and the RHS of the row if basic
-              let artificialVarsVals = map (\v -> maybe 0 (.constant) (M.lookup v eliminateArtificialVarsFromPhase1Tableau)) artificialVars
-              let artificialVarsValsSum = sum artificialVarsVals
-              if artificialVarsValsSum == 0
-                then do
-                  logMsg LevelInfo $
-                    "findFeasibleSolution: Artifical variables sum up to 0, thus original tableau is feasible. System without artificial vars (in Dict form) "
-                      <> showT eliminateArtificialVarsFromPhase1Tableau
-                  pure . Just $
-                    FeasibleSystem
-                      { dict = removeArtificialBasics phase1Dict
-                      , slackVars = slackVars
-                      , artificialVars = artificialVars
-                      , objectiveVar = objectiveVar
-                      }
-                else do
-                  logMsg LevelInfo $
-                    "findFeasibleSolution: Artifical variables sum up to "
-                      <> showT artificialVarsValsSum
-                      <> ", thus original tableau is infeasible. System without artificial vars (in Dict form) "
-                      <> showT eliminateArtificialVarsFromPhase1Tableau
-                  pure Nothing
-            Just row ->
-              if row.constant == 0
-                then do
-                  logMsg LevelInfo $
-                    "findFeasibleSolution: Objective RHS is zero after pivoting, thus original tableau is feasible. feasible system (in Dict form) "
-                      <> showT eliminateArtificialVarsFromPhase1Tableau
-                  pure . Just $
-                    FeasibleSystem
-                      { dict = removeArtificialBasics phase1Dict
-                      , slackVars = slackVars
-                      , artificialVars = artificialVars
-                      , objectiveVar = objectiveVar
-                      }
-                else do
-                  unless (row.constant < 0) $ do
-                    let errMsg =
-                          "findFeasibleSolution: Objective RHS is negative after pivoting. This should be impossible. System without artificial vars (in Dict form) "
-                            <> show eliminateArtificialVarsFromPhase1Tableau
-                    logMsg LevelError $ Text.pack errMsg
-                    error errMsg
-                  logMsg LevelInfo $
-                    "findFeasibleSolution: Objective RHS not zero after phase 1, thus original tableau is infeasible. System without artificial vars (in Dict form) "
-                      <> showT eliminateArtificialVarsFromPhase1Tableau
-                  pure Nothing
+          -- 'simplexPivot' returns the objective row it was given, and the 'M.map'
+          -- above preserves keys, so the objective row is guaranteed to be present here.
+          let row =
+                fromMaybe
+                  (error "findFeasibleSolution: objective row missing after phase one")
+                  (M.lookup objectiveVar eliminateArtificialVarsFromPhase1Tableau)
+          if row.constant == 0
+            then do
+              logMsg LevelInfo $
+                "findFeasibleSolution: Objective RHS is zero after pivoting, thus original tableau is feasible"
+              logMsg LevelDebug $
+                "findFeasibleSolution: Feasible system (in Dict form):\n"
+                  <> Text.pack (prettyShowDict eliminateArtificialVarsFromPhase1Tableau)
+              pure . Just $
+                FeasibleSystem
+                  { dict = removeArtificialBasics phase1Dict
+                  , slackVars = slackVars
+                  , artificialVars = artificialVars
+                  , objectiveVar = objectiveVar
+                  }
+            else do
+              unless (row.constant < 0) $ do
+                let errMsg =
+                      "findFeasibleSolution: Objective RHS is positive after pivoting. This should be impossible. System without artificial vars (in Dict form) "
+                        <> show eliminateArtificialVarsFromPhase1Tableau
+                logMsg LevelError $ Text.pack errMsg
+                error errMsg
+              logMsg LevelInfo $
+                "findFeasibleSolution: Objective RHS not zero after phase 1, thus original tableau is infeasible"
+              logMsg LevelDebug $
+                "findFeasibleSolution: System without artificial vars (in Dict form):\n"
+                  <> Text.pack (prettyShowDict eliminateArtificialVarsFromPhase1Tableau)
+              pure Nothing
         Nothing -> do
           logMsg LevelInfo $
-            "findFeasibleSolution: Infeasible solution found, could not pivot with objective "
-              <> showT artificialPivotObjective
-              <> " over system (in Dict form) "
-              <> showT systemWithBasicVarsAsDictionary
+            "findFeasibleSolution: Infeasible solution found, could not pivot with objective row x"
+              <> showT objectiveVar
+          logMsg LevelDebug $
+            "findFeasibleSolution: System that could not be pivoted (in Dict form):\n"
+              <> Text.pack (prettyShowDict phase1System)
           pure Nothing
   where
     -- Called only after the phase-one optimum has been verified to be zero.
@@ -245,7 +238,7 @@ runPhaseOne reservedVars unsimplifiedSystem = do
     -- every variable id in the system, including the reserved ids that may only occur in an objective.
     maxVar = fromMaybe 0 $ Set.lookupMax $ reservedVars <> collectAllVars [] variableConstraints
 
-    (systemWithSlackVars, slackVars) = systemInStandardForm variableConstraints maxVar []
+    (systemWithSlackVars, slackVars) = systemInStandardForm variableConstraints maxVar
 
     maxVarWithSlackVars = if null slackVars then maxVar else maximum slackVars
 
@@ -257,7 +250,7 @@ runPhaseOne reservedVars unsimplifiedSystem = do
 
     systemWithBasicVarsAsDictionary = tableauInDictionaryForm systemWithBasicVars
 
-    artificialPivotObjective = createArtificialPivotObjective systemWithBasicVarsAsDictionary artificialVars
+    artificialObjectiveRow = createArtificialObjectiveRow systemWithBasicVarsAsDictionary artificialVars
 
     objectiveVar = finalMaxVar + 1
 
@@ -267,83 +260,86 @@ runPhaseOne reservedVars unsimplifiedSystem = do
     -- If a constraint is already EQ, set the basic var to Nothing.
     -- Final system is a list of equalities for the given system.
     -- To be feasible, all vars must be >= 0.
-    systemInStandardForm :: [PolyConstraint] -> Var -> [Var] -> ([(Maybe Var, PolyConstraint)], [Var])
-    systemInStandardForm [] _ sVars = ([], sVars)
-    systemInStandardForm (EQ v r : xs) maxVar sVars = ((Nothing, EQ v r) : newSystem, newSlackVars)
+    -- Slack vars are allocated in constraint order from the id above 'maxVar'.
+    -- They are returned in reverse creation order, which is the order the
+    -- 'FeasibleSystem' field exposes.
+    systemInStandardForm :: [PolyConstraint] -> Var -> ([(Maybe Var, PolyConstraint)], [Var])
+    systemInStandardForm constraints maxVar = (equations, reverse slackVars)
       where
-        (newSystem, newSlackVars) = systemInStandardForm xs maxVar sVars
-    systemInStandardForm (LEQ v r : xs) maxVar sVars = ((Just newSlackVar, EQ (M.insert newSlackVar 1 v) r) : newSystem, newSlackVars)
-      where
-        newSlackVar = maxVar + 1
-        (newSystem, newSlackVars) = systemInStandardForm xs newSlackVar (newSlackVar : sVars)
-    systemInStandardForm (GEQ v r : xs) maxVar sVars = ((Just newSlackVar, EQ (M.insert newSlackVar (-1) v) r) : newSystem, newSlackVars)
-      where
-        newSlackVar = maxVar + 1
-        (newSystem, newSlackVars) = systemInStandardForm xs newSlackVar (newSlackVar : sVars)
+        (_, equations) = mapAccumL toStandardEquation maxVar constraints
 
-    -- Add artificial vars to a system of 'PolyConstraint's.
-    -- Artificial vars are added when:
-    --  Basic var is Nothing (When the original constraint was already an EQ).
-    --  Slack var is equal to a negative value (this is infeasible, all vars need to be >= 0).
-    --  Final system will be a feasible artificial system.
+        -- The basic var of a slack row is its slack var, so the equations carry
+        -- the slack vars in creation order.
+        slackVars = [slackVar | (Just slackVar, _) <- equations]
+
+        -- An equation needs no slack var and starts with no basic var.
+        -- A slack var with coefficient 1 (LEQ) or -1 (GEQ) turns the constraint into an equation.
+        toStandardEquation :: Var -> PolyConstraint -> (Var, (Maybe Var, PolyConstraint))
+        toStandardEquation nextFreshId (EQ v r) = (nextFreshId, (Nothing, EQ v r))
+        toStandardEquation nextFreshId (LEQ v r) = withSlackVar nextFreshId 1 v r
+        toStandardEquation nextFreshId (GEQ v r) = withSlackVar nextFreshId (-1) v r
+
+        withSlackVar :: Var -> SimplexNum -> VarLitMapSum -> SimplexNum -> (Var, (Maybe Var, PolyConstraint))
+        withSlackVar nextFreshId coeff v r =
+          let slackVar = nextFreshId + 1
+          in  (slackVar, (Just slackVar, EQ (M.insert slackVar coeff v) r))
+
+    -- Add artificial vars to a system of equations in standard form.
+    -- One rule decides each row: an artificial var is needed when the row has no
+    -- basic var, or when its basic var cannot be non-negative there, i.e. when
+    -- r /= 0 and the basic coefficient has the opposite sign to r. (In standard
+    -- form that coefficient is always 1 or -1, so the signum comparison never
+    -- sees a zero.) The artificial gets coefficient 1 when r >= 0 and -1 when
+    -- r < 0, so it can be basic and non-negative; the row is then keyed by the
+    -- artificial instead of by the basic var.
+    -- Artificials are allocated in constraint order, one id per row that needs
+    -- one, and are returned in creation order.
+    -- Final system will be a feasible artificial system.
     -- We keep track of artificial vars in the second item of the returned pair so they can be eliminated once phase 1 is complete.
-    -- If an artificial var would normally be negative, we negate the row so we can keep artificial variables equal to 1
     systemWithArtificialVars :: [(Maybe Var, PolyConstraint)] -> Var -> (Tableau, [Var])
-    systemWithArtificialVars [] _ = (M.empty, [])
-    systemWithArtificialVars ((mVar, EQ v r) : pcs) maxVar =
-      case mVar of
-        Nothing ->
-          if r >= 0
-            then
-              ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar 1 v, rhs = r}) newSystemWithNewMaxVar
-              , newArtificialVar : artificialVarsWithNewMaxVar
-              )
-            else
-              ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar (-1) v, rhs = r}) newSystemWithNewMaxVar
-              , newArtificialVar : artificialVarsWithNewMaxVar
-              )
-        Just basicVar ->
-          case M.lookup basicVar v of
-            Just basicVarCoeff ->
-              if r == 0
-                then (M.insert basicVar (TableauRow {lhs = v, rhs = r}) newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
-                else
-                  if r > 0
-                    then
-                      if basicVarCoeff >= 0 -- Should only be 1 in the standard call path
-                        then (M.insert basicVar (TableauRow {lhs = v, rhs = r}) newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
-                        else
-                          ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar 1 v, rhs = r}) newSystemWithNewMaxVar
-                          , newArtificialVar : artificialVarsWithNewMaxVar -- Slack var is negative, r is positive (when original constraint was GEQ)
-                          )
-                    else -- r < 0
-                      if basicVarCoeff <= 0 -- Should only be -1 in the standard call path
-                        then (M.insert basicVar (TableauRow {lhs = v, rhs = r}) newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar)
-                        else
-                          ( M.insert newArtificialVar (TableauRow {lhs = M.insert newArtificialVar (-1) v, rhs = r}) newSystemWithNewMaxVar
-                          , newArtificialVar : artificialVarsWithNewMaxVar -- Slack var is negative, r is negative (when original constraint was LEQ)
-                          )
-            Nothing -> error "1" -- undefined
+    systemWithArtificialVars equations maxVar =
+      (M.fromList [(rowVar, row) | (rowVar, _, row) <- builtRows], [artificialVar | (_, Just artificialVar, _) <- builtRows])
       where
-        newArtificialVar = maxVar + 1
+        (_, builtRows) = mapAccumL toTableauRow maxVar equations
 
-        (newSystemWithNewMaxVar, artificialVarsWithNewMaxVar) = systemWithArtificialVars pcs newArtificialVar
+        -- One row of the tableau: the var it is keyed by, the artificial var it
+        -- needed (if any), and the row itself.
+        toTableauRow :: Var -> (Maybe Var, PolyConstraint) -> (Var, (Var, Maybe Var, TableauRow))
+        toTableauRow nextFreshId (mBasicVar, EQ v r) = case mBasicVar of
+          Nothing -> artificialRow nextFreshId v r
+          Just basicVar -> case M.lookup basicVar v of
+            Nothing ->
+              error $
+                "systemWithArtificialVars: basic variable "
+                  <> show basicVar
+                  <> " does not appear in its own row"
+            Just basicVarCoeff
+              | r /= 0 && signum basicVarCoeff /= signum r -> artificialRow nextFreshId v r
+              | otherwise -> (nextFreshId, (basicVar, Nothing, TableauRow {lhs = v, rhs = r}))
+        toTableauRow _ (_, constraint) =
+          error $ "systemWithArtificialVars: expected only equations, got " <> show constraint
 
-        (newSystemWithoutNewMaxVar, artificialVarsWithoutNewMaxVar) = systemWithArtificialVars pcs maxVar
-    systemWithArtificialVars _ _ = error "systemWithArtificialVars: given system includes non-EQ constraints"
+        artificialRow :: Var -> VarLitMapSum -> SimplexNum -> (Var, (Var, Maybe Var, TableauRow))
+        artificialRow nextFreshId v r =
+          ( artificialVar
+          , (artificialVar, Just artificialVar, TableauRow {lhs = M.insert artificialVar coeff v, rhs = r})
+          )
+          where
+            artificialVar = nextFreshId + 1
+            coeff = if r >= 0 then 1 else -1
 
-    -- \| Takes a 'Dict' and a '[Var]' as input and returns a 'PivotObjective'.
+    -- \| Takes a 'Dict' and a '[Var]' as input and returns the phase-one
+    -- objective row, to be inserted into that 'Dict' under 'objectiveVar'.
     -- The 'Dict' represents the tableau of a linear program with artificial
     -- variables, and '[Var]' represents the artificial variables.
 
     -- The function first filters out the rows of the tableau that correspond
     -- to the artificial variables, and negates them. It then computes the sum
-    -- of the negated rows, which represents the 'PivotObjective'.
-    createArtificialPivotObjective :: Dict -> [Var] -> PivotObjective
-    createArtificialPivotObjective rows artificialVars =
-      PivotObjective
-        { variable = objectiveVar
-        , function = foldVarLitMap $ map (.varMapSum) negatedRowsWithoutArtificialVars
+    -- of the negated rows, which is the objective row.
+    createArtificialObjectiveRow :: Dict -> [Var] -> DictValue
+    createArtificialObjectiveRow rows artificialVars =
+      DictValue
+        { varMapSum = foldVarLitMap $ map (.varMapSum) negatedRowsWithoutArtificialVars
         , constant = sum $ map (.constant) negatedRowsWithoutArtificialVars
         }
       where
@@ -365,26 +361,26 @@ runPhaseOne reservedVars unsimplifiedSystem = do
 --  We first pass an 'ObjectiveFunction'.
 --  Then, the feasible system in 'Dict' form as well as a list of slack variables, a list artificial variables, and the objective variable.
 --  Returns 'Optimal' with variable values if an optimal solution is found, or 'Unbounded' if the objective is unbounded.
-optimizeFeasibleSystem :: (MonadIO m, MonadLogger m) => ObjectiveFunction -> FeasibleSystem -> m OptimisationOutcome
-optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..}) = do
+optimizeFeasibleSystem :: (MonadLogger m) => ObjectiveFunction -> FeasibleSystem -> m OptimisationOutcome
+optimizeFeasibleSystem objFunction (FeasibleSystem {dict = phase1Dict, ..}) = do
   logMsg LevelInfo $
-    "optimizeFeasibleSystem: Optimizing feasible system " <> showT fsys <> " with objective " <> showT objFunction
+    "optimizeFeasibleSystem: Optimizing with objective " <> Text.pack (prettyShowObjectiveFunction objFunction)
+  logMsg LevelDebug $ "optimizeFeasibleSystem: Feasible system (in Dict form):\n" <> Text.pack (prettyShowDict phase1Dict)
+  let phase2System =
+        M.insert
+          objectiveVar
+          (if null artificialVars then normalObjectiveRow else adjustedObjectiveRow)
+          phase1Dict
   mResult <-
     if null artificialVars
       then do
-        logMsg LevelInfo $
-          "optimizeFeasibleSystem: No artificial vars, system is feasible. Pivoting system (in dict form) "
-            <> showT phase1Dict
-            <> " with objective "
-            <> showT normalObjective
-        simplexPivot normalObjective phase1Dict
+        logMsg LevelInfo "optimizeFeasibleSystem: No artificial vars, system is feasible"
+        logMsg LevelDebug "optimizeFeasibleSystem: Pivoting with the original objective row"
+        simplexPivot 1 objectiveVar phase2System
       else do
-        logMsg LevelInfo $
-          "optimizeFeasibleSystem: Artificial vars present. Pivoting system (in dict form) "
-            <> showT phase1Dict
-            <> " with objective "
-            <> showT adjustedObjective
-        simplexPivot adjustedObjective phase1Dict
+        logMsg LevelInfo "optimizeFeasibleSystem: Artificial vars present"
+        logMsg LevelDebug "optimizeFeasibleSystem: Pivoting with the adjusted objective row"
+        simplexPivot 1 objectiveVar phase2System
   case mResult of
     Nothing -> do
       logMsg LevelInfo "optimizeFeasibleSystem: Objective is unbounded (ratio test failed)"
@@ -410,11 +406,10 @@ optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..})
     -- variables were necessary in the first phase. It is essentially the original
     -- objective function, with a potential change of sign based on the type of
     -- problem (Maximization or Minimization).
-    normalObjective :: PivotObjective
-    normalObjective =
-      PivotObjective
-        { variable = objectiveVar
-        , function = if isMax objFunction then objFunction.objective else M.map negate objFunction.objective
+    normalObjectiveRow :: DictValue
+    normalObjectiveRow =
+      DictValue
+        { varMapSum = if isMax objFunction then objFunction.objective else M.map negate objFunction.objective
         , constant = 0
         }
 
@@ -422,11 +417,10 @@ optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..})
     -- variables were necessary in the first phase. It is an adjustment to the
     -- original objective function, where the linear coefficients are modified
     -- by back-substitution of the values of the artificial variables.
-    adjustedObjective :: PivotObjective
-    adjustedObjective =
-      PivotObjective
-        { variable = objectiveVar
-        , function = calcVarMap
+    adjustedObjectiveRow :: DictValue
+    adjustedObjectiveRow =
+      DictValue
+        { varMapSum = calcVarMap
         , constant = calcConstants
         }
       where
@@ -472,14 +466,22 @@ optimizeFeasibleSystem objFunction fsys@(FeasibleSystem {dict = phase1Dict, ..})
 --   * The feasible system (Nothing if infeasible)
 --   * Results for each objective function (empty if infeasible)
 twoPhaseSimplex ::
-  (MonadIO m, MonadLogger m) => VarDomainMap -> [ObjectiveFunction] -> [PolyConstraint] -> m SimplexResult
+  (MonadLogger m) => VarDomainMap -> [ObjectiveFunction] -> [PolyConstraint] -> m SimplexResult
 twoPhaseSimplex domainMap objFunctions constraints = do
   logMsg LevelInfo $
+    "twoPhaseSimplex: Solving system with "
+      <> showT (length objFunctions)
+      <> " objectives and "
+      <> showT (length constraints)
+      <> " constraints"
+  logMsg LevelDebug $
     "twoPhaseSimplex: Solving system with domain map " <> showT domainMap
   -- Collect original variables before any transformations
   let originalVars = collectAllVars objFunctions constraints
   let (transformedObjs, transformedConstraints, transforms) = preprocess objFunctions domainMap constraints
   logMsg LevelInfo $
+    "twoPhaseSimplex: Applied " <> showT (length transforms) <> " variable transforms"
+  logMsg LevelDebug $
     "twoPhaseSimplex: Applied transforms "
       <> showT transforms
       <> "; Transformed objectives: "
@@ -496,18 +498,19 @@ twoPhaseSimplex domainMap objFunctions constraints = do
       logMsg LevelInfo "twoPhaseSimplex: No feasible solution found in phase 1"
       pure $ SimplexResult Nothing []
     Just feasibleSystem -> do
-      logMsg LevelInfo $
-        "twoPhaseSimplex: Feasible system found for transformed system; Feasible system: "
-          <> showT feasibleSystem
+      logMsg LevelInfo "twoPhaseSimplex: Feasible system found for transformed system"
+      logMsg LevelDebug $
+        "twoPhaseSimplex: Feasible system (in Dict form):\n"
+          <> Text.pack (prettyShowDict feasibleSystem.dict)
       objResults <- optimizeAllObjectives originalVars transforms feasibleSystem (zip objFunctions transformedObjs)
-      logMsg LevelInfo $ "twoPhaseSimplex: All objective results: " <> showT objResults
+      logMsg LevelDebug $ "twoPhaseSimplex: All objective results: " <> showT objResults
       pure $ SimplexResult (Just feasibleSystem) objResults
 
 -- | Optimize all objective functions over the given feasible system.
 -- Returns a list of ObjectiveResult, one for each objective function.
 -- The originalVars set is used to filter the result to only include original decision variables.
 optimizeAllObjectives ::
-  (MonadIO m, MonadLogger m) =>
+  (MonadLogger m) =>
   -- | Original decision variables
   Set.Set Var ->
   [VarTransform] ->
@@ -589,12 +592,14 @@ generateTransform domainMap var (transforms, nextFreshVar) =
 getTransform :: Var -> Var -> VarDomain -> ([VarTransform], Var)
 getTransform nextFreshVar var (Bounded mLower mUpper) =
   let -- Handle lower bound
+      -- Any nonzero lower bound is handled by a shift, so the bound becomes the
+      -- implicit shiftedVar >= 0: an upper bound then stays a LEQ row, whose
+      -- slack is feasible at the origin, and no artificial variable is needed.
       (lowerTransforms, varOffset) = case mLower of
         Nothing -> ([], 0) -- No lower bound: will need Split
         Just l
           | l == 0 -> ([], 0) -- NonNegative: no transform needed
-          | l > 0 -> ([AddLowerBound var l], 0) -- Positive lower bound: add constraint
-          | otherwise -> ([Shift var nextFreshVar l], 1) -- Negative lower bound: shift
+          | otherwise -> ([Shift var nextFreshVar l], 1) -- Nonzero lower bound: shift
 
       -- Handle upper bound (if present)
       upperTransforms = case mUpper of
@@ -623,13 +628,10 @@ applyTransforms transforms objFunction constraints =
 applyTransform :: VarTransform -> (ObjectiveFunction, [PolyConstraint]) -> (ObjectiveFunction, [PolyConstraint])
 applyTransform transform (objFunction, constraints) =
   case transform of
-    -- AddLowerBound: Add a GEQ constraint for the variable
-    AddLowerBound v bound ->
-      (objFunction, GEQ (M.singleton v 1) bound : constraints)
     -- AddUpperBound: Add a LEQ constraint for the variable
     AddUpperBound v bound ->
       (objFunction, LEQ (M.singleton v 1) bound : constraints)
-    -- Shift: originalVar = shiftedVar + shiftBy (where shiftBy < 0)
+    -- Shift: originalVar = shiftedVar + shiftBy (where shiftBy /= 0)
     -- Substitute: wherever we see originalVar, replace with shiftedVar
     -- and adjust the RHS by -coeff * shiftBy
     Shift origVar shiftedVar shiftBy ->
@@ -703,8 +705,6 @@ unapplyTransformsToVarMap transforms valMap =
 unapplyTransformToVarMap :: VarTransform -> VarLitMap -> VarLitMap
 unapplyTransformToVarMap transform valMap =
   case transform of
-    -- AddLowerBound: No variable substitution was done, nothing to unapply
-    AddLowerBound {} -> valMap
     -- AddUpperBound: No variable substitution was done, nothing to unapply
     AddUpperBound {} -> valMap
     -- Shift: originalVar = shiftedVar + shiftBy
@@ -726,56 +726,70 @@ unapplyTransformToVarMap transform valMap =
 -- basic variable among minimum-ratio ties. The fixed 'Var' ordering and exact
 -- rational arithmetic ensure degenerate pivots cannot cycle. The objective row
 -- is not a nonnegative basic variable and must not constrain the ratio test.
-simplexPivot :: (MonadIO m, MonadLogger m) => PivotObjective -> Dict -> m (Maybe Dict)
-simplexPivot objective@(PivotObjective {variable = objectiveVar, function = objectiveFunc, constant = objectiveConstant}) dictionary = do
-  logMsg LevelInfo $
-    "simplexPivot: Pivoting with objective " <> showT objective <> " over system (in Dict form) " <> showT dictionary
+--
+-- The first 'Var' is the objective variable. Its row must already be in the
+-- dictionary: the objective is an ordinary row that is read, pivoted and
+-- returned like any other, so the caller inserts it once before pivoting.
+--
+-- The 'Int' is the pivot number. Callers start it at 1 and each recursive pivot
+-- increments it, so a trace can be followed pivot by pivot.
+-- 'LevelInfo' gets exactly one line per pivot; the objective constant on
+-- that line is the value the pivot starts from.
+simplexPivot :: (MonadLogger m) => Int -> Var -> Dict -> m (Maybe Dict)
+simplexPivot pivotNumber objectiveVar dictionary = do
+  logMsg LevelDebug $
+    "simplexPivot: pivot "
+      <> showT pivotNumber
+      <> " starting from system (in Dict form, objective row included):\n"
+      <> Text.pack (prettyShowDict dictionary)
   case M.lookupMin (M.filter (> 0) objectiveFunc) of
     Nothing -> do
       logMsg LevelInfo $
-        "simplexPivot: Pivoting complete as no positive variables found in objective "
-          <> showT objective
-          <> " over system (in Dict form) "
-          <> showT dictionary
-      pure $ Just (insertPivotObjectiveToDict objective dictionary)
-    Just (pivotNonBasicVar, _) -> do
-      logMsg LevelInfo $
-        "simplexPivot: Non-basic pivoting variable in objective, determined by Bland's least-index rule = "
-          <> showT pivotNonBasicVar
-      let mPivotBasicVar = ratioTest dictionary pivotNonBasicVar
-      case mPivotBasicVar of
+        "simplexPivot: pivot "
+          <> showT pivotNumber
+          <> ": no positive objective coefficient left, optimal with objective constant "
+          <> Text.pack (prettyShowRational objectiveConstant)
+      pure $ Just dictionary
+    Just (pivotNonBasicVar, _) ->
+      case ratioTest dictionary pivotNonBasicVar of
         Nothing -> do
           logMsg LevelInfo $
-            "simplexPivot: Ratio test failed with non-basic variable "
+            "simplexPivot: pivot "
+              <> showT pivotNumber
+              <> ": entering "
               <> showT pivotNonBasicVar
-              <> " over system (in Dict form) "
-              <> showT dictionary
+              <> ", ratio test failed, objective is unbounded"
           pure Nothing
         Just pivotBasicVar -> do
-          logMsg LevelInfo $ "simplexPivot: Basic pivoting variable determined by ratio test " <> showT pivotBasicVar
           logMsg LevelInfo $
-            "simplexPivot: Pivoting with basic var "
-              <> showT pivotBasicVar
-              <> ", non-basic var "
+            "simplexPivot: pivot "
+              <> showT pivotNumber
+              <> ": entering "
               <> showT pivotNonBasicVar
-              <> ", objective "
-              <> showT objective
-              <> " over system (in Dict form) "
-              <> showT dictionary
-          let pivotResult = pivot pivotBasicVar pivotNonBasicVar (insertPivotObjectiveToDict objective dictionary)
-              pivotedObj =
-                let pivotedObjEntry = fromMaybe (error "simplexPivot: Can't find objective after pivoting") $ M.lookup objectiveVar pivotResult
-                in  objective & #function .~ pivotedObjEntry.varMapSum & #constant .~ pivotedObjEntry.constant
-              pivotedDict = M.delete objectiveVar pivotResult
-          logMsg LevelInfo $
-            "simplexPivot: Pivoted, Recursing with new pivoting objective "
-              <> showT pivotedObj
-              <> " for new pivoted system (in Dict form) "
-              <> showT pivotedDict
+              <> ", leaving "
+              <> showT pivotBasicVar
+              <> ", objective constant "
+              <> Text.pack (prettyShowRational objectiveConstant)
+          let pivotedDict = pivot pivotBasicVar pivotNonBasicVar dictionary
+          logMsg LevelDebug $
+            "simplexPivot: pivot "
+              <> showT (pivotNumber + 1)
+              <> " continuing from pivoted system (in Dict form, objective row included):\n"
+              <> Text.pack (prettyShowDict pivotedDict)
           simplexPivot
-            pivotedObj
+            (pivotNumber + 1)
+            objectiveVar
             pivotedDict
   where
+    objectiveRow =
+      fromMaybe
+        (error "simplexPivot: objective row missing from the dictionary")
+        (M.lookup objectiveVar dictionary)
+
+    objectiveFunc = objectiveRow.varMapSum
+
+    objectiveConstant = objectiveRow.constant
+
     ratioTest :: Dict -> Var -> Maybe Var
     ratioTest dict enteringVar =
       case ratios of

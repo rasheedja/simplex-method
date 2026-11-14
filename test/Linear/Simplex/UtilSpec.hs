@@ -11,7 +11,6 @@ import Test.QuickCheck (Positive (..), property)
 import Linear.Simplex.Types
   ( DictValue (..)
   , ObjectiveFunction (..)
-  , PivotObjective (..)
   , PolyConstraint (..)
   , TableauRow (..)
   , VarLitMapSum
@@ -20,7 +19,6 @@ import Linear.Simplex.Util
   ( combineVarLitMapSums
   , dictionaryFormToTableau
   , foldVarLitMap
-  , insertPivotObjectiveToDict
   , isMax
   , simplifySystem
   , tableauInDictionaryForm
@@ -258,33 +256,3 @@ spec = do
             let m1 = M.fromList p1
                 m2 = M.fromList p2
             in  foldVarLitMap [m1, m2] == combineVarLitMapSums m1 m2
-
-  describe "insertPivotObjectiveToDict" $ do
-    it "inserts objective into empty dictionary" $ do
-      let obj = PivotObjective {variable = 1, function = M.fromList [(2, 3)], constant = 5}
-          result = insertPivotObjectiveToDict obj M.empty
-      case M.lookup 1 result of
-        Just entry -> do
-          entry.varMapSum `shouldBe` M.fromList [(2, 3)]
-          entry.constant `shouldBe` 5
-        Nothing -> expectationFailure "Expected entry for objective variable"
-
-    it "inserts objective into non-empty dictionary without overwriting others" $ do
-      let existing = M.fromList [(2, DictValue {varMapSum = M.fromList [(3, 1)], constant = 10})]
-          obj = PivotObjective {variable = 1, function = M.fromList [(3, 4)], constant = 7}
-          result = insertPivotObjectiveToDict obj existing
-      M.size result `shouldBe` 2
-      case M.lookup 2 result of
-        Just entry -> entry.constant `shouldBe` 10
-        Nothing -> expectationFailure "Existing entry should be preserved"
-
-    it "overwrites existing entry with same variable" $ do
-      let existing = M.fromList [(1, DictValue {varMapSum = M.fromList [(2, 1)], constant = 3})]
-          obj = PivotObjective {variable = 1, function = M.fromList [(2, 99)], constant = 42}
-          result = insertPivotObjectiveToDict obj existing
-      M.size result `shouldBe` 1
-      case M.lookup 1 result of
-        Just entry -> do
-          entry.varMapSum `shouldBe` M.fromList [(2, 99)]
-          entry.constant `shouldBe` 42
-        Nothing -> expectationFailure "Expected updated entry"
