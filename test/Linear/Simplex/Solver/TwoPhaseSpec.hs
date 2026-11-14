@@ -3065,9 +3065,9 @@ spec = do
         newObj `shouldBe` Max (M.fromList [(2, 1)])
         newConstraints `shouldBe` [LEQ (M.fromList [(2, 1)]) 3]
 
-  describe "positive lower bounds are shifted instead of bounded by a GEQ row" $ do
+  describe "positive lower bounds are shifted" $ do
     let -- A three-variable box with one real constraint. Every lower bound is
-        -- positive, so before the shift each one needed an artificial variable.
+        -- positive, so a GEQ row per bound would need an artificial variable each.
         domainMap =
           VarDomainMap $
             M.fromList

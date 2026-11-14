@@ -135,20 +135,16 @@ showT = T.pack . show
 -- | Log a message at the given level, exactly as given.
 --
 -- No timestamp is attached: reading a clock is the log sink's job, so the
--- solver stays free of @MonadIO@ and does no IO when logging is disabled.
--- For deterministic output the interesting axis is the pivot number, which the
--- solver puts in its own messages. Use 'runTimestampedStdoutLoggingT' to get
--- wall-clock timestamps back.
+-- solver needs no @MonadIO@ and does no IO when logging is disabled. Use
+-- 'runTimestampedStdoutLoggingT' for wall-clock timestamps.
 logMsg :: (MonadLogger m) => LogLevel -> T.Text -> m ()
 logMsg = logOtherN
 
 -- | Run a 'LoggingT' action, prefixing every emitted line with the current
 -- ISO-8601 time.
 --
--- This is where timestamps moved to when 'logMsg' stopped reading a clock. It
--- renders exactly like @runStdoutLoggingT@, only with the timestamp prepended,
--- so it is a drop-in replacement for callers that want the old output and do
--- not mind paying for the clock syscall on every message.
+-- It renders exactly like @runStdoutLoggingT@, only with the timestamp
+-- prepended, at the cost of one clock read per message.
 runTimestampedStdoutLoggingT :: LoggingT IO a -> IO a
 runTimestampedStdoutLoggingT action =
   runLoggingT action $ \loc source level message -> do
