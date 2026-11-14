@@ -690,9 +690,8 @@ applyFixToConstraint fixedVar value constraint =
   case M.lookup fixedVar constraint.lhs of
     Nothing -> constraint
     Just coeff ->
-      constraint
-        & #lhs .~ M.delete fixedVar constraint.lhs
-        & #rhs %~ subtract (coeff * value)
+      withLhs (M.delete fixedVar constraint.lhs) $
+        withRhs (constraint.rhs - coeff * value) constraint
 
 -- | Substitute a shifted variable and return the constant offset introduced.
 -- The replacement variable must be fresh.
