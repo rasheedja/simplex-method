@@ -92,8 +92,7 @@ mergeRelationSummary new older =
     }
 
 -- | Simplifies a system of 'PolyConstraint's by grouping the constraints that share
---  a @(lhs, rhs)@ key and reducing each group, in @O(n log n)@ rather than by
---  rescanning the remaining constraints for every constraint in the system.
+--  a @(lhs, rhs)@ key and reducing each group, in @O(n log n)@.
 --
 --  For each @(lhs, rhs)@ key, let @k@ be the relation of the first constraint that
 --  carries the key. The group reduces to:
@@ -103,10 +102,9 @@ mergeRelationSummary new older =
 --    'GEQ', or when @k@ is 'EQ' already;
 --  * the single relation @k@ otherwise, which also collapses repetitions of @k@.
 --
---  One corner of the grouping is inherited from the reference implementation
---  (@nub . reduceSystem@) this replaces: when @k@ is 'LEQ' (or 'GEQ') and the group
+--  One corner is not fully reduced: when @k@ is 'LEQ' (or 'GEQ') and the group
 --  holds another relation as well as a second 'LEQ' (respectively 'GEQ'), that second
---  constraint is not absorbed by the reduction and survives untouched, because the
+--  constraint is not absorbed by the reduction and survives untouched, because
 --  duplicates collapse only when they are equal as a whole. So
 --  @[LEQ l r, GEQ l r, LEQ l r]@ is @[EQ l r, LEQ l r]@ and not @[EQ l r]@.
 --

@@ -43,8 +43,7 @@ dictionaryFormToTableau =
 -- | The reference implementation of 'simplifySystem': reduce every constraint
 --  against the constraints that follow it, then remove duplicates with 'nub'.
 --
---  The quadratic scan was replaced by the grouping implementation under test, and
---  this copy remains as the oracle for the equivalence property below.
+--  It is quadratic, and serves as the oracle for the equivalence property below.
 simplifySystemReference :: [PolyConstraint] -> [PolyConstraint]
 simplifySystemReference = nub . reduceSystem
   where
