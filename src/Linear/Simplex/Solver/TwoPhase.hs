@@ -528,9 +528,8 @@ preprocess allVars objFunctions (VarDomainMap domainMap) constraints =
       -- Generate transforms for each variable based on its domain
       -- Variables not in domainMap are treated as Unbounded
       (transforms, _) = foldr (generateTransform domainMap) ([], maxVar + 1) (Set.toList allVars)
-      -- Each transform is applied to every objective and to the constraints once.
-      -- Both use the same fold over the transforms, so the constraint list is
-      -- built exactly as it was when it was folded along with an objective.
+      -- Each transform is applied to every objective and to the constraints once,
+      -- in the same order.
       transformedObjs = map (\obj -> foldr applyTransformToObjective obj transforms) objFunctions
       transformedConstraints = foldr applyTransformToConstraints constraints transforms
   in  (transformedObjs, transformedConstraints, transforms)
