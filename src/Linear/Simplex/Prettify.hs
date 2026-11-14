@@ -12,7 +12,6 @@
 -- Converts "Linear.Simplex.Types" types into human-readable 'String's
 module Linear.Simplex.Prettify where
 
-import Data.Generics.Labels ()
 import Data.List (intercalate)
 import Data.Map qualified as M
 import Data.Ratio (denominator, numerator)
