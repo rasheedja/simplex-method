@@ -8,11 +8,9 @@ import Prelude hiding (EQ)
 import Control.Exception (evaluate)
 import Control.Monad.Logger
   ( LogLevel (LevelInfo)
-  , filterLogger
   , fromLogStr
   , runLoggingT
   , runNoLoggingT
-  , runStdoutLoggingT
   , runWriterLoggingT
   )
 import Data.Functor.Identity (runIdentity)
@@ -29,6 +27,15 @@ import Test.Hspec (Spec, describe, expectationFailure, it, shouldBe, shouldSatis
 import Test.QuickCheck (NonEmptyList (..), Positive (..), property, (==>))
 
 import Linear.Simplex.Prettify (prettyShowObjectiveFunction, prettyShowPolyConstraint, prettyShowVarLitMapSum)
+import Linear.Simplex.Solver.SpecSupport
+  ( expectInfeasible
+  , expectOptimal
+  , expectOptimalValues
+  , expectOutcomes
+  , expectUnbounded
+  , solveNonNeg
+  , solveWith
+  )
 import Linear.Simplex.Solver.TwoPhase
   ( applyShiftToConstraint
   , applyShiftToObjective
@@ -292,18 +299,8 @@ spec = do
               , LEQ (M.fromList [(2, 1)]) 4
               , LEQ (M.fromList [(1, -1), (2, 2)]) 6
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 3), (2, 4)]
-            computeObjective obj varMap `shouldBe` 29
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 3), (2, 4)]) 29 actualResult
 
       it "Min 3x₁ + 5x₂ with LEQ constraints: obj=0" $ do
         let obj = Min (M.fromList [(1, 3), (2, 5)])
@@ -313,18 +310,8 @@ spec = do
               , LEQ (M.fromList [(2, 1)]) 4
               , LEQ (M.fromList [(1, -1), (2, 2)]) 6
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.empty
-            computeObjective obj varMap `shouldBe` 0
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj M.empty 0 actualResult
 
       it "Max 3x₁ + 5x₂ with GEQ constraints: unbounded" $ do
         let obj = Max (M.fromList [(1, 3), (2, 5)])
@@ -334,16 +321,8 @@ spec = do
               , GEQ (M.fromList [(2, 1)]) 4
               , GEQ (M.fromList [(1, -1), (2, 2)]) 6
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ Unbounded] -> pure ()
-          SimplexResult Nothing _ -> expectationFailure "Expected unbounded but got infeasible"
-          _ -> expectationFailure "Expected unbounded"
+        actualResult <- solveNonNeg [obj] constraints
+        expectUnbounded actualResult
 
       it "Min 3x₁ + 5x₂ with GEQ constraints: obj=237/7, x₁=24/7, x₂=33/7" $ do
         let obj = Min (M.fromList [(1, 3), (2, 5)])
@@ -353,18 +332,8 @@ spec = do
               , GEQ (M.fromList [(2, 1)]) 4
               , GEQ (M.fromList [(1, -1), (2, 2)]) 6
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 24 % 7), (2, 33 % 7)]
-            computeObjective obj varMap `shouldBe` (237 % 7)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 24 % 7), (2, 33 % 7)]) (237 % 7) actualResult
 
     -- From https://www.eng.uwaterloo.ca/~syde05/phase1.pdf (requires two phases)
     describe "From eng.uwaterloo.ca phase1.pdf (requires two phases)" $ do
@@ -375,18 +344,8 @@ spec = do
               , LEQ (M.fromList [(1, 2), (2, -3), (3, 1)]) (-5)
               , LEQ (M.fromList [(1, -1), (2, 1), (3, -2)]) (-1)
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 14 % 5), (3, 17 % 5)]
-            computeObjective obj varMap `shouldBe` (3 % 5)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(2, 14 % 5), (3, 17 % 5)]) (3 % 5) actualResult
 
       it "Min x₁ - x₂ + x₃ with LEQ constraints: unbounded" $ do
         let obj = Min (M.fromList [(1, 1), (2, -1), (3, 1)])
@@ -395,16 +354,8 @@ spec = do
               , LEQ (M.fromList [(1, 2), (2, -3), (3, 1)]) (-5)
               , LEQ (M.fromList [(1, -1), (2, 1), (3, -2)]) (-1)
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ Unbounded] -> pure ()
-          SimplexResult Nothing _ -> expectationFailure "Expected unbounded but got infeasible"
-          _ -> expectationFailure "Expected unbounded"
+        actualResult <- solveNonNeg [obj] constraints
+        expectUnbounded actualResult
 
       it "Max x₁ - x₂ + x₃ with GEQ constraints: obj=1, x₁=3, x₂=2" $ do
         let obj = Max (M.fromList [(1, 1), (2, -1), (3, 1)])
@@ -413,18 +364,8 @@ spec = do
               , GEQ (M.fromList [(1, 2), (2, -3), (3, 1)]) (-5)
               , GEQ (M.fromList [(1, -1), (2, 1), (3, -2)]) (-1)
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 3), (2, 2)]
-            computeObjective obj varMap `shouldBe` 1
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 3), (2, 2)]) 1 actualResult
 
       it "Min x₁ - x₂ + x₃ with GEQ constraints: obj=-1/4, x₁=17/4, x₂=9/2" $ do
         let obj = Min (M.fromList [(1, 1), (2, -1), (3, 1)])
@@ -433,18 +374,8 @@ spec = do
               , GEQ (M.fromList [(1, 2), (2, -3), (3, 1)]) (-5)
               , GEQ (M.fromList [(1, -1), (2, 1), (3, -2)]) (-1)
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 17 % 4), (2, 9 % 2)]
-            computeObjective obj varMap `shouldBe` ((-1) % 4)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 17 % 4), (2, 9 % 2)]) ((-1) % 4) actualResult
 
     -- From page 49 of 'Linear and Integer Programming Made Easy' (requires two phases)
     describe "From 'Linear and Integer Programming Made Easy' (page 49, requires two phases)" $ do
@@ -454,18 +385,8 @@ spec = do
               [ EQ (M.fromList [(1, 1), (3, 2), (4, -2)]) 2
               , EQ (M.fromList [(2, 1), (3, 1), (4, 4)]) 6
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(3, 2), (4, 1)]
-            computeObjective obj varMap `shouldBe` 5
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(3, 2), (4, 1)]) 5 actualResult
 
       it "Max x₁ + x₂ + 2x₃ + x₄ with EQ constraints: obj=8, x₁=2, x₂=6" $ do
         let obj = Max (M.fromList [(1, 1), (2, 1), (3, 2), (4, 1)])
@@ -473,18 +394,8 @@ spec = do
               [ EQ (M.fromList [(1, 1), (3, 2), (4, -2)]) 2
               , EQ (M.fromList [(2, 1), (3, 1), (4, 4)]) 6
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 2), (2, 6)]
-            computeObjective obj varMap `shouldBe` 8
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 2), (2, 6)]) 8 actualResult
 
     -- From page 52 of 'Linear and Integer Programming Made Easy'
     describe "From 'Linear and Integer Programming Made Easy' (page 52)" $ do
@@ -494,18 +405,8 @@ spec = do
               [ EQ (M.fromList [(3, -2), (4, 1), (5, 1)]) 4
               , EQ (M.fromList [(3, 3), (4, -1), (5, 2)]) 2
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(3, 6), (4, 16)]
-            computeObjective obj varMap `shouldBe` 20
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(3, 6), (4, 16)]) 20 actualResult
 
       it "Min -2x₃ + 2x₄ + x₅ with EQ constraints: obj=6, x₄=2, x₅=2" $ do
         let obj = Min (M.fromList [(3, -2), (4, 2), (5, 1)])
@@ -513,18 +414,8 @@ spec = do
               [ EQ (M.fromList [(3, -2), (4, 1), (5, 1)]) 4
               , EQ (M.fromList [(3, 3), (4, -1), (5, 2)]) 2
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(4, 2), (5, 2)]
-            computeObjective obj varMap `shouldBe` 6
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(4, 2), (5, 2)]) 6 actualResult
 
     -- From page 59 of 'Linear and Integer Programming Made Easy' (requires two phases)
     describe "From 'Linear and Integer Programming Made Easy' (page 59, requires two phases)" $ do
@@ -534,18 +425,8 @@ spec = do
               [ LEQ (M.fromList [(1, 4), (2, 1)]) 150
               , LEQ (M.fromList [(1, 2), (2, -3)]) (-40)
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 150)]
-            computeObjective obj varMap `shouldBe` 150
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(2, 150)]) 150 actualResult
 
       it "Min 2x₁ + x₂: obj=40/3, x₂=40/3" $ do
         let obj = Min (M.fromList [(1, 2), (2, 1)])
@@ -553,18 +434,8 @@ spec = do
               [ LEQ (M.fromList [(1, 4), (2, 1)]) 150
               , LEQ (M.fromList [(1, 2), (2, -3)]) (-40)
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 40 % 3)]
-            computeObjective obj varMap `shouldBe` (40 % 3)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(2, 40 % 3)]) (40 % 3) actualResult
 
       it "Max 2x₁ + x₂ with GEQ constraints: unbounded" $ do
         let obj = Max (M.fromList [(1, 2), (2, 1)])
@@ -572,16 +443,8 @@ spec = do
               [ GEQ (M.fromList [(1, 4), (2, 1)]) 150
               , GEQ (M.fromList [(1, 2), (2, -3)]) (-40)
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ Unbounded] -> pure ()
-          SimplexResult Nothing _ -> expectationFailure "Expected unbounded but got infeasible"
-          _ -> expectationFailure "Expected unbounded"
+        actualResult <- solveNonNeg [obj] constraints
+        expectUnbounded actualResult
 
       it "Min 2x₁ + x₂ with GEQ constraints: obj=75, x₁=75/2" $ do
         let obj = Min (M.fromList [(1, 2), (2, 1)])
@@ -589,18 +452,8 @@ spec = do
               [ GEQ (M.fromList [(1, 4), (2, 1)]) 150
               , GEQ (M.fromList [(1, 2), (2, -3)]) (-40)
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 75 % 2)]
-            computeObjective obj varMap `shouldBe` 75
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 75 % 2)]) 75 actualResult
 
     -- From page 59 of 'Linear and Integer Programming Made Easy'
     describe "From 'Linear and Integer Programming Made Easy' (page 59)" $ do
@@ -611,18 +464,8 @@ spec = do
               , LEQ (M.fromList [(2, -5), (3, 5)]) 100
               , LEQ (M.fromList [(1, 1), (3, 1), (1, 1)]) 400
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 20)]
-            computeObjective obj varMap `shouldBe` (-120)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 20)]) (-120) actualResult
 
       it "Max -6x₁ - 4x₂ + 2x₃: obj=10, x₃=5" $ do
         let obj = Max (M.fromList [(1, -6), (2, -4), (3, 2)])
@@ -631,18 +474,8 @@ spec = do
               , LEQ (M.fromList [(2, -5), (3, 5)]) 100
               , LEQ (M.fromList [(1, 1), (3, 1), (1, 1)]) 400
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(3, 5)]
-            computeObjective obj varMap `shouldBe` 10
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(3, 5)]) 10 actualResult
 
       it "Min -6x₁ - 4x₂ + 2x₃ with GEQ constraints: unbounded" $ do
         let obj = Min (M.fromList [(1, -6), (2, -4), (3, 2)])
@@ -651,16 +484,8 @@ spec = do
               , GEQ (M.fromList [(2, -5), (3, 5)]) 100
               , GEQ (M.fromList [(1, 1), (3, 1), (1, 1)]) 400
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ Unbounded] -> pure ()
-          SimplexResult Nothing _ -> expectationFailure "Expected unbounded but got infeasible"
-          _ -> expectationFailure "Expected unbounded"
+        actualResult <- solveNonNeg [obj] constraints
+        expectUnbounded actualResult
 
       it "Max -6x₁ - 4x₂ + 2x₃ with GEQ constraints: unbounded" $ do
         let obj = Max (M.fromList [(1, -6), (2, -4), (3, 2)])
@@ -669,16 +494,8 @@ spec = do
               , GEQ (M.fromList [(2, -5), (3, 5)]) 100
               , GEQ (M.fromList [(1, 1), (3, 1), (1, 1)]) 400
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ Unbounded] -> pure ()
-          SimplexResult Nothing _ -> expectationFailure "Expected unbounded but got infeasible"
-          _ -> expectationFailure "Expected unbounded"
+        actualResult <- solveNonNeg [obj] constraints
+        expectUnbounded actualResult
 
     -- From page 59 of 'Linear and Integer Programming Made Easy'
     describe "From 'Linear and Integer Programming Made Easy' (page 59)" $ do
@@ -689,18 +506,8 @@ spec = do
               , LEQ (M.fromList [(1, 1), (2, -1), (3, 1)]) 150
               , LEQ (M.fromList [(1, 2), (2, 1), (3, 2)]) 100
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 50)]
-            computeObjective obj varMap `shouldBe` 250
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(2, 50)]) 250 actualResult
 
       it "Min 3x₁ + 5x₂ + 2x₃: obj=0" $ do
         let obj = Min (M.fromList [(1, 3), (2, 5), (3, 2)])
@@ -709,18 +516,8 @@ spec = do
               , LEQ (M.fromList [(1, 1), (2, -1), (3, 1)]) 150
               , LEQ (M.fromList [(1, 2), (2, 1), (3, 2)]) 100
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.empty
-            computeObjective obj varMap `shouldBe` 0
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj M.empty 0 actualResult
 
       it "Max 3x₁ + 5x₂ + 2x₃ with GEQ constraints: unbounded" $ do
         let obj = Max (M.fromList [(1, 3), (2, 5), (3, 2)])
@@ -729,16 +526,8 @@ spec = do
               , GEQ (M.fromList [(1, 1), (2, -1), (3, 1)]) 150
               , GEQ (M.fromList [(1, 2), (2, 1), (3, 2)]) 100
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ Unbounded] -> pure ()
-          SimplexResult Nothing _ -> expectationFailure "Expected unbounded but got infeasible"
-          _ -> expectationFailure "Expected unbounded"
+        actualResult <- solveNonNeg [obj] constraints
+        expectUnbounded actualResult
 
       it "Min 3x₁ + 5x₂ + 2x₃ with GEQ constraints: obj=300, x₃=150" $ do
         let obj = Min (M.fromList [(1, 3), (2, 5), (3, 2)])
@@ -747,18 +536,8 @@ spec = do
               , GEQ (M.fromList [(1, 1), (2, -1), (3, 1)]) 150
               , GEQ (M.fromList [(1, 2), (2, 1), (3, 2)]) 100
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(3, 150)]
-            computeObjective obj varMap `shouldBe` 300
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(3, 150)]) 300 actualResult
 
     describe "Simple single/two variable tests" $ do
       it "Max x₁ with x₁ <= 15: obj=15, x₁=15" $ do
@@ -766,18 +545,8 @@ spec = do
             constraints =
               [ LEQ (M.fromList [(1, 1)]) 15
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 15)]
-            computeObjective obj varMap `shouldBe` 15
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 15)]) 15 actualResult
 
       it "Max 2x₁ with mixed constraints: obj=20, x₁=10, x₂=10" $ do
         let obj = Max (M.fromList [(1, 2)])
@@ -785,36 +554,16 @@ spec = do
               [ LEQ (M.fromList [(1, 2)]) 20
               , GEQ (M.fromList [(2, 1)]) 10
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 10), (2, 10)]
-            computeObjective obj varMap `shouldBe` 20
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 10), (2, 10)]) 20 actualResult
 
       it "Min x₁ with x₁ <= 15: obj=0" $ do
         let obj = Min (M.fromList [(1, 1)])
             constraints =
               [ LEQ (M.fromList [(1, 1)]) 15
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.empty
-            computeObjective obj varMap `shouldBe` 0
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj M.empty 0 actualResult
 
       it "Min 2x₁ with mixed constraints: obj=0, x₂=10" $ do
         let obj = Min (M.fromList [(1, 2)])
@@ -822,18 +571,8 @@ spec = do
               [ LEQ (M.fromList [(1, 2)]) 20
               , GEQ (M.fromList [(2, 1)]) 10
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 10)]
-            computeObjective obj varMap `shouldBe` 0
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(2, 10)]) 0 actualResult
 
     describe "Infeasibility tests" $ do
       it "Conflicting bounds x₁ <= 15 and x₁ >= 15.01: infeasible" $ do
@@ -842,15 +581,8 @@ spec = do
               [ LEQ (M.fromList [(1, 1)]) 15
               , GEQ (M.fromList [(1, 1)]) 15.01
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> pure ()
-          _ -> expectationFailure "Expected infeasible"
+        actualResult <- solveNonNeg [obj] constraints
+        expectInfeasible actualResult
 
       it "Conflicting bounds with additional constraint: infeasible" $ do
         let obj = Max (M.fromList [(1, 1)])
@@ -859,15 +591,8 @@ spec = do
               , GEQ (M.fromList [(1, 1)]) 15.01
               , GEQ (M.fromList [(2, 1)]) 10
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> pure ()
-          _ -> expectationFailure "Expected infeasible"
+        actualResult <- solveNonNeg [obj] constraints
+        expectInfeasible actualResult
 
       it "Min x₁ with duplicate GEQ constraints: obj=0, x₂=1" $ do
         let obj = Min (M.fromList [(1, 1)])
@@ -875,18 +600,8 @@ spec = do
               [ GEQ (M.fromList [(1, 1), (2, 1)]) 1
               , GEQ (M.fromList [(1, 1), (2, 1)]) 1
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 1 % 1)]
-            computeObjective obj varMap `shouldBe` 0
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(2, 1 % 1)]) 0 actualResult
 
       it "Conflicting x₁+x₂ >= 2 and x₁+x₂ <= 1: infeasible" $ do
         let obj = Min (M.fromList [(1, 1)])
@@ -894,15 +609,8 @@ spec = do
               [ GEQ (M.fromList [(1, 1), (2, 1)]) 2
               , LEQ (M.fromList [(1, 1), (2, 1)]) 1
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> pure ()
-          _ -> expectationFailure "Expected infeasible"
+        actualResult <- solveNonNeg [obj] constraints
+        expectInfeasible actualResult
 
     describe "LEQ/GEQ reduction bug tests" $ do
       it "testLeqGeqBugMin1: obj=3, x₁=3, x₂=3" $ do
@@ -913,18 +621,8 @@ spec = do
               , GEQ (M.fromList [(2, 1)]) 3
               , LEQ (M.fromList [(2, 1)]) 3
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 3), (2, 3)]
-            computeObjective obj varMap `shouldBe` 3
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 3), (2, 3)]) 3 actualResult
 
       it "testLeqGeqBugMax1: obj=3, x₁=3, x₂=3" $ do
         let obj = Min (M.fromList [(1, 1)])
@@ -934,18 +632,8 @@ spec = do
               , GEQ (M.fromList [(2, 1)]) 3
               , LEQ (M.fromList [(2, 1)]) 3
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 3), (2, 3)]
-            computeObjective obj varMap `shouldBe` 3
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 3), (2, 3)]) 3 actualResult
 
       it "testLeqGeqBugMin2: obj=3, x₁=3, x₂=3" $ do
         let obj = Min (M.fromList [(1, 1)])
@@ -955,18 +643,8 @@ spec = do
               , GEQ (M.fromList [(2, 1)]) 3
               , LEQ (M.fromList [(2, 1)]) 3
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 3), (2, 3)]
-            computeObjective obj varMap `shouldBe` 3
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 3), (2, 3)]) 3 actualResult
 
       it "testLeqGeqBugMax2: obj=3, x₁=3, x₂=3" $ do
         let obj = Min (M.fromList [(1, 1)])
@@ -976,18 +654,8 @@ spec = do
               , GEQ (M.fromList [(2, 1)]) 3
               , LEQ (M.fromList [(2, 1)]) 3
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 3), (2, 3)]
-            computeObjective obj varMap `shouldBe` 3
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 3), (2, 3)]) 3 actualResult
 
     -- PolyPaver-style tests with shared parameters
     describe "PolyPaver-style tests (feasible region [0,2.5]²)" $ do
@@ -1016,64 +684,28 @@ spec = do
 
       it "Min x₁: x₁=7/4, x₂=5/2" $ do
         let (obj, constraints) = mkConstraints (Min (M.fromList [(1, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 7 % 4), (2, 5 % 2), (3, 0)]
-            computeObjective obj varMap `shouldBe` (7 % 4)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 7 % 4), (2, 5 % 2), (3, 0)]) (7 % 4) actualResult
 
       it "Max x₁: x₁=5/2, x₂=5/3" $ do
         let (obj, constraints) = mkConstraints (Max (M.fromList [(1, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            -- A zero variable may be non-basic and omitted from the result.
-            M.union varMap (M.singleton 3 0) `shouldBe` M.fromList [(1, 5 % 2), (2, 5 % 3), (3, 0)]
-            computeObjective obj varMap `shouldBe` (5 % 2)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          -- A zero variable may be non-basic and omitted from the result.
+          M.union varMap (M.singleton 3 0) `shouldBe` M.fromList [(1, 5 % 2), (2, 5 % 3), (3, 0)]
+          computeObjective obj varMap `shouldBe` (5 % 2)
 
       it "Min x₂: x₂=5/3" $ do
         let (obj, constraints) = mkConstraints (Min (M.fromList [(2, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 5 % 3), (1, 5 % 2), (3, 0)]
-            computeObjective obj varMap `shouldBe` (5 % 3)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(2, 5 % 3), (1, 5 % 2), (3, 0)]) (5 % 3) actualResult
 
       it "Max x₂: x₂=5/2" $ do
         let (obj, constraints) = mkConstraints (Max (M.fromList [(2, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.union varMap (M.singleton 3 0) `shouldBe` M.fromList [(2, 5 % 2), (1, 5 % 2), (3, 0)]
-            computeObjective obj varMap `shouldBe` (5 % 2)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.union varMap (M.singleton 3 0) `shouldBe` M.fromList [(2, 5 % 2), (1, 5 % 2), (3, 0)]
+          computeObjective obj varMap `shouldBe` (5 % 2)
 
     describe "PolyPaver-style tests (infeasible region [0,1.5]²)" $ do
       let x1l = 0.0
@@ -1101,51 +733,23 @@ spec = do
 
       it "Max x₁: infeasible" $ do
         let (obj, constraints) = mkConstraints (Max (M.fromList [(1, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> pure ()
-          _ -> expectationFailure "Expected infeasible"
+        actualResult <- solveNonNeg [obj] constraints
+        expectInfeasible actualResult
 
       it "Min x₁: infeasible" $ do
         let (obj, constraints) = mkConstraints (Min (M.fromList [(1, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> pure ()
-          _ -> expectationFailure "Expected infeasible"
+        actualResult <- solveNonNeg [obj] constraints
+        expectInfeasible actualResult
 
       it "Max x₂: infeasible" $ do
         let (obj, constraints) = mkConstraints (Max (M.fromList [(2, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> pure ()
-          _ -> expectationFailure "Expected infeasible"
+        actualResult <- solveNonNeg [obj] constraints
+        expectInfeasible actualResult
 
       it "Min x₂: infeasible" $ do
         let (obj, constraints) = mkConstraints (Min (M.fromList [(2, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> pure ()
-          _ -> expectationFailure "Expected infeasible"
+        actualResult <- solveNonNeg [obj] constraints
+        expectInfeasible actualResult
 
     describe "PolyPaver-style tests (feasible region [0,3.5]²)" $ do
       let x1l = 0.0
@@ -1173,63 +777,25 @@ spec = do
 
       it "Max x₁: x₁=7/2" $ do
         let (obj, constraints) = mkConstraints (Max (M.fromList [(1, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.union varMap (M.singleton 3 0) `shouldBe` M.fromList [(2, 5 % 9), (1, 7 % 2), (3, 0)]
-            computeObjective obj varMap `shouldBe` (7 % 2)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.union varMap (M.singleton 3 0) `shouldBe` M.fromList [(2, 5 % 9), (1, 7 % 2), (3, 0)]
+          computeObjective obj varMap `shouldBe` (7 % 2)
 
       it "Min x₁: x₁=17/20" $ do
         let (obj, constraints) = mkConstraints (Min (M.fromList [(1, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 17 % 20), (2, 7 % 2), (3, 0)]
-            computeObjective obj varMap `shouldBe` (17 % 20)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 17 % 20), (2, 7 % 2), (3, 0)]) (17 % 20) actualResult
 
       it "Max x₂: x₂=7/2" $ do
         let (obj, constraints) = mkConstraints (Max (M.fromList [(2, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 7 % 2), (1, 22 % 9)]
-            computeObjective obj varMap `shouldBe` (7 % 2)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(2, 7 % 2), (1, 22 % 9)]) (7 % 2) actualResult
 
       it "Min x₂: x₂=5/9" $ do
         let (obj, constraints) = mkConstraints (Min (M.fromList [(2, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 5 % 9), (1, 7 % 2), (3, 0)]
-            computeObjective obj varMap `shouldBe` (5 % 9)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(2, 5 % 9), (1, 7 % 2), (3, 0)]) (5 % 9) actualResult
 
     describe "PolyPaver two-function tests (infeasible)" $ do
       let x1l = 0.0
@@ -1266,51 +832,23 @@ spec = do
 
       it "Max x₁: infeasible" $ do
         let (obj, constraints) = mkConstraints (Max (M.fromList [(1, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> pure ()
-          _ -> expectationFailure "Expected infeasible"
+        actualResult <- solveNonNeg [obj] constraints
+        expectInfeasible actualResult
 
       it "Min x₁: infeasible" $ do
         let (obj, constraints) = mkConstraints (Min (M.fromList [(1, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> pure ()
-          _ -> expectationFailure "Expected infeasible"
+        actualResult <- solveNonNeg [obj] constraints
+        expectInfeasible actualResult
 
       it "Max x₂: infeasible" $ do
         let (obj, constraints) = mkConstraints (Max (M.fromList [(2, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> pure ()
-          _ -> expectationFailure "Expected infeasible"
+        actualResult <- solveNonNeg [obj] constraints
+        expectInfeasible actualResult
 
       it "Min x₂: infeasible" $ do
         let (obj, constraints) = mkConstraints (Min (M.fromList [(2, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> pure ()
-          _ -> expectationFailure "Expected infeasible"
+        actualResult <- solveNonNeg [obj] constraints
+        expectInfeasible actualResult
 
     describe "PolyPaver two-function tests (feasible)" $ do
       let x1l = 0.0
@@ -1347,63 +885,23 @@ spec = do
 
       it "Max x₁: x₁=5/2" $ do
         let (obj, constraints) = mkConstraints (Max (M.fromList [(1, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 5 % 2), (2, 45 % 22), (4, 0)]
-            computeObjective obj varMap `shouldBe` (5 % 2)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 5 % 2), (2, 45 % 22), (4, 0)]) (5 % 2) actualResult
 
       it "Min x₁: x₁=45/22" $ do
         let (obj, constraints) = mkConstraints (Min (M.fromList [(1, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 45 % 22), (2, 5 % 2), (4, 0)]
-            computeObjective obj varMap `shouldBe` (45 % 22)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 45 % 22), (2, 5 % 2), (4, 0)]) (45 % 22) actualResult
 
       it "Max x₂: x₂=5/2" $ do
         let (obj, constraints) = mkConstraints (Max (M.fromList [(2, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 5 % 2), (1, 5 % 2), (4, 0)]
-            computeObjective obj varMap `shouldBe` (5 % 2)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(2, 5 % 2), (1, 5 % 2), (4, 0)]) (5 % 2) actualResult
 
       it "Min x₂: x₂=45/22" $ do
         let (obj, constraints) = mkConstraints (Min (M.fromList [(2, 1)]))
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 45 % 22), (1, 5 % 2), (4, 0)]
-            computeObjective obj varMap `shouldBe` (45 % 22)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(2, 45 % 22), (1, 5 % 2), (4, 0)]) (45 % 22) actualResult
 
     describe "QuickCheck-generated regression tests" $ do
       it "testQuickCheck1: obj=-370, x₁=5/3, x₂=26" $ do
@@ -1415,18 +913,8 @@ spec = do
               , GEQ (M.fromList [(1, 3), (2, 0)]) 5
               , LEQ (M.fromList [(1, -48)]) (-1)
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 26), (1, 5 % 3)]
-            computeObjective obj varMap `shouldBe` (-370)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(2, 26), (1, 5 % 3)]) (-370) actualResult
 
       it "testQuickCheck2: obj=-2/9, x₁=14/9, x₂=8/9" $ do
         let obj = Max (M.fromList [(1, -3), (2, 5)])
@@ -1435,18 +923,8 @@ spec = do
               , LEQ (M.fromList [(1, 1), (2, -4), (3, 3)]) (-2)
               , LEQ (M.fromList [(2, 7), (1, -4)]) 0
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(1, 14 % 9), (2, 8 % 9)]
-            computeObjective obj varMap `shouldBe` ((-2) % 9)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(1, 14 % 9), (2, 8 % 9)]) ((-2) % 9) actualResult
 
       it "testQuickCheck3 (tests objective simplification): obj=-8, x₂=2" $ do
         let obj = Min (M.fromList [(2, 0), (2, -4)])
@@ -1456,18 +934,8 @@ spec = do
               , LEQ (M.fromList [(2, 1)]) 2
               , GEQ (M.fromList [(1, -5), (2, -1), (2, 1)]) (-5)
               ]
-            allVars = collectAllVars [obj] constraints
-            domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            varMap `shouldBe` M.fromList [(2, 2)]
-            computeObjective obj varMap `shouldBe` (-8)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveNonNeg [obj] constraints
+        expectOptimal obj (M.fromList [(2, 2)]) (-8) actualResult
 
   describe "zero objectives after phase one" $ do
     mapM_
@@ -1567,207 +1035,122 @@ spec = do
         let obj = Max (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange 0 10)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.findWithDefault 0 1 varMap `shouldBe` 10
-            computeObjective obj varMap `shouldBe` 10
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.findWithDefault 0 1 varMap `shouldBe` 10
+          computeObjective obj varMap `shouldBe` 10
 
       it "Min x₁ with 0 ≤ x₁ ≤ 10: optimal at x₁=0" $ do
         let obj = Min (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange 0 10)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.findWithDefault 0 1 varMap `shouldBe` 0
-            computeObjective obj varMap `shouldBe` 0
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.findWithDefault 0 1 varMap `shouldBe` 0
+          computeObjective obj varMap `shouldBe` 0
 
       it "Max x₁ with 5 ≤ x₁ ≤ 15: optimal at x₁=15" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange 5 15)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.findWithDefault 0 1 varMap `shouldBe` 15
-            computeObjective obj varMap `shouldBe` 15
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.findWithDefault 0 1 varMap `shouldBe` 15
+          computeObjective obj varMap `shouldBe` 15
 
       it "Min x₁ with 5 ≤ x₁ ≤ 15: optimal at x₁=5" $ do
         let obj = Min (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange 5 15)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.findWithDefault 0 1 varMap `shouldBe` 5
-            computeObjective obj varMap `shouldBe` 5
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.findWithDefault 0 1 varMap `shouldBe` 5
+          computeObjective obj varMap `shouldBe` 5
 
       it "Max x₁ with -5 ≤ x₁ ≤ 10: optimal at x₁=10" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange (-5) 10)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.findWithDefault 0 1 varMap `shouldBe` 10
-            computeObjective obj varMap `shouldBe` 10
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.findWithDefault 0 1 varMap `shouldBe` 10
+          computeObjective obj varMap `shouldBe` 10
 
       it "Min x₁ with -5 ≤ x₁ ≤ 10: optimal at x₁=-5" $ do
         let obj = Min (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange (-5) 10)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.findWithDefault 0 1 varMap `shouldBe` (-5)
-            computeObjective obj varMap `shouldBe` (-5)
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.findWithDefault 0 1 varMap `shouldBe` (-5)
+          computeObjective obj varMap `shouldBe` (-5)
 
     describe "Two variables with boundedRange" $ do
       it "Max x₁ + x₂ with 0 ≤ x₁ ≤ 10, 0 ≤ x₂ ≤ 10: optimal at 20" $ do
         let obj = Max (M.fromList [(1, 1), (2, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange 0 10), (2, boundedRange 0 10)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.lookup 1 varMap `shouldBe` Just 10
-            M.lookup 2 varMap `shouldBe` Just 10
-            computeObjective obj varMap `shouldBe` 20
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.lookup 1 varMap `shouldBe` Just 10
+          M.lookup 2 varMap `shouldBe` Just 10
+          computeObjective obj varMap `shouldBe` 20
 
       it "Min x₁ + x₂ with 0 ≤ x₁ ≤ 10, 0 ≤ x₂ ≤ 10: optimal at 0" $ do
         let obj = Min (M.fromList [(1, 1), (2, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange 0 10), (2, boundedRange 0 10)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] ->
-            computeObjective obj varMap `shouldBe` 0
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          computeObjective obj varMap `shouldBe` 0
 
       it "Max 2x₁ - x₂ with 0 ≤ x₁ ≤ 10, 0 ≤ x₂ ≤ 5: optimal at 20" $ do
         let obj = Max (M.fromList [(1, 2), (2, -1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange 0 10), (2, boundedRange 0 5)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.lookup 1 varMap `shouldBe` Just 10
-            M.findWithDefault 0 2 varMap `shouldBe` 0
-            computeObjective obj varMap `shouldBe` 20
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.lookup 1 varMap `shouldBe` Just 10
+          M.findWithDefault 0 2 varMap `shouldBe` 0
+          computeObjective obj varMap `shouldBe` 20
 
     describe "NonNegative only (no upper bound), empty constraints" $ do
       it "Max x₁ with x₁ ≥ 0 and no constraints: unbounded" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, nonNegative)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ Unbounded] -> pure ()
-          _ -> expectationFailure "Expected unbounded"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectUnbounded actualResult
 
       it "Min x₁ with x₁ ≥ 0 and no constraints: optimal at 0" $ do
         let obj = Min (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, nonNegative)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_s l -> l > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] ->
-            M.findWithDefault 0 1 varMap `shouldBe` 0
-          SimplexResult Nothing _ -> expectationFailure "Expected optimal but got infeasible"
-          _ -> expectationFailure "Unexpected result"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.findWithDefault 0 1 varMap `shouldBe` 0
 
   describe "twoPhaseSimplex (with VarDomainMap)" $ do
     it "Shift transformation with negative lower bound" $ do
       let obj = Max (M.fromList [(1, 1)])
           constraints = [LEQ (M.fromList [(1, 1)]) 10]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just 10
-        _ -> expectationFailure "Unexpected result format"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just 10
 
     it "Shift transformation finds minimum at negative bound" $ do
       let obj = Min (M.fromList [(1, 1)])
           constraints = [LEQ (M.fromList [(1, 1)]) 0]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just (-5)
-        _ -> expectationFailure "Unexpected result format"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just (-5)
 
     it "keeps Shift fresh variables distinct from existing non-negative variables" $ do
       let obj = Max (M.fromList [(2, 1)])
           constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 5]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-1)), (2, nonNegative)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-          varMap `shouldBe` M.fromList [(1, -1), (2, 6)]
-          computeObjective obj varMap `shouldBe` 6
-        _ -> expectationFailure "Unexpected result format"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimal obj (M.fromList [(1, -1), (2, 6)]) 6 actualResult
 
     it "Split transformation for unbounded variable (max)" $ do
       let obj = Max (M.fromList [(1, 1)])
@@ -1776,14 +1159,8 @@ spec = do
             , GEQ (M.fromList [(1, 1)]) (-10)
             ]
           domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just 10
-        _ -> expectationFailure "Unexpected result format"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just 10
 
     it "Split transformation for unbounded variable (min)" $ do
       let obj = Min (M.fromList [(1, 1)])
@@ -1792,40 +1169,22 @@ spec = do
             , GEQ (M.fromList [(1, 1)]) (-10)
             ]
           domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just (-10)
-        _ -> expectationFailure "Unexpected result format"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just (-10)
 
     it "Shift with positive lower bound" $ do
       let obj = Max (M.fromList [(1, 1)])
           constraints = [LEQ (M.fromList [(1, 1)]) 10]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just 10
-        _ -> expectationFailure "Unexpected result format"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just 10
 
     it "Shift finds minimum at positive bound" $ do
       let obj = Min (M.fromList [(1, 1)])
           constraints = [LEQ (M.fromList [(1, 1)]) 10]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 5)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just 5
-        _ -> expectationFailure "Unexpected result format"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just 5
 
     it "Mixed domain types" $ do
       let obj = Max (M.fromList [(1, 1), (2, 1)])
@@ -1834,19 +1193,13 @@ spec = do
             , GEQ (M.fromList [(2, 1)]) (-3)
             ]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-2)), (2, unbounded)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-          let xVal = M.findWithDefault 0 1 varMap
-              yVal = M.findWithDefault 0 2 varMap
-              oVal = computeObjective obj varMap
-          (xVal + yVal) `shouldBe` 5
-          oVal `shouldBe` 5
-        _ -> expectationFailure "Unexpected result format"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> do
+        let xVal = M.findWithDefault 0 1 varMap
+            yVal = M.findWithDefault 0 2 varMap
+            oVal = computeObjective obj varMap
+        (xVal + yVal) `shouldBe` 5
+        oVal `shouldBe` 5
 
     it "lowerBoundOnly 0 is equivalent to NonNegative" $ do
       let obj = Max (M.fromList [(1, 3), (2, 5)])
@@ -1858,14 +1211,8 @@ spec = do
             ]
           domainMap1 = VarDomainMap $ M.fromList [(1, lowerBoundOnly 0), (2, lowerBoundOnly 0)]
           domainMap2 = VarDomainMap $ M.fromList [(1, nonNegative), (2, nonNegative)]
-      actualResult1 <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap1 [obj] constraints
-      actualResult2 <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap2 [obj] constraints
+      actualResult1 <- solveWith domainMap1 [obj] constraints
+      actualResult2 <- solveWith domainMap2 [obj] constraints
       -- Both should produce the same optimal solution with x₁=3, x₂=4
       case (actualResult1, actualResult2) of
         ( SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap1)]
@@ -1879,13 +1226,8 @@ spec = do
       let obj = Max (M.fromList [(1, 1)])
           constraints = [LEQ (M.fromList [(1, 1)]) 5]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 10)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult Nothing _ -> pure ()
-        _ -> expectationFailure "Expected infeasible result"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectInfeasible actualResult
 
   describe "twoPhaseSimplex with upper bounds (AddUpperBound transformation)" $ do
     describe "Simple single variable systems" $ do
@@ -1893,84 +1235,49 @@ spec = do
         let obj = Max (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange 0 5)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just 5
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just 5
 
       it "Min x₁ with x₁ ≥ 0, x₁ ≤ 10 (using boundedRange): optimal at x₁=0" $ do
         let obj = Min (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange 0 10)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] ->
-            -- Note: non-basic variables with value 0 may not appear in varValMap
-            M.findWithDefault 0 1 varMap `shouldBe` 0
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          -- Note: non-basic variables with value 0 may not appear in varValMap
+          M.findWithDefault 0 1 varMap `shouldBe` 0
 
       it "Max x₁ with -5 ≤ x₁ ≤ 10 (bounded range with negative lower): optimal at x₁=10" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange (-5) 10)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just 10
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just 10
 
       it "Min x₁ with -5 ≤ x₁ ≤ 10 (bounded range with negative lower): optimal at x₁=-5" $ do
         let obj = Min (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange (-5) 10)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just (-5)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just (-5)
 
       it "Infeasible: lower bound > upper bound" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange 10 5)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> pure ()
-          _ -> expectationFailure "Expected infeasible system"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectInfeasible actualResult
 
     describe "Two variable systems with upper bounds" $ do
       it "Max x₁ + x₂ with 0 ≤ x₁ ≤ 3, 0 ≤ x₂ ≤ 4: optimal at x₁=3, x₂=4" $ do
         let obj = Max (M.fromList [(1, 1), (2, 1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange 0 3), (2, boundedRange 0 4)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.lookup 1 varMap `shouldBe` Just 3
-            M.lookup 2 varMap `shouldBe` Just 4
-            computeObjective obj varMap `shouldBe` 7
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.lookup 1 varMap `shouldBe` Just 3
+          M.lookup 2 varMap `shouldBe` Just 4
+          computeObjective obj varMap `shouldBe` 7
 
       it "Max 2x₁ - x₂ with -2 ≤ x₁ ≤ 5, -3 ≤ x₂ ≤ 4" $ do
         -- Maximize 2x₁ - x₂: want x₁ = 5 (max), x₂ = -3 (min)
@@ -1978,17 +1285,11 @@ spec = do
         let obj = Max (M.fromList [(1, 2), (2, -1)])
             constraints = []
             domainMap = VarDomainMap $ M.fromList [(1, boundedRange (-2) 5), (2, boundedRange (-3) 4)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.lookup 1 varMap `shouldBe` Just 5
-            M.lookup 2 varMap `shouldBe` Just (-3)
-            computeObjective obj varMap `shouldBe` 13
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.lookup 1 varMap `shouldBe` Just 5
+          M.lookup 2 varMap `shouldBe` Just (-3)
+          computeObjective obj varMap `shouldBe` 13
 
       it "Mixed bounds: x₁ nonNegative, x₂ with upper bound only (unbounded below)" $ do
         -- x₁ ≥ 0, x₂ ≤ 10 (no lower bound)
@@ -1996,19 +1297,13 @@ spec = do
         let obj = Max (M.fromList [(1, 1), (2, 1)])
             constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 20]
             domainMap = VarDomainMap $ M.fromList [(1, nonNegative), (2, upperBoundOnly 10)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            let x1 = M.findWithDefault 0 1 varMap
-                x2 = M.findWithDefault 0 2 varMap
-            x1 `shouldSatisfy` (>= 0)
-            x2 `shouldSatisfy` (<= 10)
-            (x1 + x2) `shouldBe` 20
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          let x1 = M.findWithDefault 0 1 varMap
+              x2 = M.findWithDefault 0 2 varMap
+          x1 `shouldSatisfy` (>= 0)
+          x2 `shouldSatisfy` (<= 10)
+          (x1 + x2) `shouldBe` 20
 
   describe "twoPhaseSimplex with negative lower bounds (Shift transformation)" $ do
     describe "Simple single variable systems" $ do
@@ -2018,14 +1313,8 @@ spec = do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 5]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-3))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just 5
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just 5
 
       it "Min x₁ with x₁ ≤ 5, x₁ ≥ -3: optimal at lower bound x₁=-3" $ do
         -- Minimize x with upper bound 5 and lower bound -3
@@ -2033,42 +1322,24 @@ spec = do
         let obj = Min (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 5]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-3))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just (-3)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just (-3)
 
       it "Max x₁ with x₁ ≥ -10, x₁ ≤ -2: optimal at x₁=-2" $ do
         -- Both bounds are negative, maximize
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) (-2)]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-10))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just (-2)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just (-2)
 
       it "Min x₁ with x₁ ≥ -10, x₁ ≤ -2: optimal at x₁=-10" $ do
         -- Both bounds are negative, minimize
         let obj = Min (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) (-2)]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-10))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just (-10)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just (-10)
 
     describe "Two variable systems with negative bounds" $ do
       it "Max x₁ + x₂ with x₁ ≥ -2, x₂ ≥ -3, x₁ + x₂ ≤ 10" $ do
@@ -2080,22 +1351,16 @@ spec = do
         let obj = Max (M.fromList [(1, 1), (2, 1)])
             constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 10]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-2)), (2, lowerBoundOnly (-3))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            let x1 = M.findWithDefault 0 1 varMap
-                x2 = M.findWithDefault 0 2 varMap
-                objVal = computeObjective obj varMap
-            -- Verify the actual objective value
-            objVal `shouldBe` 10
-            -- Verify lower bounds are respected
-            x1 `shouldSatisfy` (>= (-2))
-            x2 `shouldSatisfy` (>= (-3))
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          let x1 = M.findWithDefault 0 1 varMap
+              x2 = M.findWithDefault 0 2 varMap
+              objVal = computeObjective obj varMap
+          -- Verify the actual objective value
+          objVal `shouldBe` 10
+          -- Verify lower bounds are respected
+          x1 `shouldSatisfy` (>= (-2))
+          x2 `shouldSatisfy` (>= (-3))
 
       it "Min x₁ + x₂ with x₁ ≥ -2, x₂ ≥ -3, x₁ + x₂ ≤ 10" $ do
         -- Minimize sum with lower bounds -2 and -3
@@ -2103,19 +1368,13 @@ spec = do
         let obj = Min (M.fromList [(1, 1), (2, 1)])
             constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 10]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-2)), (2, lowerBoundOnly (-3))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            let objVal = computeObjective obj varMap
-            -- Verify the actual objective value
-            objVal `shouldBe` (-5)
-            M.lookup 1 varMap `shouldBe` Just (-2)
-            M.lookup 2 varMap `shouldBe` Just (-3)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          let objVal = computeObjective obj varMap
+          -- Verify the actual objective value
+          objVal `shouldBe` (-5)
+          M.lookup 1 varMap `shouldBe` Just (-2)
+          M.lookup 2 varMap `shouldBe` Just (-3)
 
       it "Max 2x₁ - x₂ with x₁ ≥ -5, x₂ ≥ -4, x₁ ≤ 3, x₂ ≤ 6" $ do
         -- Maximize 2x₁ - x₂: want x₁ large (up to 3) and x₂ small (down to -4)
@@ -2126,20 +1385,14 @@ spec = do
               , LEQ (M.fromList [(2, 1)]) 6
               ]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5)), (2, lowerBoundOnly (-4))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            let x1 = M.findWithDefault 0 1 varMap
-                x2 = M.findWithDefault 0 2 varMap
-            M.lookup 1 varMap `shouldBe` Just 3
-            M.lookup 2 varMap `shouldBe` Just (-4)
-            -- Verify objective value computed from variables
-            (2 * x1 - x2) `shouldBe` 10
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          let x1 = M.findWithDefault 0 1 varMap
+              x2 = M.findWithDefault 0 2 varMap
+          M.lookup 1 varMap `shouldBe` Just 3
+          M.lookup 2 varMap `shouldBe` Just (-4)
+          -- Verify objective value computed from variables
+          (2 * x1 - x2) `shouldBe` 10
 
       it "Min 2x₁ - x₂ with x₁ ≥ -5, x₂ ≥ -4, x₁ ≤ 3, x₂ ≤ 6" $ do
         -- Minimize 2x₁ - x₂: want x₁ small (down to -5) and x₂ large (up to 6)
@@ -2150,20 +1403,14 @@ spec = do
               , LEQ (M.fromList [(2, 1)]) 6
               ]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5)), (2, lowerBoundOnly (-4))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            let x1 = M.findWithDefault 0 1 varMap
-                x2 = M.findWithDefault 0 2 varMap
-            M.lookup 1 varMap `shouldBe` Just (-5)
-            M.lookup 2 varMap `shouldBe` Just 6
-            -- Verify objective value computed from variables
-            (2 * x1 - x2) `shouldBe` (-16)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          let x1 = M.findWithDefault 0 1 varMap
+              x2 = M.findWithDefault 0 2 varMap
+          M.lookup 1 varMap `shouldBe` Just (-5)
+          M.lookup 2 varMap `shouldBe` Just 6
+          -- Verify objective value computed from variables
+          (2 * x1 - x2) `shouldBe` (-16)
 
     describe "Systems with GEQ constraints and negative bounds" $ do
       it "Max x₁ with x₁ ≥ -5, x₁ ≥ 2 (GEQ tightens bound)" $ do
@@ -2176,14 +1423,8 @@ spec = do
               , LEQ (M.fromList [(1, 1)]) 10
               ]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just 10
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just 10
 
       it "Min x₁ with x₁ ≥ -5, x₁ ≥ 2 (GEQ tightens bound)" $ do
         -- Minimize with GEQ 2, so minimum is at x₁ = 2
@@ -2193,14 +1434,8 @@ spec = do
               , LEQ (M.fromList [(1, 1)]) 10
               ]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just 2
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just 2
 
     describe "Systems with EQ constraints and negative bounds" $ do
       it "Max x₁ + x₂ with x₁ - x₂ = 0, x₁ ≥ -5, x₂ ≥ -5, x₁ ≤ 10" $ do
@@ -2212,19 +1447,13 @@ spec = do
               , LEQ (M.fromList [(1, 1)]) 10
               ]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5)), (2, lowerBoundOnly (-5))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            let objVal = computeObjective obj varMap
-            M.lookup 1 varMap `shouldBe` Just 10
-            M.lookup 2 varMap `shouldBe` Just 10
-            -- Verify objective value
-            objVal `shouldBe` 20
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          let objVal = computeObjective obj varMap
+          M.lookup 1 varMap `shouldBe` Just 10
+          M.lookup 2 varMap `shouldBe` Just 10
+          -- Verify objective value
+          objVal `shouldBe` 20
 
       it "Min x₁ + x₂ with x₁ - x₂ = 0, x₁ ≥ -5, x₂ ≥ -5, x₁ ≤ 10" $ do
         -- x₁ = x₂, minimize x₁ + x₂ = 2x₁
@@ -2235,46 +1464,28 @@ spec = do
               , LEQ (M.fromList [(1, 1)]) 10
               ]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5)), (2, lowerBoundOnly (-5))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            let objVal = computeObjective obj varMap
-            M.lookup 1 varMap `shouldBe` Just (-5)
-            M.lookup 2 varMap `shouldBe` Just (-5)
-            -- Verify objective value
-            objVal `shouldBe` (-10)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          let objVal = computeObjective obj varMap
+          M.lookup 1 varMap `shouldBe` Just (-5)
+          M.lookup 2 varMap `shouldBe` Just (-5)
+          -- Verify objective value
+          objVal `shouldBe` (-10)
 
     describe "Fractional negative bounds" $ do
       it "Max x₁ with x₁ ≥ -7/2, x₁ ≤ 5/2" $ do
         let obj = Max (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) (5 % 2)]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly ((-7) % 2))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just (5 % 2)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just (5 % 2)
 
       it "Min x₁ with x₁ ≥ -7/2, x₁ ≤ 5/2" $ do
         let obj = Min (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) (5 % 2)]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly ((-7) % 2))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just ((-7) % 2)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just ((-7) % 2)
 
   describe "twoPhaseSimplex with unbounded variables (Split transformation)" $ do
     describe "Simple single variable systems" $ do
@@ -2286,14 +1497,8 @@ spec = do
               , GEQ (M.fromList [(1, 1)]) (-10)
               ]
             domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just 10
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just 10
 
       it "Min x₁ with -10 ≤ x₁ ≤ 10 (unbounded var with box constraints)" $ do
         let obj = Min (M.fromList [(1, 1)])
@@ -2302,14 +1507,8 @@ spec = do
               , GEQ (M.fromList [(1, 1)]) (-10)
               ]
             domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just (-10)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just (-10)
 
       it "unbounded variable with only upper bound: Min finds negative value" $ do
         -- x₁ unbounded, only x₁ ≤ 5, minimize x₁
@@ -2317,14 +1516,9 @@ spec = do
         let obj = Min (M.fromList [(1, 1)])
             constraints = [LEQ (M.fromList [(1, 1)]) 5]
             domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
+        actualResult <- solveWith domainMap [obj] constraints
         -- This should be unbounded (no finite optimum exists)
-        case actualResult of
-          SimplexResult (Just _) [ObjectiveResult _ Unbounded] -> pure ()
-          _ -> expectationFailure "Expected unbounded system"
+        expectUnbounded actualResult
 
     describe "Two variable systems with unbounded variables" $ do
       it "Max x₁ + x₂ with unbounded vars, -5 ≤ x₁ ≤ 5, -3 ≤ x₂ ≤ 7" $ do
@@ -2336,18 +1530,12 @@ spec = do
               , GEQ (M.fromList [(2, 1)]) (-3)
               ]
             domainMap = VarDomainMap $ M.fromList [(1, unbounded), (2, unbounded)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.lookup 1 varMap `shouldBe` Just 5
-            M.lookup 2 varMap `shouldBe` Just 7
-            let objVal = computeObjective obj varMap
-            objVal `shouldBe` 12
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.lookup 1 varMap `shouldBe` Just 5
+          M.lookup 2 varMap `shouldBe` Just 7
+          let objVal = computeObjective obj varMap
+          objVal `shouldBe` 12
 
       it "Min x₁ + x₂ with unbounded vars, -5 ≤ x₁ ≤ 5, -3 ≤ x₂ ≤ 7" $ do
         let obj = Min (M.fromList [(1, 1), (2, 1)])
@@ -2358,18 +1546,12 @@ spec = do
               , GEQ (M.fromList [(2, 1)]) (-3)
               ]
             domainMap = VarDomainMap $ M.fromList [(1, unbounded), (2, unbounded)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.lookup 1 varMap `shouldBe` Just (-5)
-            M.lookup 2 varMap `shouldBe` Just (-3)
-            let objVal = computeObjective obj varMap
-            objVal `shouldBe` (-8)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.lookup 1 varMap `shouldBe` Just (-5)
+          M.lookup 2 varMap `shouldBe` Just (-3)
+          let objVal = computeObjective obj varMap
+          objVal `shouldBe` (-8)
 
       it "Max x₁ - x₂ with unbounded vars: x₁ up, x₂ down" $ do
         -- Maximize x₁ - x₂: want x₁ large (5) and x₂ small (-3)
@@ -2381,18 +1563,12 @@ spec = do
               , GEQ (M.fromList [(2, 1)]) (-3)
               ]
             domainMap = VarDomainMap $ M.fromList [(1, unbounded), (2, unbounded)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.lookup 1 varMap `shouldBe` Just 5
-            M.lookup 2 varMap `shouldBe` Just (-3)
-            let objVal = computeObjective obj varMap
-            objVal `shouldBe` 8
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.lookup 1 varMap `shouldBe` Just 5
+          M.lookup 2 varMap `shouldBe` Just (-3)
+          let objVal = computeObjective obj varMap
+          objVal `shouldBe` 8
 
     describe "Systems with EQ constraints and unbounded variables" $ do
       it "Max x₁ with x₁ + x₂ = 10, unbounded vars, x₂ ≥ -5" $ do
@@ -2404,16 +1580,10 @@ spec = do
               , GEQ (M.fromList [(2, 1)]) (-5)
               ]
             domainMap = VarDomainMap $ M.fromList [(1, unbounded), (2, unbounded)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.lookup 1 varMap `shouldBe` Just 15
-            M.lookup 2 varMap `shouldBe` Just (-5)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.lookup 1 varMap `shouldBe` Just 15
+          M.lookup 2 varMap `shouldBe` Just (-5)
 
       it "Min x₁ with x₁ + x₂ = 10, unbounded vars, x₂ ≤ 20" $ do
         -- x₁ + x₂ = 10, x₂ ≤ 20, unbounded x₁
@@ -2424,16 +1594,10 @@ spec = do
               , LEQ (M.fromList [(2, 1)]) 20
               ]
             domainMap = VarDomainMap $ M.fromList [(1, unbounded), (2, unbounded)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            M.lookup 1 varMap `shouldBe` Just (-10)
-            M.lookup 2 varMap `shouldBe` Just 20
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          M.lookup 1 varMap `shouldBe` Just (-10)
+          M.lookup 2 varMap `shouldBe` Just 20
 
   describe "twoPhaseSimplex with mixed domain types" $ do
     describe "NonNegative, negative lower bound, and unbounded in same system" $ do
@@ -2452,17 +1616,11 @@ spec = do
               VarDomainMap $
                 M.fromList
                   [(1, nonNegative), (2, lowerBoundOnly (-5)), (3, unbounded)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            let objVal = computeObjective obj varMap
-            -- Verify objective value
-            objVal `shouldBe` 20
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          let objVal = computeObjective obj varMap
+          -- Verify objective value
+          objVal `shouldBe` 20
 
       it "Min x₁ + x₂ + x₃ with x₁ ≥ 0, x₂ ≥ -5, x₃ unbounded, sum ≥ -10" $ do
         -- Minimize sum with lower bound constraint
@@ -2478,24 +1636,18 @@ spec = do
               VarDomainMap $
                 M.fromList
                   [(1, nonNegative), (2, lowerBoundOnly (-5)), (3, unbounded)]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            let x1 = M.findWithDefault 0 1 varMap
-                x2 = M.findWithDefault 0 2 varMap
-                x3 = M.findWithDefault 0 3 varMap
-                objVal = computeObjective obj varMap
-            -- Verify constraints
-            x1 `shouldSatisfy` (>= 0)
-            x2 `shouldSatisfy` (>= (-5))
-            x3 `shouldSatisfy` (>= (-20))
-            -- Verify objective value
-            objVal `shouldBe` (-10)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          let x1 = M.findWithDefault 0 1 varMap
+              x2 = M.findWithDefault 0 2 varMap
+              x3 = M.findWithDefault 0 3 varMap
+              objVal = computeObjective obj varMap
+          -- Verify constraints
+          x1 `shouldSatisfy` (>= 0)
+          x2 `shouldSatisfy` (>= (-5))
+          x3 `shouldSatisfy` (>= (-20))
+          -- Verify objective value
+          objVal `shouldBe` (-10)
 
     describe "Positive lower bound with other domain types" $ do
       it "Max 2x₁ + 3x₂ with x₁ ≥ 2 (positive bound), x₂ ≥ -3, 2x₁ + x₂ ≤ 20" $ do
@@ -2507,20 +1659,14 @@ spec = do
               , LEQ (M.fromList [(2, 1)]) 10
               ]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 2), (2, lowerBoundOnly (-3))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            let x1 = M.findWithDefault 0 1 varMap
-                x2 = M.findWithDefault 0 2 varMap
-            -- Verify constraints
-            x1 `shouldSatisfy` (>= 2)
-            x2 `shouldSatisfy` (>= (-3))
-            (2 * x1 + x2) `shouldSatisfy` (<= 20)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          let x1 = M.findWithDefault 0 1 varMap
+              x2 = M.findWithDefault 0 2 varMap
+          -- Verify constraints
+          x1 `shouldSatisfy` (>= 2)
+          x2 `shouldSatisfy` (>= (-3))
+          (2 * x1 + x2) `shouldSatisfy` (<= 20)
 
       it "Min 2x₁ + 3x₂ with x₁ ≥ 2, x₂ ≥ -3, x₁ + x₂ ≥ 0" $ do
         -- Minimize with lower bounds
@@ -2532,19 +1678,13 @@ spec = do
               , LEQ (M.fromList [(2, 1)]) 10
               ]
             domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly 2), (2, lowerBoundOnly (-3))]
-        actualResult <-
-          runStdoutLoggingT $
-            filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-              twoPhaseSimplex domainMap [obj] constraints
-        case actualResult of
-          SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-          SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-            let x1 = M.findWithDefault 0 1 varMap
-                x2 = M.findWithDefault 0 2 varMap
-            x1 `shouldSatisfy` (>= 2)
-            x2 `shouldSatisfy` (>= (-3))
-            (x1 + x2) `shouldSatisfy` (>= 0)
-          _ -> expectationFailure "Unexpected result format"
+        actualResult <- solveWith domainMap [obj] constraints
+        expectOptimalValues actualResult $ \varMap -> do
+          let x1 = M.findWithDefault 0 1 varMap
+              x2 = M.findWithDefault 0 2 varMap
+          x1 `shouldSatisfy` (>= 2)
+          x2 `shouldSatisfy` (>= (-3))
+          (x1 + x2) `shouldSatisfy` (>= 0)
 
   describe "twoPhaseSimplex edge cases and infeasibility" $ do
     it "Infeasible: negative lower bound conflicts with GEQ constraint" $ do
@@ -2555,13 +1695,8 @@ spec = do
             , LEQ (M.fromList [(1, 1)]) 5
             ]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult Nothing _ -> pure ()
-        _ -> expectationFailure "Expected infeasible system"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectInfeasible actualResult
 
     it "Infeasible: unbounded variable with conflicting constraints" $ do
       let obj = Max (M.fromList [(1, 1)])
@@ -2570,40 +1705,23 @@ spec = do
             , LEQ (M.fromList [(1, 1)]) 5
             ]
           domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult Nothing _ -> pure ()
-        _ -> expectationFailure "Expected infeasible system"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectInfeasible actualResult
 
     it "Variable at exactly zero with negative lower bound" $ do
       -- x₁ ≥ -5, constraint x₁ = 0
       let obj = Max (M.fromList [(1, 1)])
           constraints = [EQ (M.fromList [(1, 1)]) 0]
           domainMap = VarDomainMap $ M.fromList [(1, lowerBoundOnly (-5))]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just 0
-        _ -> expectationFailure "Unexpected result format"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just 0
 
     it "unbounded variable constrained to zero" $ do
       let obj = Max (M.fromList [(1, 1)])
           constraints = [EQ (M.fromList [(1, 1)]) 0]
           domainMap = VarDomainMap $ M.fromList [(1, unbounded)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> M.lookup 1 varMap `shouldBe` Just 0
-        _ -> expectationFailure "Unexpected result format"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> M.lookup 1 varMap `shouldBe` Just 0
 
     it "Multiple variables, only some with negative bounds" $ do
       -- x₁ ≥ 0 (non-negative), x₂ ≥ -10, x₃ ≥ 0
@@ -2614,17 +1732,11 @@ spec = do
             VarDomainMap $
               M.fromList
                 [(1, nonNegative), (2, lowerBoundOnly (-10)), (3, nonNegative)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult Nothing _ -> expectationFailure "Expected a solution but got Nothing"
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-          let objVal = computeObjective obj varMap
-          -- Verify objective value
-          objVal `shouldBe` 15
-        _ -> expectationFailure "Unexpected result format"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> do
+        let objVal = computeObjective obj varMap
+        -- Verify objective value
+        objVal `shouldBe` 15
 
   -- ===========================================================================
   -- Tests for internal preprocessing functions
@@ -3382,130 +2494,85 @@ spec = do
       let obj = Max (M.fromList [(1, 1)])
           constraints = []
           domainMap = VarDomainMap $ M.fromList [(1, upperBoundOnly 10)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] ->
-          M.findWithDefault 0 1 varMap `shouldBe` 10
-        _ -> expectationFailure "Expected optimal at upper bound"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> do
+        M.findWithDefault 0 1 varMap `shouldBe` 10
 
     it "Min x\x2081 with x\x2081 \x2264 10 (upper bound only): unbounded (no lower bound)" $ do
       let obj = Min (M.fromList [(1, 1)])
           constraints = []
           domainMap = VarDomainMap $ M.fromList [(1, upperBoundOnly 10)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult (Just _) [ObjectiveResult _ Unbounded] -> pure ()
-        _ -> expectationFailure "Expected unbounded (no lower bound)"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectUnbounded actualResult
 
     it "Max x\x2081 with x\x2081 \x2264 5 and x\x2081 + x\x2082 \x2264 8, x\x2082 upperBoundOnly 3" $ do
       let obj = Max (M.fromList [(1, 1), (2, 1)])
           constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 8]
           domainMap = VarDomainMap $ M.fromList [(1, upperBoundOnly 5), (2, upperBoundOnly 3)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-          let x1 = M.findWithDefault 0 1 varMap
-              x2 = M.findWithDefault 0 2 varMap
-          x1 `shouldSatisfy` (<= 5)
-          x2 `shouldSatisfy` (<= 3)
-          computeObjective obj varMap `shouldBe` 8
-        _ -> expectationFailure "Expected optimal result"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> do
+        let x1 = M.findWithDefault 0 1 varMap
+            x2 = M.findWithDefault 0 2 varMap
+        x1 `shouldSatisfy` (<= 5)
+        x2 `shouldSatisfy` (<= 3)
+        computeObjective obj varMap `shouldBe` 8
 
     it "Min x\x2081 with x\x2081 \x2264 5, x\x2081 \x2265 -3: optimal at lower bound" $ do
       let obj = Min (M.fromList [(1, 1)])
           constraints = [GEQ (M.fromList [(1, 1)]) (-3)]
           domainMap = VarDomainMap $ M.fromList [(1, upperBoundOnly 5)]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] ->
-          M.lookup 1 varMap `shouldBe` Just (-3)
-        _ -> expectationFailure "Expected optimal at -3"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> do
+        M.lookup 1 varMap `shouldBe` Just (-3)
 
   describe "twoPhaseSimplex with fully-negative boundedRange" $ do
     it "Max x\x2081 with -10 \x2264 x\x2081 \x2264 -2: optimal at x\x2081=-2" $ do
       let obj = Max (M.fromList [(1, 1)])
           constraints = []
           domainMap = VarDomainMap $ M.fromList [(1, boundedRange (-10) (-2))]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] ->
-          M.lookup 1 varMap `shouldBe` Just (-2)
-        _ -> expectationFailure "Expected optimal at -2"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> do
+        M.lookup 1 varMap `shouldBe` Just (-2)
 
     it "Min x\x2081 with -10 \x2264 x\x2081 \x2264 -2: optimal at x\x2081=-10" $ do
       let obj = Min (M.fromList [(1, 1)])
           constraints = []
           domainMap = VarDomainMap $ M.fromList [(1, boundedRange (-10) (-2))]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] ->
-          M.lookup 1 varMap `shouldBe` Just (-10)
-        _ -> expectationFailure "Expected optimal at -10"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> do
+        M.lookup 1 varMap `shouldBe` Just (-10)
 
     it "Max x\x2081 + x\x2082 with -8 \x2264 x\x2081 \x2264 -1, -6 \x2264 x\x2082 \x2264 -2" $ do
       let obj = Max (M.fromList [(1, 1), (2, 1)])
           constraints = []
           domainMap = VarDomainMap $ M.fromList [(1, boundedRange (-8) (-1)), (2, boundedRange (-6) (-2))]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-          M.lookup 1 varMap `shouldBe` Just (-1)
-          M.lookup 2 varMap `shouldBe` Just (-2)
-          computeObjective obj varMap `shouldBe` (-3)
-        _ -> expectationFailure "Expected optimal at (-1, -2)"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> do
+        M.lookup 1 varMap `shouldBe` Just (-1)
+        M.lookup 2 varMap `shouldBe` Just (-2)
+        computeObjective obj varMap `shouldBe` (-3)
 
     it "Min x\x2081 + x\x2082 with -8 \x2264 x\x2081 \x2264 -1, -6 \x2264 x\x2082 \x2264 -2" $ do
       let obj = Min (M.fromList [(1, 1), (2, 1)])
           constraints = []
           domainMap = VarDomainMap $ M.fromList [(1, boundedRange (-8) (-1)), (2, boundedRange (-6) (-2))]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-          M.lookup 1 varMap `shouldBe` Just (-8)
-          M.lookup 2 varMap `shouldBe` Just (-6)
-          computeObjective obj varMap `shouldBe` (-14)
-        _ -> expectationFailure "Expected optimal at (-8, -6)"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> do
+        M.lookup 1 varMap `shouldBe` Just (-8)
+        M.lookup 2 varMap `shouldBe` Just (-6)
+        computeObjective obj varMap `shouldBe` (-14)
 
     it "Max x\x2081 with -5 \x2264 x\x2081 \x2264 -1 and x\x2081 + x\x2082 \x2264 0, x\x2082 in [-5, -1]" $ do
       -- With constraint x\x2081 + x\x2082 \x2264 0, and both negative ranges
       let obj = Max (M.fromList [(1, 1)])
           constraints = [LEQ (M.fromList [(1, 1), (2, 1)]) 0]
           domainMap = VarDomainMap $ M.fromList [(1, boundedRange (-5) (-1)), (2, boundedRange (-5) (-1))]
-      actualResult <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj] constraints
-      case actualResult of
-        SimplexResult (Just _) [ObjectiveResult _ (Optimal varMap)] -> do
-          let x1 = M.findWithDefault 0 1 varMap
-              x2 = M.findWithDefault 0 2 varMap
-          x1 `shouldBe` (-1)
-          (x1 + x2) `shouldSatisfy` (<= 0)
-        _ -> expectationFailure "Expected optimal result"
+      actualResult <- solveWith domainMap [obj] constraints
+      expectOptimalValues actualResult $ \varMap -> do
+        let x1 = M.findWithDefault 0 1 varMap
+            x2 = M.findWithDefault 0 2 varMap
+        x1 `shouldBe` (-1)
+        (x1 + x2) `shouldSatisfy` (<= 0)
 
   describe "postprocess" $ do
     it "passes through Unbounded unchanged" $ do
@@ -3598,36 +2665,21 @@ spec = do
             , LEQ (M.fromList [(1, 1)]) 6
             , LEQ (M.fromList [(2, 1)]) 8
             ]
-          allVars = collectAllVars [obj1, obj2] constraints
-          domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-      SimplexResult mFeasibleSystem objResults <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj1, obj2] constraints
-      -- Should have a feasible system
-      mFeasibleSystem `shouldSatisfy` isJust
-      -- Should have two results
-      length objResults `shouldBe` 2
-      -- First result (Max x₁) should have x₁=6
-      case objResults !! 0 of
-        ObjectiveResult _ (Optimal varVals) ->
-          M.lookup 1 varVals `shouldBe` Just 6
-        _ -> expectationFailure "Expected optimal result for obj1"
-      -- Second result (Max x₂) should have x₂=8
-      case objResults !! 1 of
-        ObjectiveResult _ (Optimal varVals) ->
-          M.lookup 2 varVals `shouldBe` Just 8
-        _ -> expectationFailure "Expected optimal result for obj2"
+      result <- solveNonNeg [obj1, obj2] constraints
+      expectOutcomes
+        [ \case
+            Optimal varVals -> M.lookup 1 varVals `shouldBe` Just 6
+            Unbounded -> expectationFailure "Expected optimal result for obj1"
+        , \case
+            Optimal varVals -> M.lookup 2 varVals `shouldBe` Just 8
+            Unbounded -> expectationFailure "Expected optimal result for obj2"
+        ]
+        result
 
     it "handles empty objective list returning feasible system only" $ do
       let constraints = [LEQ (M.fromList [(1, 1)]) 10]
-          domainMap = VarDomainMap $ M.fromSet (const nonNegative) (Set.singleton 1)
-      SimplexResult mFeasibleSystem objResults <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [] constraints
-      mFeasibleSystem `shouldSatisfy` isJust
-      length objResults `shouldBe` 0
+      result <- solveNonNeg [] constraints
+      expectOutcomes [] result
 
     it "handles infeasible system with multiple objectives" $ do
       -- x₁ ≤ 5 and x₁ ≥ 10 is infeasible
@@ -3637,16 +2689,9 @@ spec = do
             [ LEQ (M.fromList [(1, 1)]) 5
             , GEQ (M.fromList [(1, 1)]) 10
             ]
-          allVars = collectAllVars [obj1, obj2] constraints
-          domainMap = VarDomainMap $ M.fromSet (const nonNegative) allVars
-      SimplexResult mFeasibleSystem objResults <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj1, obj2] constraints
-      -- Should be infeasible
-      mFeasibleSystem `shouldBe` Nothing
-      -- No objective results when infeasible
-      length objResults `shouldBe` 0
+      result <- solveNonNeg [obj1, obj2] constraints
+      -- Infeasible, and no objective results
+      result `shouldBe` SimplexResult Nothing []
 
     it "optimizes Max and Min of same function over feasible region" $ do
       -- Feasible region: 0 ≤ x₁ ≤ 10
@@ -3656,22 +2701,18 @@ spec = do
           obj2 = Min (M.fromList [(1, 1)])
           constraints = [LEQ (M.fromList [(1, 1)]) 10]
           domainMap = VarDomainMap $ M.fromList [(1, nonNegative)]
-      SimplexResult mFeasibleSystem objResults <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj1, obj2] constraints
-      mFeasibleSystem `shouldSatisfy` isJust
-      length objResults `shouldBe` 2
-      -- Max x₁ should be 10
-      case objResults !! 0 of
-        ObjectiveResult _ (Optimal varVals) ->
-          M.lookup 1 varVals `shouldBe` Just 10
-        _ -> expectationFailure "Expected optimal result for Max x₁"
-      -- Min x₁ should be 0 (or not present in map if zero)
-      case objResults !! 1 of
-        ObjectiveResult _ (Optimal varVals) ->
-          M.findWithDefault 0 1 varVals `shouldBe` 0
-        _ -> expectationFailure "Expected optimal result for Min x₁"
+      result <- solveWith domainMap [obj1, obj2] constraints
+      expectOutcomes
+        [ \case
+            -- Max x₁ should be 10
+            Optimal varVals -> M.lookup 1 varVals `shouldBe` Just 10
+            Unbounded -> expectationFailure "Expected optimal result for Max x₁"
+        , \case
+            -- Min x₁ should be 0 (or not present in map if zero)
+            Optimal varVals -> M.findWithDefault 0 1 varVals `shouldBe` 0
+            Unbounded -> expectationFailure "Expected optimal result for Min x₁"
+        ]
+        result
 
     it "handles one unbounded objective among multiple objectives" $ do
       -- x₁ with only a lower bound (non-negative)
@@ -3681,21 +2722,18 @@ spec = do
           obj2 = Min (M.fromList [(1, 1)]) -- This will have optimal at 0
           constraints = []
           domainMap = VarDomainMap $ M.fromList [(1, nonNegative)]
-      SimplexResult mFeasibleSystem objResults <-
-        runStdoutLoggingT $
-          filterLogger (\_logSource logLevel -> logLevel > LevelInfo) $
-            twoPhaseSimplex domainMap [obj1, obj2] constraints
-      mFeasibleSystem `shouldSatisfy` isJust
-      length objResults `shouldBe` 2
-      -- Max x₁ should be unbounded
-      case objResults !! 0 of
-        ObjectiveResult _ Unbounded -> pure ()
-        _ -> expectationFailure "Expected unbounded result for Max x₁"
-      -- Min x₁ should be 0
-      case objResults !! 1 of
-        ObjectiveResult _ (Optimal varVals) ->
-          M.findWithDefault 0 1 varVals `shouldBe` 0
-        _ -> expectationFailure "Expected optimal result for Min x₁"
+      result <- solveWith domainMap [obj1, obj2] constraints
+      expectOutcomes
+        [ \case
+            -- Max x₁ should be unbounded
+            Optimal _ -> expectationFailure "Expected unbounded result for Max x₁"
+            Unbounded -> pure ()
+        , \case
+            -- Min x₁ should be 0
+            Optimal varVals -> M.findWithDefault 0 1 varVals `shouldBe` 0
+            Unbounded -> expectationFailure "Expected optimal result for Min x₁"
+        ]
+        result
 
   describe "objective-only variable allocation" $ do
     -- Slack and artificial variables must not reuse an id that belongs to a
